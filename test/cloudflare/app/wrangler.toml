@@ -1,0 +1,17 @@
+# Cloudflare Workers configuration for Nuxt Skew Protection
+name = "nuxt-skew-protection-test"
+main = ".output/server/index.mjs"
+compatibility_date = "2024-01-01"
+account_id = "5904138d55ca25d5670dca6adf99894e"
+
+# Don't bundle - use pre-built output
+no_bundle = true
+
+[vars]
+CF_WORKER_NAME = "nuxt-skew-protection-test"
+CF_PREVIEW_DOMAIN = "harlan103"
+NUXT_DEPLOYMENT_ID = "dpl-test-v2"
+CF_DEPLOYMENT_MAPPING = '{"dpl-test-v1":"cdf6f9a0-1b34-4ccf-b9a1-50a4517dd5f9","dpl-test-v2":"current"}'
+
+[site]
+bucket = ".output/public"

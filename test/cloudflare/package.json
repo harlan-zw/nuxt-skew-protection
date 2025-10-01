@@ -1,0 +1,26 @@
+{
+  "name": "nuxt-skew-protection-cloudflare-test",
+  "private": true,
+  "description": "Real Cloudflare Workers deployment test for Nuxt Skew Protection",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "setup": "./scripts/setup.sh",
+    "deploy": "./scripts/deploy.sh",
+    "test": "./scripts/test.sh",
+    "performance": "./scripts/performance.sh",
+    "performance:save": "./scripts/performance.sh --save",
+    "dev": "cd app && npm run dev",
+    "build": "cd app && npm run build",
+    "logs": "cd app && wrangler tail",
+    "versions": "cd app && wrangler versions list",
+    "clean": "cd app && rm -rf node_modules .output dist"
+  },
+  "dependencies": {
+    "bc": "^1.0.0"
+  },
+  "devDependencies": {
+    "jq": "^1.6.0"
+  }
+}
