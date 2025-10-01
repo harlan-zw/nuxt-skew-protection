@@ -190,7 +190,7 @@ export default defineNuxtConfig({
 ### Test Cloudflare Setup
 
 ```bash
-cd test/cloudflare
+cd test/fixtures/cloudflare
 pnpm install
 ```
 

@@ -5,7 +5,7 @@ This guide walks you through testing our Nuxt Skew Protection implementation wit
 ## 🚀 Quick Start
 
 ```bash
-cd test/cloudflare
+cd test/fixtures/cloudflare
 
 # 1. Setup environment
 ./scripts/setup.sh
@@ -266,7 +266,7 @@ For ongoing validation:
    # Add to GitHub Actions
    - name: Test Cloudflare Deployment
      run: |
-       cd test/cloudflare
+       cd test/fixtures/cloudflare
        ./scripts/setup.sh
        ./scripts/deploy.sh
        ./scripts/test.sh

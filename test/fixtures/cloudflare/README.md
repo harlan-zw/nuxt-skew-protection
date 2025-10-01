@@ -71,7 +71,7 @@ npm run test:cloudflare:performance
 
 ### Step 1: Deploy Initial Version
 ```bash
-cd test/cloudflare/app
+cd test/fixtures/cloudflare/app
 wrangler deploy --name nuxt-skew-test
 ```
 

@@ -23,7 +23,7 @@
 
 ```bash
 # Navigate to test directory
-cd /home/harlan/pkg/nuxt-skew-protection/test/cloudflare
+cd /home/harlan/pkg/nuxt-skew-protection/test/fixtures/cloudflare
 
 # Install Wrangler CLI globally
 npm install -g wrangler
@@ -196,7 +196,7 @@ After successful setup and testing:
 Ready to start? Run these commands:
 
 ```bash
-cd /home/harlan/pkg/nuxt-skew-protection/test/cloudflare
+cd /home/harlan/pkg/nuxt-skew-protection/test/fixtures/cloudflare
 npm install -g wrangler
 wrangler login
 cp .env.example .env.local
