@@ -1,6 +1,6 @@
 export default defineNuxtConfig({
   modules: [
-    '../../../src/module.ts', // Use our local skew protection module
+    '../../../../src/module.ts', // Use our local skew protection module
   ],
 
   skewProtection: {

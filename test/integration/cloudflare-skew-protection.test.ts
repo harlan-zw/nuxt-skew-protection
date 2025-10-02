@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-describe('Cloudflare Skew Protection Integration', () => {
-  describe('Module Configuration', () => {
+describe('cloudflare Skew Protection Integration', () => {
+  describe('module Configuration', () => {
     it('should detect Cloudflare platform from environment variables', () => {
       // Set Cloudflare environment
       process.env.CF_WORKER_NAME = 'test-worker'
@@ -52,7 +52,7 @@ describe('Cloudflare Skew Protection Integration', () => {
     })
   })
 
-  describe('Deployment Mapping Parsing', () => {
+  describe('deployment Mapping Parsing', () => {
     it('should parse valid deployment mapping JSON', () => {
       const mapping = {
         'deployment-1': 'version-abc',
@@ -106,7 +106,7 @@ describe('Cloudflare Skew Protection Integration', () => {
     })
   })
 
-  describe('Preview URL Construction', () => {
+  describe('preview URL Construction', () => {
     it('should construct correct Cloudflare preview URL', () => {
       const workerName = 'my-app'
       const previewDomain = 'my-account'
@@ -128,7 +128,7 @@ describe('Cloudflare Skew Protection Integration', () => {
     })
   })
 
-  describe('Deployment ID Detection', () => {
+  describe('deployment ID Detection', () => {
     it('should use NUXT_DEPLOYMENT_ID when available', () => {
       process.env.NUXT_DEPLOYMENT_ID = 'custom-deployment-id'
       process.env.NUXT_BUILD_ID = 'build-id'
@@ -156,7 +156,7 @@ describe('Cloudflare Skew Protection Integration', () => {
     })
   })
 
-  describe('Domain Filtering Logic', () => {
+  describe('domain Filtering Logic', () => {
     it('should identify localhost domains', () => {
       const localhostDomains = [
         'localhost',
@@ -201,7 +201,7 @@ describe('Cloudflare Skew Protection Integration', () => {
     })
   })
 
-  describe('Platform Priority', () => {
+  describe('platform Priority', () => {
     it('should prioritize Cloudflare over Vercel', () => {
       // Set both Cloudflare and Vercel env vars
       process.env.CF_WORKER_NAME = 'test-worker'

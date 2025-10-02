@@ -1,5 +1,6 @@
 import { useRuntimeConfig } from '#imports'
-import { defineEventHandler, getHeader, setCookie } from 'h3'
+import { defineEventHandler, getHeader } from 'h3'
+import { setSkewProtectionCookie } from '../composables/cookie'
 
 /**
  * Middleware for document requests (HTML pages)
@@ -21,10 +22,5 @@ export default defineEventHandler(async (event) => {
   }
 
   // Set cookie for this document request
-  setCookie(event, 'skew-version', currentBuildId, {
-    path: '/',
-    sameSite: 'strict',
-    httpOnly: true,
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-  })
+  setSkewProtectionCookie(event, currentBuildId)
 })

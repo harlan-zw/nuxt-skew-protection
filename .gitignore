@@ -53,3 +53,7 @@ Temporary Items
 .apdisk
 
 .data
+/test/fixtures/static/.test-output
+
+# Skew protection storage
+.skew-storage

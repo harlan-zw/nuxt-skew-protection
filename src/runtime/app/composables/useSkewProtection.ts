@@ -1,5 +1,7 @@
+import type { Ref } from 'vue'
 import { useNuxtApp } from '#app'
 import { computed } from 'vue'
+import { logger } from '../../shared/logger'
 
 export interface VersionInfo {
   currentVersion: string
@@ -14,18 +16,52 @@ export interface DeploymentInfo {
   releaseDate?: Date
 }
 
+export interface SkewProtectionPlugin {
+  versionMismatch: Ref<{
+    detected: boolean
+    newVersion: string
+    currentVersion: string
+    reason?: 'manifest' | 'sse'
+  }>
+  versionCookie: Ref<string>
+  currentBuildId: string
+  handleVersionMismatch: (newVersion: string, currentVersion: string, reason?: 'manifest' | 'sse') => Promise<void>
+  updateVersion: (version: string) => void
+  dismiss: () => void
+  reload: () => void
+}
+
 export function useSkewProtection() {
-  const { $skewProtection } = useNuxtApp()
+  const nuxtApp = useNuxtApp()
+  const $skewProtection = nuxtApp.$skewProtection as SkewProtectionPlugin | undefined
 
   if (!$skewProtection) {
-    throw new Error('useSkewProtection() can only be used in client-side code')
+    // Graceful degradation for SSR or when plugin isn't loaded
+    logger.warn('Skew protection plugin not available')
+
+    // Return safe defaults
+    return {
+      isOutdated: computed(() => false),
+      newVersion: computed(() => ''),
+      currentVersion: computed(() => ''),
+      currentBuildId: computed(() => ''),
+      versionMismatch: computed(() => ({ detected: false, newVersion: '', currentVersion: '' })),
+      detectionReason: computed(() => undefined),
+      getDeploymentInfo: async () => null,
+      getVersionsBehind: async () => 0,
+      getReleaseDate: async () => null,
+      getAvailableVersions: async () => [],
+      updateVersion: () => {},
+      updateAndReload: () => {},
+      reload: () => {},
+      dismiss: () => {},
+    }
   }
 
   // Reactive state from the plugin
   const versionMismatch = computed(() => $skewProtection.versionMismatch.value)
   const versionCookie = computed(() => $skewProtection.versionCookie.value)
   const currentBuildId = computed(() => $skewProtection.currentBuildId)
-  const wsConnected = computed(() => $skewProtection.wsConnected?.value || false)
 
   // Computed properties for easier access
   const isOutdated = computed(() => versionMismatch.value.detected)
@@ -34,77 +70,61 @@ export function useSkewProtection() {
   const detectionReason = computed(() => versionMismatch.value.reason)
 
   /**
-   * Check if the current version is up to date
-   */
-  async function checkForUpdates() {
-    return await $skewProtection.checkForUpdates()
-  }
-
-  /**
-   * Get detailed version status from the API
-   */
-  async function getVersionStatus(): Promise<VersionInfo | null> {
-    return await $skewProtection.checkVersionStatus()
-  }
-
-  /**
    * Get deployment information including release date
    */
   async function getDeploymentInfo(version?: string): Promise<DeploymentInfo | null> {
-    try {
-      const targetVersion = version || currentBuildId.value
-      const response = await $fetch(`/_skew/debug`)
+    const targetVersion = version || currentBuildId.value
+    return $fetch(`/_skew/debug`)
+      .then((response) => {
+        if (response && typeof response === 'object') {
+          // Find the deployment info for the specified version
+          const deployments = (response as any).deployments || []
+          const deployment = deployments.find((d: any) => d.id === targetVersion)
 
-      if (response && typeof response === 'object') {
-        // Find the deployment info for the specified version
-        const deployments = (response as any).deployments || []
-        const deployment = deployments.find((d: any) => d.id === targetVersion)
+          if (deployment) {
+            return {
+              id: deployment.id,
+              timestamp: deployment.timestamp,
+              releaseDate: deployment.timestamp ? new Date(deployment.timestamp) : undefined,
+            }
+          }
 
-        if (deployment) {
+          // If not found in deployments, return basic info
           return {
-            id: deployment.id,
-            timestamp: deployment.timestamp,
-            releaseDate: deployment.timestamp ? new Date(deployment.timestamp) : undefined,
+            id: targetVersion,
           }
         }
 
-        // If not found in deployments, return basic info
-        return {
-          id: targetVersion,
-        }
-      }
-
-      return null
-    }
-    catch (error) {
-      console.warn('[useSkewProtection] Failed to get deployment info:', error)
-      return null
-    }
+        return null
+      })
+      .catch((error) => {
+        logger.warn('Failed to get deployment info:', error)
+        return null
+      })
   }
 
   /**
    * Calculate how many versions behind the current version is
    */
   async function getVersionsBehind(): Promise<number> {
-    try {
-      const response = await $fetch('/_skew/debug')
+    return $fetch('/_skew/debug')
+      .then((response) => {
+        if (response && typeof response === 'object') {
+          const deployments = (response as any).deployments || []
+          const currentIdx = deployments.findIndex((d: any) => d.id === currentVersion.value)
+          const latestIdx = deployments.findIndex((d: any) => d.id === newVersion.value)
 
-      if (response && typeof response === 'object') {
-        const deployments = (response as any).deployments || []
-        const currentIdx = deployments.findIndex((d: any) => d.id === currentVersion.value)
-        const latestIdx = deployments.findIndex((d: any) => d.id === newVersion.value)
-
-        if (currentIdx !== -1 && latestIdx !== -1) {
-          return currentIdx - latestIdx
+          if (currentIdx !== -1 && latestIdx !== -1) {
+            return currentIdx - latestIdx
+          }
         }
-      }
 
-      return 0
-    }
-    catch (error) {
-      console.warn('[useSkewProtection] Failed to calculate versions behind:', error)
-      return 0
-    }
+        return 0
+      })
+      .catch((error) => {
+        logger.warn('Failed to calculate versions behind:', error)
+        return 0
+      })
   }
 
   /**
@@ -119,24 +139,23 @@ export function useSkewProtection() {
    * Get all available versions
    */
   async function getAvailableVersions(): Promise<DeploymentInfo[]> {
-    try {
-      const response = await $fetch('/_skew/debug')
+    return $fetch('/_skew/debug')
+      .then((response) => {
+        if (response && typeof response === 'object') {
+          const deployments = (response as any).deployments || []
+          return deployments.map((d: any) => ({
+            id: d.id,
+            timestamp: d.timestamp,
+            releaseDate: d.timestamp ? new Date(d.timestamp) : undefined,
+          }))
+        }
 
-      if (response && typeof response === 'object') {
-        const deployments = (response as any).deployments || []
-        return deployments.map((d: any) => ({
-          id: d.id,
-          timestamp: d.timestamp,
-          releaseDate: d.timestamp ? new Date(d.timestamp) : undefined,
-        }))
-      }
-
-      return []
-    }
-    catch (error) {
-      console.warn('[useSkewProtection] Failed to get available versions:', error)
-      return []
-    }
+        return []
+      })
+      .catch((error) => {
+        logger.warn('Failed to get available versions:', error)
+        return []
+      })
   }
 
   /**
@@ -170,24 +189,6 @@ export function useSkewProtection() {
     $skewProtection.dismiss()
   }
 
-  /**
-   * Connect to WebSocket (if enabled and not already connected)
-   */
-  function connectWebSocket() {
-    if ($skewProtection.connectWebSocket) {
-      $skewProtection.connectWebSocket()
-    }
-  }
-
-  /**
-   * Disconnect from WebSocket
-   */
-  function disconnectWebSocket() {
-    if ($skewProtection.disconnectWebSocket) {
-      $skewProtection.disconnectWebSocket()
-    }
-  }
-
   return {
     // State
     isOutdated,
@@ -196,11 +197,8 @@ export function useSkewProtection() {
     currentBuildId,
     versionMismatch,
     detectionReason,
-    wsConnected,
 
     // Methods
-    checkForUpdates,
-    getVersionStatus,
     getDeploymentInfo,
     getVersionsBehind,
     getReleaseDate,
@@ -209,7 +207,5 @@ export function useSkewProtection() {
     updateAndReload,
     reload,
     dismiss,
-    connectWebSocket,
-    disconnectWebSocket,
   }
 }

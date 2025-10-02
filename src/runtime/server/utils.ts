@@ -1,6 +1,7 @@
 import type { H3Event } from 'h3'
-import { getCookie } from 'h3'
 import { useRuntimeConfig } from '#imports'
+import { logger } from '../server/logger'
+import { getSkewProtectionCookie } from './composables/cookie'
 
 /**
  * Check if the client is outdated based on cookie version vs current build ID
@@ -9,7 +10,7 @@ import { useRuntimeConfig } from '#imports'
 export function isClientOutdated(event: H3Event) {
   const config = useRuntimeConfig(event)
   const currentBuildId = config.app.buildId
-  const clientVersion = getCookie(event, 'skew-version')
+  const clientVersion = getSkewProtectionCookie(event)
 
   const outdated = !!(clientVersion && currentBuildId && clientVersion !== currentBuildId)
 
@@ -28,8 +29,8 @@ export async function triggerOutdatedClientEvent(
   clientVersion: string,
   currentVersion: string,
 ) {
-  console.log(
-    `[skew-protection] Outdated client detected: ${clientVersion} (current: ${currentVersion})`,
+  logger.info(
+    `Outdated client detected: ${clientVersion} (current: ${currentVersion})`,
   )
 
   const nitro = (event.context as any)?.nitro

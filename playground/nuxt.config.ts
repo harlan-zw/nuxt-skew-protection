@@ -4,9 +4,6 @@ export default defineNuxtConfig({
     appManifest: true,
   },
   skewProtection: {
-    storage: {
-      driver: 'memory', // Use memory storage for playground testing
-    },
     checkOutdatedBuildInterval: 10000, // 10 seconds for faster testing
     retentionDays: 1, // Short retention for testing
     debug: true,

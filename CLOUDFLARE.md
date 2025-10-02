@@ -247,7 +247,7 @@ curl https://nuxt-skew-test.your-domain.com/_nuxt/app.js?dpl=dpl-old
 
 2. **Version Cleanup**: Limit old versions to reduce mapping size
    ```typescript
-   maxNumberOfVersions: 10,
+   maxNumberOfVersions: 10
    retentionDays: 7
    ```
 

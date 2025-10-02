@@ -1,0 +1,11 @@
+{
+  "name": "test-fixture-node",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "node .output/server/index.mjs",
+    "postinstall": "nuxt prepare"
+  }
+}

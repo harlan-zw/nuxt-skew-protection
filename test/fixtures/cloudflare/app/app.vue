@@ -6,7 +6,7 @@ const config = useRuntimeConfig()
 // Build information
 const deploymentId = ref(config.public?.deploymentId || 'unknown')
 const buildId = ref(config.public?.buildId || 'unknown')
-const version = ref('1.0.0-test')
+const version = ref('v2') // Modified by test script
 const timestamp = ref(new Date().toISOString())
 
 // Environment information
@@ -43,7 +43,7 @@ function getDeploymentIdFromRequest() {
 
 async function fetchDeploymentMapping() {
   try {
-    const response = await $fetch('/api/_skew/deployment-mapping')
+    const response = await $fetch('/_skew/deployment-mapping')
     deploymentMapping.value = JSON.stringify(response, null, 2)
   }
   catch (error) {
@@ -89,6 +89,9 @@ function testQueryParam() {
 <template>
   <div class="container">
     <h1>🛡️ Nuxt Skew Protection - Cloudflare Test</h1>
+    <p class="version">
+      Version: {{ version }}
+    </p>
 
     <div class="info-grid">
       <div class="info-card">

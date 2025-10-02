@@ -155,7 +155,7 @@ header_time=$(basic_performance_test "Requests with Deployment ID Header" "$WORK
 query_time=$(basic_performance_test "Requests with Deployment ID Query" "$WORKER_URL?dpl=test-deployment")
 
 # Test 4: API endpoint performance
-api_time=$(basic_performance_test "API Endpoint Performance" "$WORKER_URL/api/_skew/status")
+api_time=$(basic_performance_test "API Endpoint Performance" "$WORKER_URL/_skew/status")
 
 echo -e "\n${BLUE}🏋️ Load Testing${NC}"
 

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-describe('Module Platform Detection', () => {
+describe('module Platform Detection', () => {
   beforeEach(() => {
     vi.unstubAllEnvs()
   })
 
-  describe('Cloudflare Detection', () => {
+  describe('cloudflare Detection', () => {
     it('should detect Cloudflare when all required env vars are set', () => {
       vi.stubEnv('CF_WORKER_NAME', 'test-worker')
       vi.stubEnv('CF_PREVIEW_DOMAIN', 'test-account')
@@ -74,7 +74,7 @@ describe('Module Platform Detection', () => {
     })
   })
 
-  describe('Vercel Detection', () => {
+  describe('vercel Detection', () => {
     it('should detect Vercel when both required env vars are set', () => {
       vi.stubEnv('VERCEL_SKEW_PROTECTION_ENABLED', '1')
       vi.stubEnv('VERCEL_DEPLOYMENT_ID', 'vercel-deployment-123')
@@ -110,7 +110,7 @@ describe('Module Platform Detection', () => {
     })
   })
 
-  describe('Platform Priority', () => {
+  describe('platform Priority', () => {
     it('should select Cloudflare when both Cloudflare and Vercel are detected', () => {
       vi.stubEnv('CF_WORKER_NAME', 'test-worker')
       vi.stubEnv('CF_PREVIEW_DOMAIN', 'test-account')
@@ -178,7 +178,7 @@ describe('Module Platform Detection', () => {
     })
   })
 
-  describe('Debug Logging', () => {
+  describe('debug Logging', () => {
     it('should log platform selection when debug is enabled', () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 

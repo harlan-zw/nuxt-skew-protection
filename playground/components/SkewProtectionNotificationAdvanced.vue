@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 
 // Example showing how to use the composable for advanced features
 const versionsBehind = ref(0)
 const releaseDate = ref<Date | null>(null)
 
 // Access the slot props to get utility functions
-const loadVersionInfo = async (getVersionsBehind: () => Promise<number>, getReleaseDate: (version?: string) => Promise<Date | null>, newVersion: string) => {
+async function loadVersionInfo(getVersionsBehind: () => Promise<number>, getReleaseDate: (version?: string) => Promise<Date | null>, newVersion: string) {
   versionsBehind.value = await getVersionsBehind()
   releaseDate.value = await getReleaseDate(newVersion)
 }
@@ -14,7 +14,7 @@ const loadVersionInfo = async (getVersionsBehind: () => Promise<number>, getRele
 
 <template>
   <SkewNotificationRoot>
-    <template #default="{ dismiss, reload, newVersion, currentVersion, getVersionsBehind, getReleaseDate }">
+    <template #default="{ dismiss, reload: _reload, newVersion, currentVersion, getVersionsBehind, getReleaseDate }">
       <SkewNotificationOverlay
         :style="{
           position: 'fixed',

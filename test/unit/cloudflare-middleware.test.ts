@@ -12,7 +12,7 @@ vi.mock('h3', () => ({
 // Mock fetch globally
 global.fetch = vi.fn()
 
-describe('Cloudflare Skew Protection Middleware', () => {
+describe('cloudflare Skew Protection Middleware', () => {
   let mockEvent: any
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     vi.stubEnv('NUXT_DEPLOYMENT_ID', 'current-deployment')
   })
 
-  describe('Platform Detection', () => {
+  describe('platform Detection', () => {
     it('should only activate on Cloudflare environment', async () => {
       const { getHeader, getQuery } = await import('h3')
       vi.mocked(getHeader).mockReturnValue(null)
@@ -69,7 +69,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     })
   })
 
-  describe('Domain Filtering', () => {
+  describe('domain Filtering', () => {
     it('should skip localhost domain', async () => {
       mockEvent.node.req.headers.host = 'localhost:3000'
 
@@ -127,7 +127,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     })
   })
 
-  describe('Deployment ID Detection', () => {
+  describe('deployment ID Detection', () => {
     it('should detect deployment ID from header', async () => {
       const { getHeader, getQuery } = await import('h3')
       vi.mocked(getHeader).mockReturnValue('old-deployment')
@@ -197,7 +197,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     })
   })
 
-  describe('Deployment Mapping Logic', () => {
+  describe('deployment Mapping Logic', () => {
     it('should skip when requested deployment is current', async () => {
       const { getHeader, getQuery } = await import('h3')
       vi.mocked(getHeader).mockReturnValue('current-deployment')
@@ -261,7 +261,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     })
   })
 
-  describe('Request Forwarding', () => {
+  describe('request Forwarding', () => {
     it('should forward request to versioned worker', async () => {
       const { getHeader, getQuery, setResponseStatus, setResponseHeaders } = await import('h3')
       vi.mocked(getHeader).mockReturnValue('old-deployment')
@@ -369,7 +369,7 @@ describe('Cloudflare Skew Protection Middleware', () => {
     })
   })
 
-  describe('Error Handling', () => {
+  describe('error Handling', () => {
     it('should handle fetch errors gracefully', async () => {
       const { getHeader, getQuery } = await import('h3')
       vi.mocked(getHeader).mockReturnValue('old-deployment')

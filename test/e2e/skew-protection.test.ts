@@ -1,7 +1,7 @@
 import { $fetch, setup } from '@nuxt/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-describe('Skew Protection E2E Tests', () => {
+describe('skew Protection E2E Tests', () => {
   beforeAll(async () => {
     await setup({
       rootDir: import.meta.dirname,
@@ -11,7 +11,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Version Status API', () => {
+  describe('version Status API', () => {
     it('should return current version status', async () => {
       const response = await $fetch('/_skew/status')
 
@@ -35,7 +35,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Debug API', () => {
+  describe('debug API', () => {
     it('should return debug information', async () => {
       const response = await $fetch('/_skew/debug')
 
@@ -58,7 +58,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Error Handling', () => {
+  describe('error Handling', () => {
     it('should handle non-existent versioned assets gracefully', async () => {
       try {
         await $fetch('/_skew/versions/non-existent/test.js')
@@ -79,7 +79,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Performance', () => {
+  describe('performance', () => {
     it('should respond to status check quickly', async () => {
       const start = Date.now()
       await $fetch('/_skew/status')
@@ -106,7 +106,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Deployment ID Handling', () => {
+  describe('deployment ID Handling', () => {
     it('should handle deployment ID in header', async () => {
       try {
         await $fetch('/_skew/versions/test/asset.js', {
@@ -131,7 +131,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Content Types', () => {
+  describe('content Types', () => {
     it('should set appropriate content-type for JS files', async () => {
       try {
         await $fetch('/_skew/versions/test/test.js')
@@ -157,7 +157,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('WebSocket Support (if enabled)', () => {
+  describe('webSocket Support (if enabled)', () => {
     it('should provide WebSocket endpoint when enabled', async () => {
       try {
         // WebSocket endpoint might not be available in all configurations
@@ -174,7 +174,7 @@ describe('Skew Protection E2E Tests', () => {
     })
   })
 
-  describe('Security', () => {
+  describe('security', () => {
     it('should not expose sensitive information in debug endpoint', async () => {
       const response = await $fetch('/_skew/debug')
 

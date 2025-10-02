@@ -1,6 +1,7 @@
-import { createError, defineEventHandler, getCookie, getHeader, getQuery, sendRedirect, setHeader } from 'h3'
-import { DeploymentMappingManager } from '../../../utils/deployment-mapping'
+import { createError, defineEventHandler, getHeader, getQuery, sendRedirect, setHeader } from 'h3'
+import { getSkewProtectionCookie } from '../../../composables/cookie'
 import { getSkewProtectionStorage } from '../../../utils/storage'
+import { CURRENT_VERSION_ID, getVersionManifest } from '../../../utils/version-manager'
 
 /**
  * Route handler for serving versioned assets from /_skew/versions/* path
@@ -23,26 +24,21 @@ export default defineEventHandler(async (event) => {
 
   // Use storage to lookup versioned assets
   const storage = getSkewProtectionStorage()
-  const deploymentMapping = new DeploymentMappingManager(storage)
 
   // Get manifest for version resolution
-  const manifest = await storage.getItem('versions-manifest.json').catch(() => null) as any
+  const manifest = await getVersionManifest(storage)
 
   // If deployment mapping is enabled, resolve version from deployment ID
   let targetVersion = requestedDeploymentId
 
-  if (requestedDeploymentId) {
-    try {
-      const mappedVersion = await deploymentMapping.getVersionForDeployment(requestedDeploymentId)
-      if (mappedVersion && mappedVersion !== 'current') {
-        targetVersion = mappedVersion
-      }
-      else if (mappedVersion === 'current' && manifest?.current) {
-        targetVersion = manifest.current
-      }
+  if (requestedDeploymentId && manifest.deploymentMapping) {
+    const mappedVersion = manifest.deploymentMapping[requestedDeploymentId]
+
+    if (mappedVersion && mappedVersion !== CURRENT_VERSION_ID) {
+      targetVersion = mappedVersion
     }
-    catch (error) {
-      console.warn('[skew-protection] Failed to resolve deployment mapping:', error)
+    else if (mappedVersion === CURRENT_VERSION_ID && manifest.current) {
+      targetVersion = manifest.current
     }
   }
 
@@ -72,7 +68,7 @@ function getRequestedDeploymentId(event: any): string | null {
   return (
     getHeader(event, 'x-deployment-id')
     || getQuery(event).dpl
-    || getCookie(event, 'skew-version')
+    || getSkewProtectionCookie(event)
     || null
   )
 }
@@ -95,7 +91,7 @@ async function handleAssetNotFound(
   event: any,
   versionedPath: string,
   manifest: any,
-  requestedDeploymentId: string | null,
+  _requestedDeploymentId: string | null,
 ) {
   // No manifest available - return 404
   if (!manifest) {

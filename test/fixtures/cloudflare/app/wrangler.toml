@@ -11,7 +11,7 @@ no_bundle = true
 CF_WORKER_NAME = "nuxt-skew-protection-test"
 CF_PREVIEW_DOMAIN = "harlan103"
 NUXT_DEPLOYMENT_ID = "dpl-test-v2"
-CF_DEPLOYMENT_MAPPING = '{"dpl-test-v1":"cdf6f9a0-1b34-4ccf-b9a1-50a4517dd5f9","dpl-test-v2":"current"}'
+CF_DEPLOYMENT_MAPPING = '{"dpl-test-v2":"current","dpl-test-v1":"cdf6f9a0-1b34-4ccf-b9a1-50a4517dd5f9"}'
 
 [site]
 bucket = ".output/public"

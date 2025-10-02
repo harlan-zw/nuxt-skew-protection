@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const url = event.node.req.url || ''
 
   // Only handle API routes (excluding internal _skew routes)
-  if (!url.startsWith('/api/') || url.startsWith('/_skew')) {
+  if (!url.startsWith('/api/')) {
     return
   }
 

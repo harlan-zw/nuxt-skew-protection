@@ -61,18 +61,43 @@ All platform detection and setup is handled in `src/module.ts` - no separate pro
 **When:** Auto-detected when `CF_WORKER_NAME`, `CF_PREVIEW_DOMAIN` and deployment ID exist
 
 **How it works:**
-1. Uses deployment ID routing pattern compatible with OpenNext
-2. Routes requests to specific deployments based on cookies/headers
-3. Client: Checks `/_skew/status` to detect outdated version
+1. **Build-time:** Creates asset manifest mapping file paths to deployment IDs
+   ```json
+   {
+     "releases": [
+       {
+         "deploymentId": "dpl-abc123",
+         "date": "2025-10-01T10:00:00Z",
+         "buildId": "abc123",
+         "versionId": "cdf6f9a0-...",
+         "modules": ["/_nuxt/app.js", "/_nuxt/entry.js"]
+       }
+     ],
+     "files": {
+       "/_nuxt/app.abc123.js": "dpl-abc123",
+       "/_nuxt/entry.abc123.js": "dpl-abc123"
+     }
+   }
+   ```
+
+2. **Runtime - Document requests:**
+   - Bots: Always serve current version (ignore cookies)
+   - Users: Serve current version and reset `skew-version` cookie (ignore old cookies)
+
+3. **Runtime - Asset requests (`/_nuxt/*`):**
+   - **With cookie:** Route to deployment from cookie (fast path)
+   - **Without cookie (bots/crawlers):** Look up asset in manifest, route to correct deployment
+   - **Not in manifest:** Try current version, then search all versions (fallback)
 
 **Files:**
 - `src/module.ts` - Platform detection and setup (lines 69-103)
-- `src/runtime/server/middleware/cloudflare-skew.ts` - Runtime request routing
+- `src/runtime/server/middleware/cloudflare-skew.ts` - Runtime request routing with manifest lookup
 
 **Environment Variables:**
 - `CF_WORKER_NAME` - Worker name
 - `CF_PREVIEW_DOMAIN` - Preview domain
 - `NUXT_DEPLOYMENT_ID` or `NUXT_BUILD_ID` - Deployment identifier
+- `CF_DEPLOYMENT_MAPPING` - JSON mapping of deployment IDs to version IDs
 
 ### 2. Vercel (native)
 
@@ -139,20 +164,35 @@ All platform detection and setup is handled in `src/module.ts` - no separate pro
 }
 ```
 
-## Key Simplifications
+## Key Design Decisions
+
+### Asset Resolution Strategy (Cloudflare):
+
+**Priority Order:**
+1. **Cookie present** → Route directly (fast path, no manifest lookup needed)
+2. **No cookie + manifest hit** → Route to deployment from manifest lookup
+3. **Manifest miss** → Fallback: try current version, then search all versions
+
+**Why this works:**
+- ✅ **Users with cookies**: Fast routing, no manifest lookup
+- ✅ **Bots with cached HTML**: Manifest lookup finds correct version for old assets
+- ✅ **Graceful degradation**: Fallback search handles edge cases
+- ✅ **No 404s**: Old assets remain accessible even weeks after deployment
 
 ### What We Simplified:
 1. ✅ **No provider classes** - All platform detection logic is directly in `src/module.ts`
 2. ✅ **Simple platform detection** - Auto-detects Cloudflare, Vercel, or uses Generic
 3. ✅ **Platform-specific middleware** - Each platform only loads the middleware it needs
 4. ✅ **Streamlined API** - Just `/_skew/status` and `/_skew/debug`
+5. ✅ **Manifest-based routing** - Assets can be found without cookies (handles bots/crawlers)
 
 ### What We Support:
-1. ✅ Cloudflare Workers (OpenNext pattern)
+1. ✅ Cloudflare Workers (OpenNext pattern with manifest-based asset routing)
 2. ✅ Vercel (native skew protection)
 3. ✅ Generic platforms via unstorage (Netlify, self-hosted, etc.)
 4. ✅ `/_skew/status` (client version checking)
 5. ✅ `/_skew/debug` (admin debugging)
+6. ✅ Bot/crawler support (cached HTML assets work via manifest lookup)
 
 ## Flow Diagrams
 
@@ -164,6 +204,8 @@ All platform detection and setup is handled in `src/module.ts` - no separate pro
 └──────┬──────┘
        │
        ├─► Detect CF_WORKER_NAME, CF_PREVIEW_DOMAIN
+       ├─► Generate asset manifest: { releases: [], files: {} }
+       ├─► Map every /_nuxt/* file to its deployment ID
        ├─► Register cloudflare-skew middleware
        └─► Set deployment ID
 
@@ -171,8 +213,15 @@ All platform detection and setup is handled in `src/module.ts` - no separate pro
 │   Runtime   │
 └──────┬──────┘
        │
-       ├─► Middleware routes requests by deployment ID
-       ├─► Supports preview URLs per deployment
+       ├─► Document requests (HTML):
+       │   ├─► Bots: Current version (ignore cookies)
+       │   └─► Users: Current version + reset cookie
+       │
+       ├─► Asset requests (/_nuxt/*):
+       │   ├─► With cookie: Route to deployment from cookie (fast)
+       │   ├─► Without cookie: Look up in manifest → route to correct deployment
+       │   └─► Not in manifest: Try current → search all versions
+       │
        └─► Client checks /_skew/status
 
 ```

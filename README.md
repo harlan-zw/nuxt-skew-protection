@@ -5,15 +5,34 @@
 [![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-Simple, effective skew protection for Nuxt applications. Prevents version mismatches between client and server during deployments.
+## Why Nuxt Skew Protection?
+
+When you deploy new updates to your Nuxt app, users using your previous app version will remain on this version until they do a hard
+reload of the page.
+
+Nuxt has a solution for this enabled by default, it does an hourly poll to check for a new version,
+if one is detected it will do a hard reload on the next navigation or if it encounters an error loading a chunk.
+
+However, this approach has some limitations:
+- **User Experience**: Users may encounter broken pages or missing assets if they navigate to a part of the app that relies on
+  the new version before the next poll.
+- **API**: API requests may fail if they rely on assets or endpoints that have changed in the new version. The user has no way
+  to recover from this without losing their current state.
+- **Cached HTML**: If your HTML is cached by a CDN or proxy, users may be served outdated HTML that references
+  assets from a previous build that no longer exist on the server.
+- **SEO**: As crawlers cache HTML natively, they'll often hit your site and request build assets that no longer exist.
 
 ## 🚀 Features
 
-- 🛡️ **Zero-downtime deployments** - Handle version skew gracefully during rolling updates
-- 🏗️ **Deployment mapping** - Intelligent routing to correct asset versions
+- **Real-time skew protection** - SSE updates notify clients of new deployments immediately
+- Detect when outdated clients make a API requests
+- 🏗️ **Long-lived Nuxt Assets** - Previous deployment build assets remain accessible
+- **UI Notifications** - Configurable client-side notifications for updates
 - 🔍 **Multi-source detection** - Check deployment ID from header → query → cookie
 - 🔄 **Automatic fallbacks** - Graceful handling when requested version isn't found
 - 🧹 **Version cleanup** - Prevent storage bloat with configurable retention
+- Integrates with Vercel Skew Protection
+- Runs on Cloudflare Workers, Vercel, Node.js, and more
 
 ## 📦 Installation
 
@@ -100,44 +119,64 @@ export default defineNuxtConfig({
 
 #### Redis (Recommended for production)
 ```typescript
-storage: {
-  driver: 'redis',
-  host: process.env.REDIS_HOST,
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  keyPrefix: 'skew:',
-  ttl: 7 * 24 * 60 * 60, // 7 days
-}
+export default defineNuxtConfig({
+  modules: ['nuxt-skew-protection'],
+  skewProtection: {
+    storage: {
+      driver: 'redis',
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number.parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      keyPrefix: 'skew:',
+      ttl: 7 * 24 * 60 * 60, // 7 days
+    },
+  },
+})
 ```
 
 #### AWS S3
 ```typescript
-storage: {
-  driver: 's3',
-  bucket: process.env.S3_BUCKET,
-  region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-}
+export default defineNuxtConfig({
+  modules: ['nuxt-skew-protection'],
+  skewProtection: {
+    storage: {
+      driver: 's3',
+      bucket: process.env.S3_BUCKET || 'my-bucket',
+      region: process.env.AWS_REGION || 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+  },
+})
 ```
 
 #### Cloudflare KV
 ```typescript
-storage: {
-  driver: 'cloudflare-kv',
-  accountId: process.env.CF_ACCOUNT_ID,
-  namespaceId: process.env.CF_KV_NAMESPACE_ID,
-  apiToken: process.env.CF_API_TOKEN,
-}
+export default defineNuxtConfig({
+  modules: ['nuxt-skew-protection'],
+  skewProtection: {
+    storage: {
+      driver: 'cloudflare-kv',
+      accountId: process.env.CF_ACCOUNT_ID || '',
+      namespaceId: process.env.CF_KV_NAMESPACE_ID || '',
+      apiToken: process.env.CF_API_TOKEN,
+    },
+  },
+})
 ```
 
 #### PostgreSQL/MySQL
 ```typescript
-storage: {
-  driver: 'database',
-  connectionString: process.env.DATABASE_URL,
-  tableName: 'skew_protection_cache',
-}
+export default defineNuxtConfig({
+  modules: ['nuxt-skew-protection'],
+  skewProtection: {
+    storage: {
+      driver: 'database',
+      connectionString: process.env.DATABASE_URL || '',
+      tableName: 'skew_protection_cache',
+    },
+  },
+})
 ```
 
 ### Environment-Specific Configurations
@@ -336,15 +375,6 @@ const deploymentIdSchema = {
   }
 }
 ```
-
-### Security Headers
-
-Automatic security headers:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Content-Security-Policy`
-- `Strict-Transport-Security`
 
 ## 🧪 Testing
 

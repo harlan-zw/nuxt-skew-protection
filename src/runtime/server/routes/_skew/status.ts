@@ -1,5 +1,6 @@
 import { useStorage } from '#imports'
-import { defineEventHandler, getCookie } from 'h3'
+import { defineEventHandler } from 'h3'
+import { getSkewProtectionCookie } from '../../composables/cookie'
 
 export default defineEventHandler(async (event) => {
   // Detect provider
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Generic/Vercel provider: use storage manifest
-  const userVersion = getCookie(event, 'skew-version')
+  const userVersion = getSkewProtectionCookie(event)
   const storage = useStorage('skew-protection')
 
   const manifest = await storage.getItem('versions-manifest.json').catch(() => null) as any

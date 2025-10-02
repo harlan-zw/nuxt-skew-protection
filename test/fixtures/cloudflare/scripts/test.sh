@@ -60,7 +60,7 @@ run_test "Provider Detection API" \
 
 # Test 3: Deployment mapping API
 run_test "Deployment Mapping API" \
-    "curl -s -o /dev/null -w '%{http_code}' '$WORKER_URL/api/_skew/deployment-mapping'" \
+    "curl -s -o /dev/null -w '%{http_code}' '$WORKER_URL/_skew/deployment-mapping'" \
     "200"
 
 # Test 4: Normal request (no deployment ID)
@@ -91,7 +91,7 @@ run_test "Invalid Deployment Mapping Handling" \
 
 # Test 9: Cloudflare environment variables detection
 run_test "Environment Variables Detection" \
-    "curl -s '$WORKER_URL/api/_skew/cloudflare/versions?action=current' | jq -r '.workerName' 2>/dev/null || echo '$CF_WORKER_NAME'" \
+    "curl -s '$WORKER_URL/_skew/cloudflare/versions?action=current' | jq -r '.workerName' 2>/dev/null || echo '$CF_WORKER_NAME'" \
     "$CF_WORKER_NAME"
 
 # Test 10: Performance test (response time should be reasonable)
@@ -109,7 +109,7 @@ fi
 
 # Test 11: OpenNext compatibility check
 echo -e "${BLUE}🧪 Testing: OpenNext Compatibility${NC}"
-DEPLOYMENT_MAPPING_FORMAT=$(curl -s "$WORKER_URL/api/_skew/deployment-mapping" | jq -r 'type' 2>/dev/null || echo "object")
+DEPLOYMENT_MAPPING_FORMAT=$(curl -s "$WORKER_URL/_skew/deployment-mapping" | jq -r 'type' 2>/dev/null || echo "object")
 if [ "$DEPLOYMENT_MAPPING_FORMAT" = "object" ]; then
     echo -e "${GREEN}✅ PASS: OpenNext Compatible Deployment Mapping Format${NC}"
     TEST_RESULTS+=("PASS: OpenNext Compatibility")
@@ -120,7 +120,7 @@ fi
 
 # Test 12: Preview URL generation test
 echo -e "${BLUE}🧪 Testing: Preview URL Generation${NC}"
-PREVIEW_URL_TEST=$(curl -s "$WORKER_URL/api/_skew/cloudflare/versions?action=current" | jq -r '.previewUrl' 2>/dev/null || echo "null")
+PREVIEW_URL_TEST=$(curl -s "$WORKER_URL/_skew/cloudflare/versions?action=current" | jq -r '.previewUrl' 2>/dev/null || echo "null")
 if [[ "$PREVIEW_URL_TEST" == *"workers.dev"* ]]; then
     echo -e "${GREEN}✅ PASS: Preview URL Generation${NC}"
     TEST_RESULTS+=("PASS: Preview URL Generation")

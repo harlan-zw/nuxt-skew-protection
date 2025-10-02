@@ -4,7 +4,7 @@
 
 <template>
   <SkewNotificationRoot>
-    <template #default="{ dismiss, reload, newVersion, currentVersion }">
+    <template #default="{ dismiss: _dismiss, reload: _reload, newVersion: _newVersion, currentVersion: _currentVersion }">
       <SkewNotificationOverlay
         :style="{
           position: 'fixed',
