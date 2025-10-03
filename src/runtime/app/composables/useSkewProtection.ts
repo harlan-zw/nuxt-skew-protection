@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
-import { useNuxtApp } from '#app'
-import { computed } from 'vue'
+import type { ModuleInvalidatedPayload } from '../../types'
+import { useNuxtApp, useRuntimeConfig } from '#app'
+import { computed, onUnmounted } from 'vue'
 import { logger } from '../../shared/logger'
 
 export interface VersionInfo {
@@ -33,40 +34,21 @@ export interface SkewProtectionPlugin {
 
 export function useSkewProtection() {
   const nuxtApp = useNuxtApp()
-  const $skewProtection = nuxtApp.$skewProtection as SkewProtectionPlugin | undefined
 
-  if (!$skewProtection) {
-    // Graceful degradation for SSR or when plugin isn't loaded
-    logger.warn('Skew protection plugin not available')
-
-    // Return safe defaults
+  // // Reactive state from the plugin
+  const versionMismatch = computed(() => {
     return {
-      isOutdated: computed(() => false),
-      newVersion: computed(() => ''),
-      currentVersion: computed(() => ''),
-      currentBuildId: computed(() => ''),
-      versionMismatch: computed(() => ({ detected: false, newVersion: '', currentVersion: '' })),
-      detectionReason: computed(() => undefined),
-      getDeploymentInfo: async () => null,
-      getVersionsBehind: async () => 0,
-      getReleaseDate: async () => null,
-      getAvailableVersions: async () => [],
-      updateVersion: () => {},
-      updateAndReload: () => {},
-      reload: () => {},
-      dismiss: () => {},
+      detected: false,
+      newVersion: '',
+      currentVersion: '',
+      reason: undefined as 'manifest' | 'sse' | undefined,
     }
-  }
-
-  // Reactive state from the plugin
-  const versionMismatch = computed(() => $skewProtection.versionMismatch.value)
-  const versionCookie = computed(() => $skewProtection.versionCookie.value)
+  })
   const currentBuildId = computed(() => $skewProtection.currentBuildId)
 
   // Computed properties for easier access
   const isOutdated = computed(() => versionMismatch.value.detected)
   const newVersion = computed(() => versionMismatch.value.newVersion)
-  const currentVersion = computed(() => versionMismatch.value.currentVersion || versionCookie.value)
   const detectionReason = computed(() => versionMismatch.value.reason)
 
   /**
@@ -74,7 +56,7 @@ export function useSkewProtection() {
    */
   async function getDeploymentInfo(version?: string): Promise<DeploymentInfo | null> {
     const targetVersion = version || currentBuildId.value
-    return $fetch(`/_skew/debug`)
+    return $fetch(`/_skew/status`)
       .then((response) => {
         if (response && typeof response === 'object') {
           // Find the deployment info for the specified version
@@ -189,11 +171,31 @@ export function useSkewProtection() {
     $skewProtection.dismiss()
   }
 
+  /**
+   * Register a callback for when current modules are invalidated
+   * Returns an unsubscribe function
+   */
+  function onCurrentModulesInvalidated(callback: (payload: ModuleInvalidatedPayload) => void | Promise<void>) {
+    const hook = nuxtApp.hooks.hook('skew-protection:module-invalidated', callback)
+
+    // Cleanup on unmount
+    onUnmounted(() => {
+      // Remove the hook when component unmounts
+      if (typeof hook === 'function') {
+        hook()
+      }
+    })
+
+    return hook
+  }
+
+  const runtimeConfig = useRuntimeConfig()
+
   return {
     // State
     isOutdated,
     newVersion,
-    currentVersion,
+    currentVersion: runtimeConfig.app.buildId,
     currentBuildId,
     versionMismatch,
     detectionReason,
@@ -207,5 +209,6 @@ export function useSkewProtection() {
     updateAndReload,
     reload,
     dismiss,
+    onCurrentModulesInvalidated,
   }
 }

@@ -21,22 +21,6 @@
   "bugs": {
     "url": "https://github.com/your-org/nuxt-skew-protection/issues"
   },
-  "keywords": [
-    "nuxt",
-    "nuxt-module",
-    "skew-protection",
-    "deployment",
-    "zero-downtime",
-    "version-management",
-    "rolling-deployment",
-    "blue-green",
-    "canary",
-    "enterprise",
-    "production",
-    "monitoring",
-    "performance",
-    "caching"
-  ],
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",

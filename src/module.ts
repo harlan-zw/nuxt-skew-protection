@@ -1,5 +1,7 @@
+import type { NuxtSkewProtectionRuntimeConfig } from '~/src/runtime/types'
 import {
   addComponent,
+  addImports,
   addPlugin,
   addServerHandler,
   addTypeTemplate,
@@ -36,18 +38,21 @@ export interface ModuleOptions {
    */
   checkOutdatedBuildInterval?: number | false
   /**
-   * Notification strategy when version mismatch is detected
-   * @default 'modal'
-   */
-  notificationStrategy?: 'modal' | 'toast' | 'redirect' | 'silent'
-  /**
    * Enable Server-Sent Events for real-time version update notifications
    * When enabled, reduces Nuxt's polling frequency and uses SSE for instant updates
    * Only works on platforms with persistent connections (Node.js, Bun, Deno)
    * Auto-disabled on Cloudflare Workers
    * @default false
    */
-  enableSSE?: boolean
+  sse?: boolean
+  /**
+   * Enable Cloudflare Durable Objects for real-time version update notifications
+   * When enabled, reduces Nuxt's polling frequency and uses WebSocket connections via Durable Objects
+   * Only works on Cloudflare Workers with Durable Objects enabled
+   * Requires wrangler.toml configuration with durable_objects bindings
+   * @default false
+   */
+  durableObjects?: boolean
   /**
    * Cookie name for storing deployment version
    * @default '__nkpv'
@@ -62,6 +67,10 @@ export interface ModuleOptions {
   debug?: boolean
 }
 
+export interface ModulePublicRuntimeConfig {
+  skewProtection: NuxtSkewProtectionRuntimeConfig
+}
+
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: 'nuxt-skew-protection',
@@ -74,8 +83,8 @@ export default defineNuxtModule<ModuleOptions>({
     retentionDays: 30,
     maxNumberOfVersions: 10,
     checkOutdatedBuildInterval: 600000, // 10 minutes
-    notificationStrategy: 'modal',
-    enableSSE: false,
+    sse: false,
+    durableObjects: false,
     cookieName: '__nkpv',
     debug: false,
   },
@@ -179,11 +188,6 @@ export default defineNuxtModule<ModuleOptions>({
       handler: resolver.resolve('./runtime/server/routes/_skew/debug.ts'),
     })
 
-    // Add client plugin for version tracking
-    addPlugin({
-      src: resolver.resolve('./runtime/app/plugins/version-tracker.ts'),
-    })
-
     // Add TypeScript types
     addTypeTemplate({
       filename: 'types/nuxt-skew-protection.d.ts',
@@ -196,20 +200,38 @@ export default defineNuxtModule<ModuleOptions>({
 import type { SkewProtectionPlugin } from '${typesPath}'
 
 declare module '#app' {
-  interface NuxtApp {
-    $skewProtection: SkewProtectionPlugin
+  interface NuxtAppManifestMeta {
+    skewProtection?: {
+      versions?: Record<string, {
+        timestamp: string
+        expires: string
+        assets: string[]
+        deletedChunks?: string[]
+      }>
+      deploymentMapping?: Record<string, string>
+    }
   }
 }
 
-declare module 'vue' {
-  interface ComponentCustomProperties {
-    $skewProtection: SkewProtectionPlugin
+declare module 'nuxt/app' {
+  interface NuxtAppManifestMeta {
+    skewProtection?: {
+      versions?: Record<string, {
+        timestamp: string
+        expires: string
+        assets: string[]
+        deletedChunks?: string[]
+      }>
+      deploymentMapping?: Record<string, string>
+    }
   }
 }
 
 export {}
 `
       },
+    }, {
+      nuxt: true,
     })
 
     // Add SkewNotification UI components
@@ -232,14 +254,35 @@ export {}
       })
     }
 
+    // Add service worker as public asset
+    nuxt.options.nitro.publicAssets = nuxt.options.nitro.publicAssets || []
+    nuxt.options.nitro.publicAssets.push({
+      dir: resolver.resolve('./assets'),
+      maxAge: 0, // Service workers should not be cached
+    })
+
+    // Add service worker plugin
+    addPlugin({
+      src: resolver.resolve('./runtime/app/plugins/service-worker.client.ts'),
+      mode: 'client',
+    })
+
+    // add useSkewProtection composable import
+    addImports({
+      name: 'useSkewProtection',
+      from: resolver.resolve('./runtime/app/composables/useSkewProtection'),
+    })
+
+    // cookie as well
+    addImports({
+      name: 'useSkewProtectionCookie',
+      from: resolver.resolve('./runtime/app/composables/useSkewProtectionCookie'),
+    })
+
     // Add build hooks for asset versioning
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
       const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
       const outputDir = nitro.options.output.dir
-
-      if (options.debug) {
-        logger.warn(`Build completed with ID: ${buildId}`)
-      }
 
       // Cloudflare: generate asset manifest
       if (platform === 'cloudflare') {
@@ -271,18 +314,14 @@ export {}
         process.exit(1)
       }
 
-      if (options.debug) {
-        logger.warn(`Deployment ID "${buildId}" is unique, proceeding with build.`)
-      }
-
-      // Copy assets to versioned directory
-      const assets = await assetManager.copyAssetsToVersionedDirectory(buildId, outputDir).catch((error) => {
-        logger.error('Error copying assets:', error)
+      // Get list of assets from build
+      const assets = await assetManager.getAssetsFromBuild(buildId, outputDir).catch((error) => {
+        logger.error('Error getting assets from build:', error)
         process.exit(1)
       })
 
       // Update versions manifest
-      await assetManager.updateVersionsManifest(buildId, assets).catch((error) => {
+      const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets).catch((error) => {
         logger.error('Error updating versions manifest:', error)
         process.exit(1)
       })
@@ -290,12 +329,6 @@ export {}
       // Store assets in configured storage
       await assetManager.storeAssetsInStorage(buildId, outputDir, assets).catch((error) => {
         logger.error('Error storing assets in storage:', error)
-        process.exit(1)
-      })
-
-      // For static/prerendered builds: restore old versioned assets into public directory
-      await assetManager.restoreOldAssetsToPublic(buildId, outputDir).catch((error) => {
-        logger.error('Error restoring old assets:', error)
         process.exit(1)
       })
 
@@ -309,9 +342,24 @@ export {}
         process.exit(1)
       })
 
-      if (options.debug) {
-        logger.warn(`Updated deployment mapping for "${buildId}"`)
+      // Count versions (excluding current)
+      const versionCount = existingVersions.filter(v => v.id !== buildId).length
+
+      // For static/prerendered builds: restore old versioned assets into public directory
+      if (versionCount > 0) {
+        logger.log(`Restoring build files from the last ${versionCount} release${versionCount > 1 ? 's' : ''}...`)
       }
+
+      await assetManager.restoreOldAssetsToPublic(buildId, outputDir, assets, isExistingVersion).catch((error) => {
+        logger.error('Error restoring old assets:', error)
+        process.exit(1)
+      })
+
+      // Augment Nuxt build metadata files with skew protection data
+      await assetManager.augmentBuildMetadata(buildId, outputDir).catch((error) => {
+        logger.error('Error augmenting build metadata:', error)
+        process.exit(1)
+      })
 
       // Clean up expired versions
       await assetManager.cleanupExpiredVersions(outputDir).catch((error) => {
@@ -332,10 +380,10 @@ export {}
     }
 
     // Add SSE route for real-time updates (if enabled and platform supports it)
-    if (options.enableSSE) {
+    if (options.sse) {
       if (platform === 'cloudflare') {
         logger.warn('SSE not supported on Cloudflare Workers (no persistent connections), falling back to native polling only')
-        options.enableSSE = false
+        options.sse = false
       }
       else {
         addServerHandler({
@@ -343,7 +391,7 @@ export {}
           handler: resolver.resolve('./runtime/server/routes/_skew/updates.ts'),
         })
 
-        if (options.enableSSE) {
+        if (options.sse) {
           // Add SSE plugin for client
           addPlugin(resolver.resolve('./runtime/app/plugins/sse-version-updates.client.ts'))
         }
@@ -358,11 +406,45 @@ export {}
       }
     }
 
+    // Add Durable Objects WebSocket route for real-time updates (if enabled and on Cloudflare)
+    if (options.durableObjects) {
+      if (platform !== 'cloudflare') {
+        logger.warn('Durable Objects only supported on Cloudflare Workers, falling back to native polling only')
+        options.durableObjects = false
+      }
+      else {
+        // Add WebSocket route
+        addServerHandler({
+          route: '/_skew/ws',
+          handler: resolver.resolve('./runtime/server/routes/_skew/ws.ts'),
+        })
+
+        // Add WebSocket plugin for client
+        addPlugin(resolver.resolve('./runtime/app/plugins/websocket-version-updates.client.ts'))
+
+        // Increase Nuxt's polling interval since Durable Objects provides real-time updates
+        if (options.checkOutdatedBuildInterval === 600000) {
+          nuxt.options.experimental.checkOutdatedBuildInterval = 3600000 // 1 hour
+          if (options.debug) {
+            logger.info('Durable Objects enabled, increasing Nuxt polling interval to 1 hour (Durable Objects handles real-time updates)')
+          }
+        }
+
+        if (options.debug) {
+          logger.info('Durable Objects WebSocket enabled for real-time version updates')
+          logger.info('Make sure to configure Durable Objects binding in wrangler.toml:')
+          logger.info('  [[durable_objects.bindings]]')
+          logger.info('  name = "VERSION_UPDATES"')
+          logger.info('  class_name = "VersionUpdatesDO"')
+        }
+      }
+    }
+
     // Add runtime config for client access to module options
     nuxt.options.runtimeConfig.public = nuxt.options.runtimeConfig.public || {}
     nuxt.options.runtimeConfig.public.skewProtection = {
-      notificationStrategy: options.notificationStrategy,
-      enableSSE: options.enableSSE,
+      sse: options.sse,
+      durableObjects: options.durableObjects,
       cookieName: options.cookieName,
       debug: options.debug,
     }

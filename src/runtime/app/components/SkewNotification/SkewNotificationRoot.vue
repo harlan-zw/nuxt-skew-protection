@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useSkewProtection } from '../../composables/useSkewProtection'
 
 interface Props {
@@ -21,14 +21,50 @@ const emit = defineEmits<{
 // Use the composable if auto mode is enabled
 const skewProtection = props.auto ? useSkewProtection() : null
 
+// Track if modules have been invalidated
+const modulesInvalidated = ref(false)
+const releaseDate = ref<Date | null>(null)
+
+// Listen for module invalidation events
+if (props.auto && skewProtection) {
+  skewProtection.onCurrentModulesInvalidated(async () => {
+    console.log('Modules invalidated, setting flag to true')
+    modulesInvalidated.value = true
+    // Fetch release date when new version is detected
+    if (skewProtection.newVersion.value) {
+      releaseDate.value = await skewProtection.getReleaseDate(skewProtection.newVersion.value)
+    }
+  })
+}
+
 // Determine if notification should be open
 const isOpen = computed(() => {
   if (props.auto && skewProtection) {
-    // In auto mode, sync with version tracker state
-    return skewProtection.isOutdated.value
+    // In auto mode, show when modules are invalidated
+    return modulesInvalidated.value
   }
   // In manual mode, use the prop
   return props.open
+})
+
+// Calculate time ago
+const timeAgo = computed(() => {
+  if (!releaseDate.value)
+    return null
+
+  const now = new Date()
+  const diff = now.getTime() - releaseDate.value.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0)
+    return `${days} day${days > 1 ? 's' : ''} ago`
+  if (hours > 0)
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`
+  if (minutes > 0)
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
+  return 'just now'
 })
 
 // Watch for manual prop changes (only in manual mode)
@@ -54,61 +90,19 @@ function handleReload() {
   }
   emit('reload')
 }
-
-// Provide state to child components
-provide('skewNotification', {
-  isOpen,
-  dismiss: handleDismiss,
-  reload: handleReload,
-  // Expose composable data to children
-  ...(skewProtection && {
-    newVersion: skewProtection.newVersion,
-    currentVersion: skewProtection.currentVersion,
-    getVersionsBehind: skewProtection.getVersionsBehind,
-    getReleaseDate: skewProtection.getReleaseDate,
-    getDeploymentInfo: skewProtection.getDeploymentInfo,
-  }),
-})
-
-// Focus management and body scroll lock for accessibility
-onMounted(() => {
-  if (isOpen.value) {
-    document.body.style.overflow = 'hidden'
-  }
-})
-
-onUnmounted(() => {
-  document.body.style.overflow = ''
-})
-
-watch(isOpen, (value) => {
-  if (value) {
-    document.body.style.overflow = 'hidden'
-  }
-  else {
-    document.body.style.overflow = ''
-  }
-})
 </script>
 
 <template>
-  <div
-    v-if="isOpen"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="skew-notification-title"
-    aria-describedby="skew-notification-description"
-    @keydown.esc="handleDismiss"
-  >
-    <slot
-      :is-open="isOpen"
-      :dismiss="handleDismiss"
-      :reload="handleReload"
-      :new-version="skewProtection?.newVersion.value"
-      :current-version="skewProtection?.currentVersion.value"
-      :get-versions-behind="skewProtection?.getVersionsBehind"
-      :get-release-date="skewProtection?.getReleaseDate"
-      :get-deployment-info="skewProtection?.getDeploymentInfo"
-    />
-  </div>
+  <slot
+    :is-open="isOpen"
+    :dismiss="handleDismiss"
+    :reload="handleReload"
+    :time-ago="timeAgo"
+    :new-version="skewProtection?.newVersion.value"
+    :current-version="skewProtection?.currentVersion.value"
+    :release-date="releaseDate"
+    :get-versions-behind="skewProtection?.getVersionsBehind"
+    :get-release-date="skewProtection?.getReleaseDate"
+    :get-deployment-info="skewProtection?.getDeploymentInfo"
+  />
 </template>

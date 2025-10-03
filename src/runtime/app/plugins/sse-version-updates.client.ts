@@ -20,7 +20,7 @@ export default defineNuxtPlugin({
     const config = useRuntimeConfig()
     const skewConfig = config.public.skewProtection
 
-    const versionCookie = useSkewProtectionCookie(config.app.buildId)
+    const versionCookie = useSkewProtectionCookie()
 
     let eventSource: EventSource | null = null
     let reconnectAttempts = 0

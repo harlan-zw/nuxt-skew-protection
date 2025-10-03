@@ -7,32 +7,27 @@
 
 ## Why Nuxt Skew Protection?
 
-When you deploy new updates to your Nuxt app, users using your previous app version will remain on this version until they do a hard
-reload of the page.
+Congrats you shipped that latest release! Turns out many of your users are going to be using the previous version of your app
+for hours or even days after you deployed the new version.
 
-Nuxt has a solution for this enabled by default, it does an hourly poll to check for a new version,
-if one is detected it will do a hard reload on the next navigation or if it encounters an error loading a chunk.
+Finally fixed that SEO issue? Great, but crawlers will often hit your site and request build chunks that no longer exist, leading
+to 500 errors and broken indexes.
 
-However, this approach has some limitations:
-- **User Experience**: Users may encounter broken pages or missing assets if they navigate to a part of the app that relies on
-  the new version before the next poll.
-- **API**: API requests may fail if they rely on assets or endpoints that have changed in the new version. The user has no way
-  to recover from this without losing their current state.
-- **Cached HTML**: If your HTML is cached by a CDN or proxy, users may be served outdated HTML that references
-  assets from a previous build that no longer exist on the server.
-- **SEO**: As crawlers cache HTML natively, they'll often hit your site and request build assets that no longer exist.
+Unfortunately, you've just been "skewed". Skew is the version difference between what your users are running and what is currently deployed.
+
+While Nuxt helps us by hard-reloading on navigation when it detects a new release, it's often not enough to ensure a smooth experience for all users
+and crawlers. Just check out one of Nuxt's top commented [issues](https://github.com/nuxt/nuxt/issues/29624).
 
 ## 🚀 Features
 
-- **Real-time skew protection** - SSE updates notify clients of new deployments immediately
-- Detect when outdated clients make a API requests
-- 🏗️ **Long-lived Nuxt Assets** - Previous deployment build assets remain accessible
-- **UI Notifications** - Configurable client-side notifications for updates
-- 🔍 **Multi-source detection** - Check deployment ID from header → query → cookie
-- 🔄 **Automatic fallbacks** - Graceful handling when requested version isn't found
-- 🧹 **Version cleanup** - Prevent storage bloat with configurable retention
-- Integrates with Vercel Skew Protection
-- Runs on Cloudflare Workers, Vercel, Node.js, and more
+- 🏗️ **Long-lived Nuxt Assets** - Old build assets remain accessible after new deployments for set periods.
+- **Instantly Adopted Releases**
+  - Use SSE in supported environments for updates notify clients of new deployments immediately
+  - Using workers? No problem. Skew protection is enabled through [Preview Environments](https://vercel.com/docs/concepts/deployments/preview-deployments) and [Vercel Skew Protection](https://vercel.com/docs/concepts/limits/skew-protection).
+  -
+- **Intelligent User Notifications**
+  - Based on the page the user is on and if a chunk they're using is updated, it will conditionally notify them.
+  - Headless UI component with full Nuxt UI integration.
 
 ## 📦 Installation
 

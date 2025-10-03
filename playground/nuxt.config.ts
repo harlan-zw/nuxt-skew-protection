@@ -7,7 +7,6 @@ export default defineNuxtConfig({
     checkOutdatedBuildInterval: 10000, // 10 seconds for faster testing
     retentionDays: 1, // Short retention for testing
     debug: true,
-    notificationStrategy: 'modal',
     // Uncomment to enable WebSocket for real-time updates
     // enableWebSocket: true,
   },

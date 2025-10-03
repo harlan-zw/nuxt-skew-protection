@@ -9,7 +9,7 @@ export default defineNuxtConfig({
 
   skewProtection: {
     debug: true,
-    enableSSE: true,
+    sse: true,
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),

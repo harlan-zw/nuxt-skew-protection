@@ -9,6 +9,8 @@ export default defineNuxtConfig({
     maxNumberOfVersions: 10,
     notificationStrategy: 'modal',
     checkOutdatedBuildInterval: 30000,
+    // Enable Durable Objects for real-time updates on Cloudflare
+    durableObjects: true,
   },
 
   // Cloudflare Workers configuration
