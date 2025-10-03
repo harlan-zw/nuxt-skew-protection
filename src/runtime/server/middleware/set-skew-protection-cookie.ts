@@ -1,6 +1,6 @@
 import { useRuntimeConfig } from '#imports'
 import { defineEventHandler, getHeader } from 'h3'
-import { setSkewProtectionCookie } from '../composables/cookie'
+import { setSkewProtectionCookie } from '~/src/runtime/server/imports/cookie'
 
 /**
  * Middleware for document requests (HTML pages)

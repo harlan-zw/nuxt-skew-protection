@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import { useRuntimeConfig } from '#imports'
 import { getCookie, setCookie } from 'h3'
-import { COOKIE_CONFIG } from '../../shared/cookie'
+import { getCookieConfig } from '../../shared/cookie'
 
 /**
  * Get the skew protection version cookie name from runtime config
@@ -48,5 +48,5 @@ export function getSkewProtectionCookie(event: H3Event): string | undefined {
  */
 export function setSkewProtectionCookie(event: H3Event, value: string): void {
   const cookieName = getSkewProtectionCookieName(event)
-  setCookie(event, cookieName, value, COOKIE_CONFIG)
+  setCookie(event, cookieName, value, getCookieConfig())
 }

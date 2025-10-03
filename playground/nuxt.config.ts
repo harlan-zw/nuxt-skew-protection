@@ -2,13 +2,17 @@ export default defineNuxtConfig({
   modules: ['../src/module'],
   experimental: {
     appManifest: true,
+    checkOutdatedBuildInterval: 30 * 1000, // this is ms
   },
   skewProtection: {
-    checkOutdatedBuildInterval: 10000, // 10 seconds for faster testing
+    checkForUpdateStrategy: 'ws',
     retentionDays: 1, // Short retention for testing
     debug: true,
-    // Uncomment to enable WebSocket for real-time updates
-    // enableWebSocket: true,
+  },
+  nitro: {
+    experimental: {
+      websocket: true,
+    },
   },
   devtools: { enabled: true },
 })

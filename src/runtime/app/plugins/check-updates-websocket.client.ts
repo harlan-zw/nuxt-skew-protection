@@ -25,11 +25,9 @@ export default defineNuxtPlugin({
     const skewConfig = config.public.skewProtection
 
     const versionCookie = useSkewProtectionCookie()
-
-    const clientVersion = versionCookie.value
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = typeof window !== 'undefined'
-      ? `${protocol}//${window.location.host}/_skew/ws?version=${encodeURIComponent(clientVersion || '')}`
+      ? `${protocol}//${window.location.host}/_skew/ws`
       : ''
 
     const {

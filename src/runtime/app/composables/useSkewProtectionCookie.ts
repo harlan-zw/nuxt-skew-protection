@@ -1,6 +1,6 @@
 import type { CookieRef } from '#app'
 import { useCookie, useRuntimeConfig } from '#app'
-import { COOKIE_CONFIG } from '../../shared/cookie'
+import { getCookieConfig } from '../../shared/cookie'
 
 /**
  * Composable for managing the skew protection version cookie
@@ -21,6 +21,6 @@ export function useSkewProtectionCookie(): CookieRef<string | null | undefined> 
 
   return useCookie(cookieName, {
     default: () => config.app.buildId,
-    ...COOKIE_CONFIG,
+    ...getCookieConfig(),
   })
 }

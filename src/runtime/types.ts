@@ -2,6 +2,11 @@ export interface NuxtSkewProtectionRuntimeConfig {
   sse: boolean
   durableObjects: boolean
   cookieName: string
+  cookie: {
+    path: string
+    sameSite: 'strict' | 'lax' | 'none' | boolean
+    maxAge: number
+  }
   debug: boolean
 }
 

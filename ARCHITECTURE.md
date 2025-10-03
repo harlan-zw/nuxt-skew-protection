@@ -1,307 +1,642 @@
-# Nuxt Skew Protection - Simplified Architecture
+# Nuxt Skew Protection - Architecture
 
 ## Overview
 
-This module provides version skew protection for Nuxt applications with three platform-specific implementations:
-1. **Cloudflare** - OpenNext-compatible pattern with deployment routing
-2. **Vercel** - Uses Vercel's built-in skew protection
-3. **Generic (unstorage-based)** - Works everywhere else, uses unstorage for version tracking
+This module provides version skew protection for Nuxt applications through:
+1. **Version Tracking** - Maintains multiple build versions to prevent 404 errors on old sessions
+2. **Real-time Updates** - Notifies users when a new version is deployed using polling, SSE, or WebSockets
+3. **Intelligent Notifications** - Only prompts users when their loaded modules become invalidated
+4. **Universal Storage** - Works on any platform using unstorage (filesystem, S3, Redis, etc.)
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              SIMPLIFIED ARCHITECTURE                 │
+│              ARCHITECTURE OVERVIEW                   │
 ├─────────────────────────────────────────────────────┤
 │                                                      │
 │  Build-Time (src/module.ts):                        │
 │  ┌────────────────────────────────────────┐        │
-│  │ 1. Detect platform (CF/Vercel/Generic) │        │
-│  │ 2. Register platform middleware         │        │
-│  │ 3. Register API endpoints               │        │
-│  │ 4. Set up build hooks                   │        │
+│  │ 1. Detect platform & update strategy   │        │
+│  │ 2. Configure storage (unstorage)        │        │
+│  │ 3. Register middleware & plugins        │        │
+│  │ 4. Setup build hooks                    │        │
+│  └────────────────────────────────────────┘        │
+│                     │                                │
+│                     ▼                                │
+│  nitro:build:public-assets hook:                    │
+│  ┌────────────────────────────────────────┐        │
+│  │ 1. Collect /_nuxt/* assets from build  │        │
+│  │ 2. Update version manifest              │        │
+│  │ 3. Store assets in storage (versioned) │        │
+│  │ 4. Restore old assets to public/        │        │
+│  │ 5. Augment builds/latest.json           │        │
+│  │ 6. Cleanup expired versions             │        │
 │  └────────────────────────────────────────┘        │
 │                                                      │
-│  Runtime - Client APIs:                             │
+│  Runtime - Server Middleware:                       │
 │  ┌────────────────────────────────────────┐        │
-│  │ GET /_skew/status                   │        │
-│  │  → Check if client version is outdated │        │
-│  │  → Returns: outdated, clientVersion,   │        │
-│  │     currentVersion                      │        │
-│  └────────────────────────────────────────┘        │
-│                                                      │
-│  Runtime - Admin APIs:                              │
-│  ┌────────────────────────────────────────┐        │
-│  │ GET /_skew/debug                    │        │
-│  │  → Show all deployment info             │        │
-│  │  → Returns: provider, buildId, manifest│        │
-│  └────────────────────────────────────────┘        │
-│                                                      │
-│  Runtime - Middleware:                              │
-│  ┌────────────────────────────────────────┐        │
-│  │ Cloudflare: /** → cloudflare-skew.ts   │        │
-│  │  → Routes requests based on deployment │        │
+│  │ set-skew-protection-cookie.ts           │        │
+│  │  → Sets __nkpv cookie on HTML requests │        │
+│  │  → Cookie = current buildId             │        │
 │  │                                          │        │
-│  │ Vercel: /** → vercel-skew.ts            │        │
-│  │  → Sets Vercel deployment cookie        │        │
+│  │ vercel-skew.ts (Vercel only)            │        │
+│  │  → Sets __vdpl cookie for Vercel        │        │
+│  └────────────────────────────────────────┘        │
+│                                                      │
+│  Runtime - Update Notifications:                    │
+│  ┌────────────────────────────────────────┐        │
+│  │ Strategy: polling (default)             │        │
+│  │  → Nuxt's built-in builds/latest.json  │        │
 │  │                                          │        │
-│  │ Generic: Uses standard middleware       │        │
-│  │  → Version checking via API endpoints   │        │
+│  │ Strategy: sse (Node.js compatible)      │        │
+│  │  → /_skew/sse endpoint                  │        │
+│  │  → Real-time SSE connection             │        │
+│  │                                          │        │
+│  │ Strategy: ws (Cloudflare Durable)       │        │
+│  │  → /_skew/ws endpoint                   │        │
+│  │  → WebSocket connection                 │        │
+│  └────────────────────────────────────────┘        │
+│                                                      │
+│  Runtime - Client Plugins:                          │
+│  ┌────────────────────────────────────────┐        │
+│  │ 0.skew-protection.ts (root)             │        │
+│  │  → Sets up version tracking             │        │
+│  │  → Listens to app:manifest:update       │        │
+│  │  → Provides $skewProtection             │        │
+│  │                                          │        │
+│  │ sw-track-user-modules.client.ts         │        │
+│  │  → Registers service worker             │        │
+│  │  → Tracks loaded JS modules             │        │
+│  │  → Detects invalidated modules          │        │
+│  │  → Fires skew-protection:module-        │        │
+│  │    -invalidated hook                    │        │
 │  └────────────────────────────────────────┘        │
 │                                                      │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Platform Implementations
+## Core Components
 
-All platform detection and setup is handled in `src/module.ts` - no separate provider classes needed.
+### 1. Build-Time Asset Management (src/utils/version-manager.ts)
 
-### 1. Cloudflare (OpenNext pattern)
+The `createAssetManager` function handles all build-time operations:
 
-**When:** Auto-detected when `CF_WORKER_NAME`, `CF_PREVIEW_DOMAIN` and deployment ID exist
+**Asset Collection:**
+- Scans `public/_nuxt/` for all build assets
+- Collects asset paths (e.g., `_nuxt/entry.abc123.js`)
 
-**How it works:**
-1. **Build-time:** Creates asset manifest mapping file paths to deployment IDs
-   ```json
-   {
-     "releases": [
-       {
-         "deploymentId": "dpl-abc123",
-         "date": "2025-10-01T10:00:00Z",
-         "buildId": "abc123",
-         "versionId": "cdf6f9a0-...",
-         "modules": ["/_nuxt/app.js", "/_nuxt/entry.js"]
-       }
-     ],
-     "files": {
-       "/_nuxt/app.abc123.js": "dpl-abc123",
-       "/_nuxt/entry.abc123.js": "dpl-abc123"
-     }
-   }
-   ```
-
-2. **Runtime - Document requests:**
-   - Bots: Always serve current version (ignore cookies)
-   - Users: Serve current version and reset `skew-version` cookie (ignore old cookies)
-
-3. **Runtime - Asset requests (`/_nuxt/*`):**
-   - **With cookie:** Route to deployment from cookie (fast path)
-   - **Without cookie (bots/crawlers):** Look up asset in manifest, route to correct deployment
-   - **Not in manifest:** Try current version, then search all versions (fallback)
-
-**Files:**
-- `src/module.ts` - Platform detection and setup (lines 69-103)
-- `src/runtime/server/middleware/cloudflare-skew.ts` - Runtime request routing with manifest lookup
-
-**Environment Variables:**
-- `CF_WORKER_NAME` - Worker name
-- `CF_PREVIEW_DOMAIN` - Preview domain
-- `NUXT_DEPLOYMENT_ID` or `NUXT_BUILD_ID` - Deployment identifier
-- `CF_DEPLOYMENT_MAPPING` - JSON mapping of deployment IDs to version IDs
-
-### 2. Vercel (native)
-
-**When:** Auto-detected when `VERCEL_SKEW_PROTECTION_ENABLED=1` and `VERCEL_DEPLOYMENT_ID` exists
-
-**How it works:**
-1. Uses Vercel's native skew protection (no custom logic needed)
-2. Sets `__vdpl` cookie with deployment ID on HTML requests
-3. Vercel infrastructure handles the rest
-
-**Files:**
-- `src/module.ts` - Platform detection and setup (lines 69-111)
-- `src/runtime/server/middleware/vercel-skew.ts` - Runtime cookie setting
-
-**No storage needed** - Vercel handles everything
-
-### 3. Generic (unstorage-based)
-
-**When:** Default fallback for all other platforms (Netlify, self-hosted, etc.)
-
-**How it works:**
-1. Build-time: Copies assets to versioned directories in storage
-2. Runtime: Serves versioned assets and tracks versions
-3. Client: Checks `/_skew/status` to detect outdated version
-
-**Files:**
-- `src/module.ts` - Platform detection and setup
-- Standard middleware files for document/API/asset handling
-
-**Storage:**
-- Uses unstorage (memory, filesystem, KV, etc.)
-- Stores: `versions-manifest.json` and versioned assets
-
-## API Endpoints
-
-### GET `/_skew/status`
-**Purpose:** Client-side version checking
-
-**Response:**
-```json
-{
-  "outdated": false,
-  "clientVersion": "build-abc123",
-  "currentVersion": "build-xyz789",
-  "versionExists": true,
-  "availableVersions": ["build-abc123", "build-xyz789"]
+**Version Manifest:**
+```typescript
+interface VersionManifest {
+  current: string                           // Current build ID
+  versions: Record<string, {
+    timestamp: string                       // When this version was built
+    expires: string                         // When to clean up this version
+    assets: string[]                        // All assets in this version
+    deletedChunks?: string[]                // Chunks removed in this version
+  }>
+  deploymentMapping?: Record<string, string> // deploymentId → buildId
+  fileIdToVersion?: Record<string, string>   // fileId → buildId (for deduplication)
 }
 ```
 
-### GET `/_skew/debug`
-**Purpose:** Admin debugging
+**Key Operations:**
+1. **updateVersionsManifest()** - Adds current build to manifest, calculates deletedChunks
+2. **storeAssetsInStorage()** - Stores assets with deduplication (same hash = same file)
+3. **restoreOldAssetsToPublic()** - Copies old version assets back to public/ folder
+4. **augmentBuildMetadata()** - Adds skewProtection data to builds/latest.json
+5. **cleanupExpiredVersions()** - Removes old versions based on retention policy
 
-**Response:**
-```json
-{
-  "provider": "generic",
-  "buildId": "build-abc123",
-  "manifest": { /* versions manifest */ },
-  "stats": {
-    "availableVersions": ["build-abc123"],
-    "currentVersion": "build-abc123",
-    "totalVersions": 1
-  }
-}
+**Deduplication Strategy:**
+- Extracts file ID (hash) from asset path (e.g., "ABC123.js" from "ABC123.DEF456.js")
+- Only stores one copy of each file ID across all versions
+- When new build includes same hash, removes it from old version's storage
+
+### 2. Runtime Cookie Management
+
+**Server-side (src/runtime/server/imports/cookie.ts):**
+- `getSkewProtectionCookie(event)` - Reads `__nkpv` cookie
+- `setSkewProtectionCookie(event, buildId)` - Sets `__nkpv` cookie
+
+**Client-side (src/runtime/app/composables/useSkewProtectionCookie.ts):**
+- `useSkewProtectionCookie()` - Reactive cookie reference
+- Defaults to current buildId
+
+**Middleware (src/runtime/server/middleware/set-skew-protection-cookie.ts):**
+- Runs on all document requests (HTML pages)
+- Sets `__nkpv` cookie to current buildId
+- Ensures users always have a valid version cookie
+
+### 3. Update Detection Strategies
+
+The module supports three strategies for detecting new deployments:
+
+**Strategy 1: Polling (default, works everywhere)**
+- Uses Nuxt's built-in `experimental.checkOutdatedBuildInterval`
+- Polls `builds/latest.json` periodically
+- No server-side code needed
+- Selected automatically for static sites
+
+**Strategy 2: SSE (Node.js, Bun, Deno)**
+- Endpoint: `/_skew/sse` (src/runtime/server/routes/_skew/sse.ts)
+- Plugin: `check-updates-sse.client.ts`
+- Persistent connection sends version updates in real-time
+- Keepalive every 30 seconds
+- NOT compatible with Cloudflare Workers (no persistent connections)
+
+**Strategy 3: WebSocket (Cloudflare Durable Objects)**
+- Endpoint: `/_skew/ws` (src/runtime/server/routes/_skew/ws.ts)
+- Plugin: `check-updates-websocket.client.ts`
+- Bidirectional WebSocket connection
+- Heartbeat every 30 seconds
+- Requires `experimental.websockets` enabled
+- Requires `cloudflare-durable` preset
+
+### 4. Intelligent Module Invalidation
+
+**Service Worker (sw/sw.js):**
+- Intercepts all JavaScript fetch requests
+- Tracks loaded module URLs in a Set
+- Responds to messages: `GET_MODULES`, `CHECK_MODULE`, `RESET_MODULES`
+
+**Plugin (src/runtime/app/plugins/sw-track-user-modules.client.ts):**
+- Registers service worker at `/sw.js`
+- Listens to `app:manifest:update` hook
+- When new version detected:
+  1. Gets list of loaded modules from service worker
+  2. Extracts deletedChunks from builds/latest.json manifest
+  3. Checks if any loaded modules are in deletedChunks
+  4. If yes, fires `skew-protection:module-invalidated` hook
+
+**Why this matters:**
+- Only notifies users when their *current session* is affected
+- Avoids unnecessary "update available" popups
+- Provides urgency signal: "Your loaded code was deleted, please refresh"
+
+## Public APIs
+
+### Composables
+
+**useSkewProtection()** (src/runtime/app/composables/useSkewProtection.ts)
+```typescript
+const skew = useSkewProtection()
+
+// Reactive state
+skew.manifest           // NuxtAppManifestMeta | null
+skew.currentVersion     // string (user's build ID)
+skew.isOutdated         // Ref<boolean>
+
+// Methods
+skew.checkForUpdates()  // Manually trigger update check
+skew.onCurrentModulesInvalidated(callback) // Hook for module invalidation
+```
+
+**useSkewProtectionCookie()** (src/runtime/app/composables/useSkewProtectionCookie.ts)
+```typescript
+const versionCookie = useSkewProtectionCookie()
+// Returns reactive cookie reference (CookieRef<string>)
+```
+
+### Component
+
+**SkewNotification** (src/runtime/app/components/SkewNotification.vue)
+
+Headless component that provides notification logic:
+```vue
+<template>
+  <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo, releaseDate }">
+    <!-- Your custom UI -->
+    <div v-if="isOpen">
+      <p>New version available!</p>
+      <button @click="reload">Reload</button>
+      <button @click="dismiss">Dismiss</button>
+    </div>
+  </SkewNotification>
+</template>
+```
+
+Props:
+- `open` - Manual control over open state
+
+Slot props:
+- `isOpen` - Whether notification should be shown
+- `dismiss()` - Dismiss notification
+- `reload()` - Trigger reload
+- `timeAgo` - Human-readable time since release
+- `releaseDate` - Release date object
+
+### Hooks
+
+**app:manifest:update** (Nuxt built-in)
+```typescript
+nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
+  // Called when new version detected
+  // manifest: NuxtAppManifestMeta
+})
+```
+
+**skew-protection:module-invalidated** (Custom)
+```typescript
+nuxtApp.hooks.hook('skew-protection:module-invalidated', (payload) => {
+  // Called when user's loaded modules are deleted
+  // payload: { deletedChunks: string[], invalidatedModules: string[] }
+})
+```
+
+### Server Utilities
+
+**nuxt-skew-protection/server** (src/runtime/server/index.ts)
+
+```typescript
+import { getSkewProtectionCookie, setSkewProtectionCookie, isClientOutdated } from 'nuxt-skew-protection/server'
+
+export default defineEventHandler((event) => {
+  const version = getSkewProtectionCookie(event)
+  setSkewProtectionCookie(event, 'new-build-id')
+  const outdated = isClientOutdated(event) // boolean
+})
 ```
 
 ## Key Design Decisions
 
-### Asset Resolution Strategy (Cloudflare):
+### 1. Universal Storage Approach
 
-**Priority Order:**
-1. **Cookie present** → Route directly (fast path, no manifest lookup needed)
-2. **No cookie + manifest hit** → Route to deployment from manifest lookup
-3. **Manifest miss** → Fallback: try current version, then search all versions
+Instead of platform-specific implementations, the module uses a **single universal approach** that works everywhere:
 
-**Why this works:**
-- ✅ **Users with cookies**: Fast routing, no manifest lookup
-- ✅ **Bots with cached HTML**: Manifest lookup finds correct version for old assets
-- ✅ **Graceful degradation**: Fallback search handles edge cases
-- ✅ **No 404s**: Old assets remain accessible even weeks after deployment
+**Storage Strategy:**
+- Uses unstorage for flexibility (filesystem, S3, Redis, Cloudflare KV, etc.)
+- Stores versioned assets in storage during build
+- Restores old assets to `public/` folder during build
+- Old assets become part of the deployment package
 
-### What We Simplified:
-1. ✅ **No provider classes** - All platform detection logic is directly in `src/module.ts`
-2. ✅ **Simple platform detection** - Auto-detects Cloudflare, Vercel, or uses Generic
-3. ✅ **Platform-specific middleware** - Each platform only loads the middleware it needs
-4. ✅ **Streamlined API** - Just `/_skew/status` and `/_skew/debug`
-5. ✅ **Manifest-based routing** - Assets can be found without cookies (handles bots/crawlers)
+**Benefits:**
+- ✅ Works on any platform (Node.js, Cloudflare, Vercel, Netlify, static hosting)
+- ✅ No runtime asset proxying or routing needed
+- ✅ Assets served as static files (fast, cacheable)
+- ✅ No CDN conflicts (assets always served from origin)
+- ✅ Simpler architecture (no platform-specific middleware for assets)
 
-### What We Support:
-1. ✅ Cloudflare Workers (OpenNext pattern with manifest-based asset routing)
-2. ✅ Vercel (native skew protection)
-3. ✅ Generic platforms via unstorage (Netlify, self-hosted, etc.)
-4. ✅ `/_skew/status` (client version checking)
-5. ✅ `/_skew/debug` (admin debugging)
-6. ✅ Bot/crawler support (cached HTML assets work via manifest lookup)
+### 2. Asset Deduplication
 
-## Flow Diagrams
+**Problem:** Multiple versions can share many identical files (vendor chunks, framework code)
 
-### Cloudflare Flow
+**Solution:** File ID-based deduplication
+- Extract file ID (hash) from asset path
+- Store only one copy per hash across all versions
+- Update `fileIdToVersion` mapping when new build reuses a hash
+- Remove duplicate from old version's storage
+
+**Result:** Significantly reduced storage usage
+
+### 3. Intelligent Notifications
+
+**Problem:** Don't want to spam users with "update available" for every deploy
+
+**Solution:** Module invalidation detection
+1. Service worker tracks which JS modules user has loaded
+2. Build manifest includes `deletedChunks` for each version
+3. When new version detected, check if user's loaded modules are deleted
+4. Only fire `skew-protection:module-invalidated` if user is affected
+
+**Result:** Users only notified when their session is truly broken
+
+### 4. Three Update Strategies
+
+**Why three strategies?**
+- Different platforms have different capabilities
+- Polling: Universal, works everywhere
+- SSE: Real-time updates for Node.js-compatible platforms
+- WebSocket: Real-time updates for Cloudflare Durable Objects
+
+**Auto-detection:**
+- Static sites → Polling
+- Cloudflare (cloudflare-durable preset) → WebSocket
+- Node.js/Bun/Deno → SSE (default)
+- Manual override via `checkForUpdateStrategy` option
+
+### 5. Integration with Nuxt's Native Mechanisms
+
+**Builds metadata:**
+- Augments `builds/latest.json` with skewProtection data
+- Augments `builds/meta/{buildId}.json` with version-specific data
+- Works with Nuxt's existing `app:manifest:update` hook
+
+**Why this matters:**
+- Compatible with Nuxt's chunk-reload plugin
+- Uses standard Nuxt conventions
+- Minimal disruption to existing Nuxt behavior
+
+### 6. Cookie-Based Version Tracking
+
+**Cookie name:** `__nkpv` (Nuxt Kit Protection Version)
+
+**How it works:**
+- Middleware sets cookie on every document request
+- Cookie value = current buildId
+- Client reads cookie to know their version
+- Server can check if client is outdated
+
+**Vercel Integration:**
+- Also sets `__vdpl` cookie for Vercel's native skew protection
+- Works alongside Vercel's infrastructure
+
+## Complete Flow Diagram
 
 ```
-┌─────────────┐
-│  Build Time │
-└──────┬──────┘
-       │
-       ├─► Detect CF_WORKER_NAME, CF_PREVIEW_DOMAIN
-       ├─► Generate asset manifest: { releases: [], files: {} }
-       ├─► Map every /_nuxt/* file to its deployment ID
-       ├─► Register cloudflare-skew middleware
-       └─► Set deployment ID
+┌──────────────────────────────────────────────────────────────────┐
+│                         BUILD TIME                                │
+└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────┐
-│   Runtime   │
-└──────┬──────┘
-       │
-       ├─► Document requests (HTML):
-       │   ├─► Bots: Current version (ignore cookies)
-       │   └─► Users: Current version + reset cookie
-       │
-       ├─► Asset requests (/_nuxt/*):
-       │   ├─► With cookie: Route to deployment from cookie (fast)
-       │   ├─► Without cookie: Look up in manifest → route to correct deployment
-       │   └─► Not in manifest: Try current → search all versions
-       │
-       └─► Client checks /_skew/status
+1. Module Setup (src/module.ts)
+   ├─► Detect platform (Cloudflare/Vercel/generic)
+   ├─► Configure unstorage (fs/s3/redis/kv)
+   ├─► Determine update strategy (polling/sse/ws)
+   ├─► Register middleware & plugins
+   └─► Register build hooks
 
-```
+2. nitro:build:public-assets Hook (runs after Nuxt builds assets)
+   │
+   ├─► Asset Manager: getAssetsFromBuild()
+   │   └─► Scans public/_nuxt/ → ["_nuxt/entry.abc123.js", ...]
+   │
+   ├─► Asset Manager: updateVersionsManifest()
+   │   ├─► Adds current build to manifest
+   │   ├─► Calculates deletedChunks (vs previous version)
+   │   └─► Saves to storage/version-manifest.json
+   │
+   ├─► Asset Manager: storeAssetsInStorage()
+   │   ├─► For each asset, extract fileId (hash)
+   │   ├─► Store in storage/{buildId}/{asset}
+   │   ├─► Check if fileId exists in previous version
+   │   ├─► If yes, remove from old version (deduplication)
+   │   └─► Update fileIdToVersion mapping
+   │
+   ├─► Asset Manager: restoreOldAssetsToPublic()
+   │   ├─► For each old version in manifest
+   │   ├─► Skip assets that exist in current build
+   │   ├─► Skip assets with same fileId as current build
+   │   └─► Copy old assets to public/_nuxt/
+   │       Result: public/_nuxt/ contains ALL versions
+   │
+   ├─► Asset Manager: updateDeploymentMapping()
+   │   └─► Maps deploymentId → buildId for version tracking
+   │
+   ├─► Asset Manager: augmentBuildMetadata()
+   │   ├─► Adds skewProtection data to builds/latest.json:
+   │   │   { versions: {...}, deploymentMapping: {...} }
+   │   └─► Adds version-specific data to builds/meta/{buildId}.json:
+   │       { assets: [...], deletedChunks: [...] }
+   │
+   └─► Asset Manager: cleanupExpiredVersions()
+       ├─► Remove versions older than retentionDays
+       ├─► Remove versions beyond maxNumberOfVersions
+       └─► Update manifest and storage
 
-### Vercel Flow
+┌──────────────────────────────────────────────────────────────────┐
+│                        RUNTIME - SERVER                           │
+└──────────────────────────────────────────────────────────────────┘
 
-```
-┌─────────────┐
-│  Build Time │
-└──────┬──────┘
-       │
-       ├─► Detect VERCEL_SKEW_PROTECTION_ENABLED
-       └─► Register vercel-skew middleware
+Middleware: set-skew-protection-cookie.ts (on every HTML request)
+├─► Checks sec-fetch-dest === 'document'
+├─► Gets current buildId from runtimeConfig
+└─► Sets __nkpv cookie = buildId
 
-┌─────────────┐
-│   Runtime   │
-└──────┬──────┘
-       │
-       ├─► Middleware sets __vdpl cookie
-       ├─► Vercel routes requests to correct deployment
-       └─► Client checks /_skew/status (optional)
-```
+Middleware: vercel-skew.ts (Vercel only, on HTML requests)
+└─► Sets __vdpl cookie for Vercel's native skew protection
 
-### Generic Flow
+Route: /_skew/sse (SSE strategy only)
+├─► Client connects with persistent connection
+├─► Server sends initial version
+├─► Sends keepalive every 30s
+└─► On new deployment, sends version update
 
-```
-┌─────────────┐
-│  Build Time │
-└──────┬──────┘
-       │
-       ├─► Copy assets to versioned directories
-       ├─► Create versions-manifest.json
-       └─► Store in unstorage
+Route: /_skew/ws (WebSocket strategy only)
+├─► Client connects via WebSocket
+├─► Server sends initial version
+├─► Heartbeat every 30s
+└─► On new deployment, sends version update
 
-┌─────────────┐
-│   Runtime   │
-└──────┬──────┘
-       │
-       ├─► Standard middleware handles requests
-       ├─► Serve versioned assets from storage
-       └─► Client checks /_skew/status periodically
+┌──────────────────────────────────────────────────────────────────┐
+│                       RUNTIME - CLIENT                            │
+└──────────────────────────────────────────────────────────────────┘
+
+Plugin: 0.skew-protection.ts (root plugin)
+├─► Gets currentVersion from cookie or buildId
+├─► Creates reactive refs: manifest, latestVersion, isOutdated
+├─► Listens to app:manifest:update hook
+└─► Provides $skewProtection globally
+
+Plugin: sw-track-user-modules.client.ts (service worker plugin)
+├─► Registers service worker at /sw.js
+├─► Service Worker intercepts all JS fetch requests
+│   └─► Tracks loaded modules in Set
+├─► Listens to app:manifest:update hook
+├─► When new version detected:
+│   ├─► Gets list of loaded modules from SW
+│   ├─► Gets deletedChunks from manifest
+│   ├─► Checks intersection
+│   └─► If user's modules are deleted:
+│       └─► Fire skew-protection:module-invalidated hook
+└─► Provides getLoadedModules() helper
+
+Plugin: check-updates-sse.client.ts (SSE strategy only)
+├─► Connects to /_skew/sse
+├─► Listens for version updates
+└─► Calls fetchLatestManifest() on version change
+    └─► Fires app:manifest:update hook
+
+Plugin: check-updates-websocket.client.ts (WebSocket strategy only)
+├─► Connects to /_skew/ws
+├─► Listens for version updates
+└─► Fires app:manifest:update hook directly
+
+Polling Strategy (default)
+└─► Nuxt's built-in checkOutdatedBuildInterval
+    └─► Polls builds/latest.json
+        └─► Fires app:manifest:update hook
+
+┌──────────────────────────────────────────────────────────────────┐
+│                         USER EXPERIENCE                           │
+└──────────────────────────────────────────────────────────────────┘
+
+Component: SkewNotification.vue
+├─► Calls useSkewProtection()
+├─► Listens to onCurrentModulesInvalidated()
+└─► Shows notification when modules invalidated
+    ├─► Provides isOpen, dismiss(), reload() to slot
+    └─► User sees: "New version available, please reload"
+
+User Flow:
+1. User visits site → Gets __nkpv cookie with buildId
+2. User navigates → Service worker tracks loaded modules
+3. New deployment happens → New buildId deployed
+4. Update detection (polling/sse/ws) → Detects new version
+5. app:manifest:update fired → manifest.value updated
+6. SW plugin checks loaded modules vs deletedChunks
+7. If intersection found → skew-protection:module-invalidated fired
+8. SkewNotification shows → User sees notification
+9. User clicks reload → window.location.reload()
+10. User gets new version → New __nkpv cookie set
 ```
 
 ## Configuration
 
-Minimal configuration required:
+### Module Options (nuxt.config.ts)
 
 ```typescript
-// nuxt.config.ts
 export default defineNuxtConfig({
   modules: ['nuxt-skew-protection'],
 
   skewProtection: {
-    // Optional: configure storage
+    // Storage configuration (required for non-Vercel platforms)
     storage: {
-      driver: 'fs', // or 'memory', 'cloudflare-kv', etc.
-      base: './.versions'
+      driver: 'fs',  // or 's3', 'redis', 'cloudflare-kv', etc.
+      base: 'node_modules/.cache/nuxt/skew-protection', // for fs driver
+      // For other drivers, see unstorage documentation
     },
 
-    // Optional: retention settings
-    retentionDays: 7,
-    maxNumberOfVersions: 10,
+    // Retention settings
+    retentionDays: 30,           // How long to keep old versions
+    maxNumberOfVersions: 10,     // Maximum versions to retain
 
-    // Optional: notification strategy
-    notificationStrategy: 'modal', // or 'toast', 'redirect', 'silent'
+    // Update detection strategy
+    checkForUpdateStrategy: 'sse', // 'polling' | 'sse' | 'ws'
+    // Auto-detected based on platform if not specified:
+    // - Static sites → 'polling'
+    // - Cloudflare Durable → 'ws'
+    // - Node.js/Bun/Deno → 'sse'
+
+    // Cookie configuration
+    cookieName: '__nkpv',        // Cookie name for version tracking
+    cookie: {
+      path: '/',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 60, // 60 days
+    },
+
+    // Enable debug logging
+    debug: false,
+
+    // Enable/disable module
+    enabled: true,
+  },
+})
+```
+
+### Storage Driver Examples
+
+**Filesystem (default):**
+```typescript
+storage: {
+  driver: 'fs',
+  base: 'node_modules/.cache/nuxt/skew-protection'
+}
+```
+
+**Cloudflare KV:**
+```typescript
+storage: {
+  driver: 'cloudflare-kv-binding',
+  binding: 'SKEW_PROTECTION_KV'
+}
+```
+
+**Redis:**
+```typescript
+storage: {
+  driver: 'redis',
+  host: 'localhost',
+  port: 6379,
+  base: 'skew-protection'
+}
+```
+
+**S3:**
+```typescript
+storage: {
+  driver: 's3',
+  bucket: 'my-bucket',
+  region: 'us-east-1',
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+}
+```
+
+See [unstorage documentation](https://unstorage.unjs.io/) for all available drivers.
+
+### Platform-Specific Configuration
+
+**Vercel:**
+```bash
+# Enable Vercel's native skew protection alongside this module
+VERCEL_SKEW_PROTECTION_ENABLED=1
+```
+
+**Cloudflare Workers (WebSocket strategy):**
+```typescript
+export default defineNuxtConfig({
+  nitro: {
+    preset: 'cloudflare-durable',
+    experimental: {
+      websockets: true  // Required for WebSocket strategy
+    }
+  },
+  skewProtection: {
+    checkForUpdateStrategy: 'ws'
   }
 })
 ```
 
-### Vercel-specific:
-```bash
-# Enable Vercel native skew protection
-VERCEL_SKEW_PROTECTION_ENABLED=1
-# Vercel sets VERCEL_DEPLOYMENT_ID automatically
+## File Structure
+
+```
+src/
+├── module.ts                          # Main module entry, platform detection
+├── kit.ts                             # Platform detection utilities
+├── logger.ts                          # Build-time logger
+├── utils/
+│   └── version-manager.ts             # Asset versioning & storage logic
+├── runtime/
+│   ├── types.ts                       # TypeScript types
+│   ├── shared/
+│   │   ├── cookie.ts                  # Shared cookie utilities
+│   │   └── logger.ts                  # Client-side logger
+│   ├── app/
+│   │   ├── components/
+│   │   │   └── SkewNotification.vue   # Headless notification component
+│   │   ├── composables/
+│   │   │   ├── useSkewProtection.ts   # Main composable
+│   │   │   ├── useSkewProtectionCookie.ts
+│   │   │   └── fetchLatestManifest.ts
+│   │   └── plugins/
+│   │       ├── 0.skew-protection.ts   # Root plugin
+│   │       ├── sw-track-user-modules.client.ts  # Service worker integration
+│   │       ├── check-updates-sse.client.ts      # SSE update detection
+│   │       └── check-updates-websocket.client.ts # WebSocket update detection
+│   └── server/
+│       ├── index.ts                   # Server exports
+│       ├── imports/
+│       │   ├── cookie.ts              # Server cookie utilities
+│       │   └── utils.ts               # Server utilities
+│       ├── middleware/
+│       │   ├── set-skew-protection-cookie.ts  # Cookie middleware
+│       │   └── vercel-skew.ts         # Vercel-specific middleware
+│       └── routes/
+│           └── _skew/
+│               ├── sse.ts             # SSE endpoint
+│               └── ws.ts              # WebSocket endpoint
+sw/
+└── sw.js                              # Service worker for module tracking
 ```
 
-## Benefits of Simplified Architecture
+## Benefits of This Architecture
 
-1. **Easier to understand** - All platform logic in one file (`src/module.ts`)
-2. **Less code** - No provider abstraction layer, direct platform detection
-3. **Better tree-shaking** - Only load middleware for the detected platform
-4. **Simpler APIs** - Only 2 endpoints (status + debug)
-5. **Three platforms supported** - Cloudflare, Vercel, and Generic (unstorage)
+1. **Universal** - Works on any platform with any storage backend
+2. **Simple** - No platform-specific code paths for asset serving
+3. **Fast** - Assets served as static files, fully cacheable
+4. **Intelligent** - Only notifies users when their session is affected
+5. **Flexible** - Three update strategies for different use cases
+6. **Compatible** - Integrates with Nuxt's native mechanisms
+7. **Scalable** - Deduplication reduces storage costs
+8. **Maintainable** - Single code path, well-organized structure

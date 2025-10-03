@@ -3,29 +3,27 @@
   "type": "module",
   "version": "1.0.0",
   "packageManager": "pnpm@10.16.1",
-  "description": "Enterprise-grade skew protection for Nuxt applications. Prevents version mismatches between client and server during deployments with zero-downtime updates.",
+  "description": "Zero-config real-time notifications and long-lived build assets to prevent skew issues in Nuxt applications.",
   "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com",
-    "url": "https://example.com/"
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
   },
-  "contributors": [
-    "Your Name <your.email@example.com>"
-  ],
-  "license": "MIT",
-  "homepage": "https://github.com/your-org/nuxt-skew-protection",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "homepage": "https://nuxtseo.com/skew-protection",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/nuxt-skew-protection.git"
+    "url": "git+https://github.com/harlan-zw/nuxt-skew-protection.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/nuxt-skew-protection/issues"
+    "url": "https://github.com/harlan-zw/nuxt-skew-protection/issues"
   },
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
-    }
+    },
+    "./server": "./dist/runtime/server/index.js"
   },
   "main": "./dist/module.mjs",
   "files": [

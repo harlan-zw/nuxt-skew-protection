@@ -1,6 +1,7 @@
 // sw.js
 const loadedModules = new Set()
 
+// eslint-disable-next-line no-restricted-globals
 self.addEventListener('fetch', (event) => {
   const url = event.request.url
 
@@ -9,6 +10,7 @@ self.addEventListener('fetch', (event) => {
 
     // Notify all clients about the new module
     event.waitUntil(
+      // eslint-disable-next-line no-restricted-globals
       self.clients.matchAll().then((clients) => {
         clients.forEach((client) => {
           client.postMessage({
@@ -23,6 +25,7 @@ self.addEventListener('fetch', (event) => {
 })
 
 // Listen for messages from main app
+// eslint-disable-next-line no-restricted-globals
 self.addEventListener('message', (event) => {
   if (event.data.type === 'GET_MODULES') {
     // Send back all loaded modules

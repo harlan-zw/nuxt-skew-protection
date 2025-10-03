@@ -5,7 +5,6 @@ import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
-import { getSkewProtectionStorage } from './storage'
 
 const logger = createConsola({
   defaults: { tag: 'nuxt-skew-protection' },
@@ -103,7 +102,7 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 
 // Get the unified manifest
 export async function getVersionManifest(storage?: Storage): Promise<VersionManifest> {
-  const store = storage || getSkewProtectionStorage()
+  const store = storage
   return store.getItem('version-manifest.json')
     .then(manifest => (manifest as VersionManifest) || {
       current: '',
@@ -117,95 +116,8 @@ export async function getVersionManifest(storage?: Storage): Promise<VersionMani
 
 // Update the manifest
 async function setVersionManifest(manifest: VersionManifest, storage?: Storage): Promise<void> {
-  const store = storage || getSkewProtectionStorage()
+  const store = storage
   await store.setItem('version-manifest.json', manifest)
-}
-
-// ============================================================================
-// CLOUDFLARE-SPECIFIC: Asset manifest generation (no copying/storage)
-// ============================================================================
-
-export async function generateCloudflareManifest(
-  deploymentId: string,
-  buildId: string,
-  outputDir: string,
-  buildAssetsDir = '/_nuxt',
-  options?: { debug?: boolean },
-): Promise<VersionManifest> {
-  const storage = getSkewProtectionStorage()
-  const manifest = await getVersionManifest(storage)
-
-  // Find all build assets in the output directory
-  const assetsSubDir = buildAssetsDir.replace(/^\//, '')
-  const assetsOutputDir = join(outputDir, 'public', assetsSubDir)
-  const assetFiles: string[] = []
-  const assetToDeployment: Record<string, string> = manifest.assetToDeployment || {}
-
-  await fs.readdir(assetsOutputDir, { recursive: true })
-    .then((files) => {
-      for (const file of files) {
-        if (typeof file === 'string') {
-          const assetPath = `${buildAssetsDir}/${file}`
-          assetFiles.push(assetPath)
-          assetToDeployment[assetPath] = deploymentId
-        }
-      }
-    })
-    .catch((error) => {
-      if (options?.debug) {
-        logger.warn('Could not read build assets directory:', error)
-      }
-    })
-
-  // Add this version to the manifest
-  const now = new Date()
-  const expires = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000)) // 7 days default
-
-  // Calculate deleted chunks compared to previous version
-  const previousVersionId = getPreviousVersion(manifest, buildId)
-  const previousAssets = previousVersionId ? manifest.versions[previousVersionId]?.assets || [] : []
-  const deletedChunks = calculateDeletedChunks(assetFiles, previousAssets)
-
-  manifest.current = buildId
-  manifest.versions[buildId] = {
-    timestamp: now.toISOString(),
-    expires: expires.toISOString(),
-    deploymentId,
-    assets: assetFiles,
-    deletedChunks,
-  }
-  manifest.assetToDeployment = assetToDeployment
-
-  // Keep only the last 10 releases for Cloudflare
-  const maxReleases = 10
-  const sortedVersions = Object.entries(manifest.versions)
-    .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
-    .sort((a, b) => b.timestamp - a.timestamp)
-
-  if (sortedVersions.length > maxReleases) {
-    const removed = sortedVersions.slice(maxReleases)
-    for (const { id } of removed) {
-      const versionAssets = manifest.versions[id]?.assets || []
-      delete manifest.versions[id]
-
-      // Clean up asset mappings
-      if (manifest.assetToDeployment) {
-        for (const asset of versionAssets) {
-          if (manifest.assetToDeployment[asset] === manifest.versions[id]?.deploymentId) {
-            delete manifest.assetToDeployment[asset]
-          }
-        }
-      }
-    }
-  }
-
-  await setVersionManifest(manifest, storage)
-
-  if (options?.debug) {
-    logger.info(`Generated Cloudflare manifest with ${assetFiles.length} assets`)
-  }
-
-  return manifest
 }
 
 // Get deployment ID for a specific asset (Cloudflare)
@@ -598,12 +510,6 @@ export function createAssetManager(options: {
     const manifest = await getVersionManifest(storage)
     return manifest.deploymentMapping?.[deploymentId] || null
   }
-
-  async function isDeploymentIdUsed(deploymentId: string): Promise<boolean> {
-    const manifest = await getVersionManifest(storage)
-    return !!(manifest.deploymentMapping && deploymentId in manifest.deploymentMapping)
-  }
-
   async function augmentBuildMetadata(buildId: string, outputDir: string) {
     const manifest = await getVersionManifest(storage)
 
@@ -660,7 +566,6 @@ export function createAssetManager(options: {
     restoreOldAssetsToPublic,
     updateDeploymentMapping,
     getVersionForDeployment,
-    isDeploymentIdUsed,
     augmentBuildMetadata,
   }
 }

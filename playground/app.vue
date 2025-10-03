@@ -6,7 +6,6 @@ import { onMounted, ref } from 'vue'
 const runtimeConfig = useRuntimeConfig()
 const buildId = ref(runtimeConfig.app?.buildId)
 const versionCookie = useCookie('skew-version')
-const $skewProtection = ref(null)
 const skew = useSkewProtection()
 
 async function checkForUpdates() {
@@ -85,7 +84,7 @@ onMounted(async () => {
     </div>
 
     <!-- Skew Protection Notification Component -->
-    <SkewNotificationRoot v-slot="{ isOpen, dismiss, reload, timeAgo }">
+    <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo }">
       <div>
         debug: {{ isOpen ? 'open' : 'closed' }}
       </div>
@@ -117,7 +116,7 @@ onMounted(async () => {
           </div>
         </div>
       </Transition>
-    </SkewNotificationRoot>
+    </SkewNotification>
   </div>
 </template>
 

@@ -1,5 +1,5 @@
-import type { NuxtApp } from '#app'
-import { defineNuxtPlugin } from '#app'
+import type { NuxtApp } from 'nuxt/app'
+import { defineNuxtPlugin } from 'nuxt/app'
 import { useSkewProtectionCookie } from '../composables/useSkewProtectionCookie'
 
 export default defineNuxtPlugin({
@@ -12,9 +12,7 @@ export default defineNuxtPlugin({
     const versionCookie = useSkewProtectionCookie()
 
     // Register service worker
-    navigator.serviceWorker.register('/sw.js').then((registration) => {
-      console.log('[skew-protection] Service Worker registered')
-    }).catch((error) => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
       console.error('[skew-protection] Service Worker registration failed:', error)
     })
 
@@ -155,7 +153,6 @@ export default defineNuxtPlugin({
       provide: {
         skewServiceWorker: {
           getLoadedModules,
-          checkDeletedChunks,
         },
       },
     }
