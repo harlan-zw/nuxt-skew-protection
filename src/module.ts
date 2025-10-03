@@ -128,7 +128,6 @@ declare module '#app' {
         assets: string[]
         deletedChunks?: string[]
       }>
-      deploymentMapping?: Record<string, string>
     }
   }
 }
@@ -142,7 +141,6 @@ declare module 'nuxt/app' {
         assets: string[]
         deletedChunks?: string[]
       }>
-      deploymentMapping?: Record<string, string>
     }
   }
 }
@@ -245,7 +243,7 @@ export {}
       const assetManager = createAssetManager(options)
 
       // Get list of assets from build
-      const assets = await assetManager.getAssetsFromBuild(buildId, outputDir)
+      const assets = await assetManager.getAssetsFromBuild(outputDir)
 
       // Update versions manifest
       const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
@@ -253,11 +251,8 @@ export {}
       // Store assets in configured storage
       await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
 
-      // Update deployment mapping
-      const existingVersions = await assetManager.listExistingVersions()
-      await assetManager.updateDeploymentMapping(buildId, existingVersions)
-
       // Count versions (excluding current)
+      const existingVersions = await assetManager.listExistingVersions()
       const versionCount = existingVersions.filter(v => v.id !== buildId).length
 
       // For static/prerendered builds: restore old versioned assets into public directory
@@ -271,7 +266,7 @@ export {}
       await assetManager.augmentBuildMetadata(buildId, outputDir)
 
       // Clean up expired versions
-      await assetManager.cleanupExpiredVersions(outputDir)
+      await assetManager.cleanupExpiredVersions()
     })
 
     // Add Durable Objects WebSocket route for real-time updates (if enabled and on Cloudflare)

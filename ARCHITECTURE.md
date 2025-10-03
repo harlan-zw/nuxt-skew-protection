@@ -96,17 +96,18 @@ interface VersionManifest {
     assets: string[]                        // All assets in this version
     deletedChunks?: string[]                // Chunks removed in this version
   }>
-  deploymentMapping?: Record<string, string> // deploymentId → buildId
   fileIdToVersion?: Record<string, string>   // fileId → buildId (for deduplication)
 }
 ```
 
 **Key Operations:**
-1. **updateVersionsManifest()** - Adds current build to manifest, calculates deletedChunks
-2. **storeAssetsInStorage()** - Stores assets with deduplication (same hash = same file)
-3. **restoreOldAssetsToPublic()** - Copies old version assets back to public/ folder
-4. **augmentBuildMetadata()** - Adds skewProtection data to builds/latest.json
-5. **cleanupExpiredVersions()** - Removes old versions based on retention policy
+1. **getAssetsFromBuild()** - Scans build output for all \_nuxt assets
+2. **updateVersionsManifest()** - Adds current build to manifest, calculates deletedChunks
+3. **storeAssetsInStorage()** - Stores assets with deduplication (same hash = same file)
+4. **restoreOldAssetsToPublic()** - Copies old version assets back to public/ folder
+5. **augmentBuildMetadata()** - Adds skewProtection data to builds/latest.json
+6. **cleanupExpiredVersions()** - Removes old versions based on retention policy
+7. **listExistingVersions()** - Returns all versions with creation timestamps
 
 **Deduplication Strategy:**
 - Extracts file ID (hash) from asset path (e.g., "ABC123.js" from "ABC123.DEF456.js")
@@ -379,12 +380,9 @@ Instead of platform-specific implementations, the module uses a **single univers
    │   └─► Copy old assets to public/_nuxt/
    │       Result: public/_nuxt/ contains ALL versions
    │
-   ├─► Asset Manager: updateDeploymentMapping()
-   │   └─► Maps deploymentId → buildId for version tracking
-   │
    ├─► Asset Manager: augmentBuildMetadata()
    │   ├─► Adds skewProtection data to builds/latest.json:
-   │   │   { versions: {...}, deploymentMapping: {...} }
+   │   │   { versions: {...} }
    │   └─► Adds version-specific data to builds/meta/{buildId}.json:
    │       { assets: [...], deletedChunks: [...] }
    │

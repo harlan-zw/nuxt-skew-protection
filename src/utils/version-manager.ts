@@ -16,20 +16,13 @@ export interface VersionManifest {
   versions: Record<string, {
     timestamp: string
     expires: string
-    deploymentId?: string
     assets: string[]
     // Chunks deleted in this version compared to previous version
     deletedChunks?: string[]
   }>
-  // Cloudflare-specific: maps asset paths to deployment IDs for fast lookup
-  assetToDeployment?: Record<string, string>
-  // Generic-specific: maps deployment IDs to version IDs
-  deploymentMapping?: Record<string, string>
   // Maps file IDs (hashes from filename) to the latest version that contains them
   fileIdToVersion?: Record<string, string>
 }
-
-export const CURRENT_VERSION_ID = 'current'
 
 /**
  * Extract file ID (hash + extension) from asset path
@@ -49,7 +42,7 @@ function extractFileId(assetPath: string): string | null {
 /**
  * Calculate deleted chunks in the current version compared to a previous version
  */
-export function calculateDeletedChunks(currentAssets: string[], previousAssets: string[]): string[] {
+function calculateDeletedChunks(currentAssets: string[], previousAssets: string[]): string[] {
   const currentSet = new Set(currentAssets)
   return previousAssets.filter(asset => !currentSet.has(asset))
 }
@@ -57,7 +50,7 @@ export function calculateDeletedChunks(currentAssets: string[], previousAssets: 
 /**
  * Get the previous version by timestamp
  */
-export function getPreviousVersion(manifest: VersionManifest, currentVersionId: string): string | null {
+function getPreviousVersion(manifest: VersionManifest, currentVersionId: string): string | null {
   const sortedVersions = Object.entries(manifest.versions)
     .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
     .sort((a, b) => b.timestamp - a.timestamp)
@@ -68,18 +61,6 @@ export function getPreviousVersion(manifest: VersionManifest, currentVersionId: 
   }
 
   return sortedVersions[currentIndex + 1]?.id || null
-}
-
-/**
- * Check if client's loaded chunks intersect with deleted chunks from an update
- * Returns true if update is urgent (client is using deleted chunks)
- */
-export function isUpdateUrgent(
-  clientChunks: string[],
-  deletedChunksInUpdate: string[],
-): boolean {
-  const deletedChunksSet = new Set(deletedChunksInUpdate)
-  return clientChunks.some(chunk => deletedChunksSet.has(chunk))
 }
 
 async function getFilesRecursively(dir: string): Promise<string[]> {
@@ -101,9 +82,8 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 }
 
 // Get the unified manifest
-export async function getVersionManifest(storage?: Storage): Promise<VersionManifest> {
-  const store = storage
-  return store.getItem('version-manifest.json')
+async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
+  return storage.getItem('version-manifest.json')
     .then(manifest => (manifest as VersionManifest) || {
       current: '',
       versions: {},
@@ -115,19 +95,12 @@ export async function getVersionManifest(storage?: Storage): Promise<VersionMani
 }
 
 // Update the manifest
-async function setVersionManifest(manifest: VersionManifest, storage?: Storage): Promise<void> {
-  const store = storage
-  await store.setItem('version-manifest.json', manifest)
-}
-
-// Get deployment ID for a specific asset (Cloudflare)
-export async function getAssetDeploymentId(assetPath: string): Promise<string | null> {
-  const manifest = await getVersionManifest()
-  return manifest.assetToDeployment?.[assetPath] || null
+async function setVersionManifest(manifest: VersionManifest, storage: Storage): Promise<void> {
+  await storage.setItem('version-manifest.json', manifest)
 }
 
 // ============================================================================
-// GENERIC PLATFORM: Full asset versioning with copy/storage
+// ASSET MANAGER: Full asset versioning with copy/storage
 // ============================================================================
 
 export function createAssetManager(options: {
@@ -150,7 +123,7 @@ export function createAssetManager(options: {
   const retentionDays = options.retentionDays || 7
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
 
-  async function getAssetsFromBuild(buildId: string, outputDir: string) {
+  async function getAssetsFromBuild(outputDir: string) {
     const nuxtDir = join(outputDir, 'public', '_nuxt')
 
     const assets: string[] = []
@@ -187,7 +160,7 @@ export function createAssetManager(options: {
     return { manifest, isExistingVersion }
   }
 
-  async function cleanupExpiredVersions(_outputDir: string) {
+  async function cleanupExpiredVersions() {
     const manifest = await getVersionManifest(storage)
     if (!manifest || !manifest.versions) {
       return
@@ -224,15 +197,6 @@ export function createAssetManager(options: {
         await Promise.all(assetPromises)
 
         delete manifest.versions[version.id]
-
-        // Clean up deployment mapping if it exists
-        if (manifest.deploymentMapping) {
-          for (const [deploymentId, versionId] of Object.entries(manifest.deploymentMapping)) {
-            if (versionId === version.id) {
-              delete manifest.deploymentMapping[deploymentId]
-            }
-          }
-        }
 
         // Clean up fileIdToVersion mapping if it exists
         if (manifest.fileIdToVersion) {
@@ -474,42 +438,6 @@ export function createAssetManager(options: {
     }
   }
 
-  async function updateDeploymentMapping(
-    newDeploymentId: string,
-    existingVersions: { id: string, createdAt: number }[],
-  ): Promise<void> {
-    const manifest = await getVersionManifest(storage)
-
-    // Initialize deployment mapping if it doesn't exist
-    if (!manifest.deploymentMapping) {
-      manifest.deploymentMapping = {}
-    }
-
-    const newMapping: Record<string, string> = { [newDeploymentId]: CURRENT_VERSION_ID }
-
-    const sortedVersions = existingVersions
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, maxNumberOfVersions)
-
-    const versionIds = new Set(sortedVersions.map(v => v.id))
-
-    for (const [deploymentId, versionId] of Object.entries(manifest.deploymentMapping)) {
-      if (versionId === CURRENT_VERSION_ID && sortedVersions.length > 0) {
-        newMapping[deploymentId] = sortedVersions[0]!.id
-      }
-      else if (versionIds.has(versionId)) {
-        newMapping[deploymentId] = versionId
-      }
-    }
-
-    manifest.deploymentMapping = newMapping
-    await setVersionManifest(manifest, storage)
-  }
-
-  async function getVersionForDeployment(deploymentId: string): Promise<string | null> {
-    const manifest = await getVersionManifest(storage)
-    return manifest.deploymentMapping?.[deploymentId] || null
-  }
   async function augmentBuildMetadata(buildId: string, outputDir: string) {
     const manifest = await getVersionManifest(storage)
 
@@ -521,7 +449,6 @@ export function createAssetManager(options: {
 
       latestJson.skewProtection = {
         versions: manifest.versions,
-        deploymentMapping: manifest.deploymentMapping,
       }
 
       await fs.writeFile(latestPath, JSON.stringify(latestJson, null, 2), 'utf-8')
@@ -564,8 +491,6 @@ export function createAssetManager(options: {
     storeAssetsInStorage,
     listExistingVersions,
     restoreOldAssetsToPublic,
-    updateDeploymentMapping,
-    getVersionForDeployment,
     augmentBuildMetadata,
   }
 }
