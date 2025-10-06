@@ -45,7 +45,7 @@ Install `nuxt-skew-protection` dependency to your project:
 npx nuxi@latest module add nuxt-skew-protection
 ```
 
-Note: Nuxt Skew Protection is part of [Nuxt SEO Pro](https://nuxtseo.com/pricing). A license is required for commercial use.
+Nuxt Skew Protection is a [Nuxt SEO Pro](https://nuxtseo.com/pricing) module, **please see the [licensing](#license) for commercial use**.
 
 ## Documentation
 
@@ -63,7 +63,7 @@ Note: Nuxt Skew Protection is part of [Nuxt SEO Pro](https://nuxtseo.com/pricing
 
 #### Commercial License
 
-If you want to use Nuxt Skew Protection for commercial projects, you need a [Nuxt SEO Pro](https://nuxtseo.com/pricing) license. With this license, your source code remains proprietary.
+Nuxt Skew Protection requires a [Nuxt SEO Pro License](https://nuxtseo.com/pro) when using it for commercial projects. With this license, your source code remains proprietary.
 
 Commercial use includes:
 - Use in commercial products or services
