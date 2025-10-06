@@ -1,17 +1,6 @@
 import { createEventStream, defineEventHandler } from 'h3'
 import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
 
-/**
- * Server-Sent Events endpoint for real-time version updates
- *
- * On connection:
- * - Client sends their version via query param
- * - Server immediately responds if client is outdated
- * - Connection stays open for future updates
- *
- * Compatible with: Node.js, Bun, Deno
- * NOT compatible with: Cloudflare Workers (no persistent connections)
- */
 export default defineEventHandler(async (event) => {
   const nitroApp = useNitroApp()
   const stream = createEventStream(event)

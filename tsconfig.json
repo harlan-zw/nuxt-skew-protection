@@ -1,10 +1,8 @@
 {
   "extends": "./.nuxt/tsconfig.json",
   "exclude": [
-    "dist/**/*",
-    "**/dist/_nuxt/**/*",
-    "test/fixtures/*/dist/**/*",
-    "test/fixtures/*/.nuxt/**/*",
-    "test/fixtures/*/.output/**/*"
+    "test/**",
+    "scripts/**",
+    "playground/**"
   ]
 }

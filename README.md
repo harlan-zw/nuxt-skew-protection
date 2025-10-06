@@ -30,7 +30,7 @@ and crawlers. Just check out one of Nuxt's top commented [issues](https://github
 
 Nuxt Skew Protection aims to solve skews by providing better UX on top of app updates as well as long-lived build assets to avoid breaking crawlers and old sessions.
 
-## 🚀 Features
+## Features
 
 - ⚡ **Instantly Adopted Releases** - Zero-config Real-time notifications to users when a new version is deployed.
 - 🎯 **Intelligent User Notifications** - Avoid spamming your users by only sending update notifications when their chunks are outdated. No annoying popups for unrelated updates.

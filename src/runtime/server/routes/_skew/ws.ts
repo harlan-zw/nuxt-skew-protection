@@ -3,11 +3,10 @@ import { useRuntimeConfig } from 'nitropack/runtime'
 
 export default defineWebSocketHandler({
   open(peer) {
-    const config = useRuntimeConfig()
-    const serverVersion = config.app.buildId
+    const runtimeConfig = useRuntimeConfig()
     peer.send({
       type: 'connected',
-      version: serverVersion,
+      version: runtimeConfig.app?.buildId,
       timestamp: Date.now(),
     })
   },

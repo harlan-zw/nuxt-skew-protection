@@ -1,7 +1,7 @@
+import type { CookieSerializeOptions } from 'cookie-es'
 import type { H3Event } from 'h3'
-import { useRuntimeConfig } from '#imports'
 import { getCookie, setCookie } from 'h3'
-import { getCookieConfig } from '../../shared/cookie'
+import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection'
 
 /**
  * Get the skew protection version cookie name from runtime config
@@ -10,8 +10,8 @@ import { getCookieConfig } from '../../shared/cookie'
  * @returns The configured cookie name
  */
 export function getSkewProtectionCookieName(event?: H3Event): string {
-  const config = useRuntimeConfig(event)
-  return config.public.skewProtection?.cookieName || '__nkpv'
+  const { cookie } = getRuntimeConfigSkewProtection(event)
+  return cookie.name
 }
 
 /**
@@ -47,6 +47,7 @@ export function getSkewProtectionCookie(event: H3Event): string | undefined {
  * ```
  */
 export function setSkewProtectionCookie(event: H3Event, value: string): void {
-  const cookieName = getSkewProtectionCookieName(event)
-  setCookie(event, cookieName, value, getCookieConfig())
+  const { cookie: cookieConfig } = getRuntimeConfigSkewProtection(event)
+  const { name: cookieName, ...cookieOptions } = cookieConfig
+  setCookie(event, cookieName, value, cookieOptions as CookieSerializeOptions)
 }

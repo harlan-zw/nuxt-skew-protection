@@ -69,8 +69,8 @@ This module provides version skew protection for Nuxt applications through:
 │  │  → Registers service worker             │        │
 │  │  → Tracks loaded JS modules             │        │
 │  │  → Detects invalidated modules          │        │
-│  │  → Fires skew-protection:module-        │        │
-│  │    -invalidated hook                    │        │
+│  │  → Fires skew-protection:chunks-        │        │
+│  │    -outdated hook                       │        │
 │  └────────────────────────────────────────┘        │
 │                                                      │
 └─────────────────────────────────────────────────────┘
@@ -89,14 +89,14 @@ The `createAssetManager` function handles all build-time operations:
 **Version Manifest:**
 ```typescript
 interface VersionManifest {
-  current: string                           // Current build ID
+  current: string // Current build ID
   versions: Record<string, {
-    timestamp: string                       // When this version was built
-    expires: string                         // When to clean up this version
-    assets: string[]                        // All assets in this version
-    deletedChunks?: string[]                // Chunks removed in this version
+    timestamp: string // When this version was built
+    expires: string // When to clean up this version
+    assets: string[] // All assets in this version
+    deletedChunks?: string[] // Chunks removed in this version
   }>
-  fileIdToVersion?: Record<string, string>   // fileId → buildId (for deduplication)
+  fileIdToVersion?: Record<string, string> // fileId → buildId (for deduplication)
 }
 ```
 
@@ -167,8 +167,9 @@ The module supports three strategies for detecting new deployments:
 - When new version detected:
   1. Gets list of loaded modules from service worker
   2. Extracts deletedChunks from builds/latest.json manifest
-  3. Checks if any loaded modules are in deletedChunks
-  4. If yes, fires `skew-protection:module-invalidated` hook
+  3. Collects all passed release IDs
+  4. Checks if any loaded modules are in deletedChunks
+  5. If yes, fires `skew-protection:chunks-outdated` hook
 
 **Why this matters:**
 - Only notifies users when their *current session* is affected
@@ -184,13 +185,13 @@ The module supports three strategies for detecting new deployments:
 const skew = useSkewProtection()
 
 // Reactive state
-skew.manifest           // NuxtAppManifestMeta | null
-skew.currentVersion     // string (user's build ID)
-skew.isOutdated         // Ref<boolean>
+skew.manifest // NuxtAppManifestMeta | null
+skew.currentVersion // string (user's build ID)
+skew.isOutdated // Ref<boolean>
 
 // Methods
-skew.checkForUpdates()  // Manually trigger update check
-skew.onCurrentModulesInvalidated(callback) // Hook for module invalidation
+skew.checkForUpdates() // Manually trigger update check
+skew.onChunksOutdated(callback) // Hook for when chunks become outdated
 ```
 
 **useSkewProtectionCookie()** (src/runtime/app/composables/useSkewProtectionCookie.ts)
@@ -206,12 +207,16 @@ const versionCookie = useSkewProtectionCookie()
 Headless component that provides notification logic:
 ```vue
 <template>
-  <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo, releaseDate }">
+  <SkewNotification v-slot="{ isOpen, dismiss, reload }">
     <!-- Your custom UI -->
     <div v-if="isOpen">
       <p>New version available!</p>
-      <button @click="reload">Reload</button>
-      <button @click="dismiss">Dismiss</button>
+      <button @click="reload">
+        Reload
+      </button>
+      <button @click="dismiss">
+        Dismiss
+      </button>
     </div>
   </SkewNotification>
 </template>
@@ -237,11 +242,15 @@ nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
 })
 ```
 
-**skew-protection:module-invalidated** (Custom)
+**skew-protection:chunks-outdated** (Custom)
 ```typescript
-nuxtApp.hooks.hook('skew-protection:module-invalidated', (payload) => {
+nuxtApp.hooks.hook('skew-protection:chunks-outdated', (payload) => {
   // Called when user's loaded modules are deleted
-  // payload: { deletedChunks: string[], invalidatedModules: string[] }
+  // payload: {
+  //   deletedChunks: string[],
+  //   invalidatedModules: string[],
+  //   passedReleases: string[]
+  // }
 })
 ```
 
@@ -250,7 +259,7 @@ nuxtApp.hooks.hook('skew-protection:module-invalidated', (payload) => {
 **nuxt-skew-protection/server** (src/runtime/server/index.ts)
 
 ```typescript
-import { getSkewProtectionCookie, setSkewProtectionCookie, isClientOutdated } from 'nuxt-skew-protection/server'
+import { getSkewProtectionCookie, isClientOutdated, setSkewProtectionCookie } from 'nuxt-skew-protection/server'
 
 export default defineEventHandler((event) => {
   const version = getSkewProtectionCookie(event)
@@ -298,7 +307,7 @@ Instead of platform-specific implementations, the module uses a **single univers
 1. Service worker tracks which JS modules user has loaded
 2. Build manifest includes `deletedChunks` for each version
 3. When new version detected, check if user's loaded modules are deleted
-4. Only fire `skew-protection:module-invalidated` if user is affected
+4. Only fire `skew-protection:chunks-outdated` if user is affected
 
 **Result:** Users only notified when their session is truly broken
 
@@ -433,9 +442,10 @@ Plugin: sw-track-user-modules.client.ts (service worker plugin)
 ├─► When new version detected:
 │   ├─► Gets list of loaded modules from SW
 │   ├─► Gets deletedChunks from manifest
+│   ├─► Collects all passed release IDs
 │   ├─► Checks intersection
 │   └─► If user's modules are deleted:
-│       └─► Fire skew-protection:module-invalidated hook
+│       └─► Fire skew-protection:chunks-outdated hook
 └─► Provides getLoadedModules() helper
 
 Plugin: check-updates-sse.client.ts (SSE strategy only)
@@ -460,7 +470,7 @@ Polling Strategy (default)
 
 Component: SkewNotification.vue
 ├─► Calls useSkewProtection()
-├─► Listens to onCurrentModulesInvalidated()
+├─► Listens to onChunksOutdated()
 └─► Shows notification when modules invalidated
     ├─► Provides isOpen, dismiss(), reload() to slot
     └─► User sees: "New version available, please reload"
@@ -472,7 +482,7 @@ User Flow:
 4. Update detection (polling/sse/ws) → Detects new version
 5. app:manifest:update fired → manifest.value updated
 6. SW plugin checks loaded modules vs deletedChunks
-7. If intersection found → skew-protection:module-invalidated fired
+7. If intersection found → skew-protection:chunks-outdated fired
 8. SkewNotification shows → User sees notification
 9. User clicks reload → window.location.reload()
 10. User gets new version → New __nkpv cookie set
@@ -489,14 +499,14 @@ export default defineNuxtConfig({
   skewProtection: {
     // Storage configuration (required for non-Vercel platforms)
     storage: {
-      driver: 'fs',  // or 's3', 'redis', 'cloudflare-kv', etc.
+      driver: 'fs', // or 's3', 'redis', 'cloudflare-kv', etc.
       base: 'node_modules/.cache/nuxt/skew-protection', // for fs driver
       // For other drivers, see unstorage documentation
     },
 
     // Retention settings
-    retentionDays: 30,           // How long to keep old versions
-    maxNumberOfVersions: 10,     // Maximum versions to retain
+    retentionDays: 30, // How long to keep old versions
+    maxNumberOfVersions: 10, // Maximum versions to retain
 
     // Update detection strategy
     checkForUpdateStrategy: 'sse', // 'polling' | 'sse' | 'ws'
@@ -506,8 +516,8 @@ export default defineNuxtConfig({
     // - Node.js/Bun/Deno → 'sse'
 
     // Cookie configuration
-    cookieName: '__nkpv',        // Cookie name for version tracking
     cookie: {
+      name: '__nkpv', // Cookie name for version tracking
       path: '/',
       sameSite: 'strict',
       maxAge: 60 * 60 * 24 * 60, // 60 days
@@ -526,39 +536,57 @@ export default defineNuxtConfig({
 
 **Filesystem (default):**
 ```typescript
-storage: {
-  driver: 'fs',
-  base: 'node_modules/.cache/nuxt/skew-protection'
-}
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 'fs',
+      base: 'node_modules/.cache/nuxt/skew-protection'
+    }
+  }
+})
 ```
 
 **Cloudflare KV:**
 ```typescript
-storage: {
-  driver: 'cloudflare-kv-binding',
-  binding: 'SKEW_PROTECTION_KV'
-}
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 'cloudflare-kv-binding',
+      namespaceId: process.env.CLOUDFLARE_KV_NAMESPACE_ID // Auto-detected from wrangler.toml if omitted
+    }
+  }
+})
 ```
+
+The module automatically uses wrangler CLI commands during build for authenticated access to Cloudflare KV (no API token needed).
 
 **Redis:**
 ```typescript
-storage: {
-  driver: 'redis',
-  host: 'localhost',
-  port: 6379,
-  base: 'skew-protection'
-}
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 'redis',
+      host: 'localhost',
+      port: 6379,
+      base: 'skew-protection'
+    }
+  }
+})
 ```
 
 **S3:**
 ```typescript
-storage: {
-  driver: 's3',
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-}
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 's3',
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+  }
+})
 ```
 
 See [unstorage documentation](https://unstorage.unjs.io/) for all available drivers.
@@ -577,7 +605,7 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'cloudflare-durable',
     experimental: {
-      websockets: true  // Required for WebSocket strategy
+      websockets: true // Required for WebSocket strategy
     }
   },
   skewProtection: {

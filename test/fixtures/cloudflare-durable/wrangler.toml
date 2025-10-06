@@ -1,0 +1,22 @@
+# Cloudflare Durable Objects configuration for Nuxt Skew Protection
+name = "nuxt-skew-protection-durable-test"
+main = ".output/server/index.mjs"
+compatibility_date = "2024-01-01"
+compatibility_flags = [ "nodejs_compat" ]
+account_id = "5904138d55ca25d5670dca6adf99894e"
+
+[durable_objects]
+bindings = [ { name = "$DurableObject", class_name = "$DurableObject" } ]
+
+[[migrations]]
+tag = "v1"
+new_classes = [ "$DurableObject" ]
+
+[[kv_namespaces]]
+binding = "SKEW_STORAGE"
+id = "3de5b8fa99f545c7a78f40ea3fc71646"
+preview_id = "3de5b8fa99f545c7a78f40ea3fc71646"
+
+[observability]
+enabled = true
+head_sampling_rate = 1

@@ -11,7 +11,7 @@
     "logs": "wrangler tail"
   },
   "dependencies": {
-    "nuxt": "^3.11.0",
+    "nuxt": "^4.0.0",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
   },

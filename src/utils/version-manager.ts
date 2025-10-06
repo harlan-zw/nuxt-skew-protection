@@ -1,14 +1,9 @@
-import type { Storage } from 'unstorage'
+import type { Driver, Storage } from 'unstorage'
 import { promises as fs } from 'node:fs'
-import { createConsola } from 'consola'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
-import fsDriver from 'unstorage/drivers/fs'
-
-const logger = createConsola({
-  defaults: { tag: 'nuxt-skew-protection' },
-})
+import { logger } from '../logger'
 
 // Unified manifest format used by all platforms
 export interface VersionManifest {
@@ -83,15 +78,26 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 
 // Get the unified manifest
 async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
-  return storage.getItem('version-manifest.json')
-    .then(manifest => (manifest as VersionManifest) || {
+  try {
+    const manifest = await storage.getItem('version-manifest.json')
+
+    // Ensure we have a valid manifest structure
+    if (manifest && typeof manifest === 'object' && 'versions' in manifest) {
+      return manifest as VersionManifest
+    }
+
+    // Return default manifest if invalid or missing
+    return {
       current: '',
       versions: {},
-    })
-    .catch(() => ({
+    }
+  }
+  catch {
+    return {
       current: '',
       versions: {},
-    }))
+    }
+  }
 }
 
 // Update the manifest
@@ -104,22 +110,15 @@ async function setVersionManifest(manifest: VersionManifest, storage: Storage): 
 // ============================================================================
 
 export function createAssetManager(options: {
-  storage?: any
+  driver?: Driver
   retentionDays?: number
   maxNumberOfVersions?: number
   debug?: boolean
 }) {
   // Create storage with proper driver
-  let storage: Storage
-  if (options.storage?.driver === 'fs') {
-    storage = createStorage({
-      driver: fsDriver(options.storage),
-    })
-  }
-  else {
-    storage = options.storage ? createStorage(options.storage) : createStorage()
-  }
-
+  const storage: Storage = createStorage({
+    driver: options.driver,
+  })
   const retentionDays = options.retentionDays || 7
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
 

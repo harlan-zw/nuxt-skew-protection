@@ -1,0 +1,15 @@
+{
+  "name": "test-fixture-vercel",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "@vueuse/nuxt": "latest",
+    "nuxt": "latest",
+    "nuxt-skew-protection": "./nuxt-skew-protection-1.0.0.tgz"
+  }
+}

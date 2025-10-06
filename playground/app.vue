@@ -1,7 +1,7 @@
 <script setup>
-import { useCookie, useNuxtApp, useRuntimeConfig } from '#app'
-import { useSkewProtection } from '#imports'
-import { onMounted, ref } from 'vue'
+import { reloadNuxtApp, useCookie, useNuxtApp, useRuntimeConfig } from '#app'
+import { useSkewProtection, useToast } from '#imports'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const runtimeConfig = useRuntimeConfig()
 const buildId = ref(runtimeConfig.app?.buildId)
@@ -28,66 +28,244 @@ function clearVersionCookie() {
   console.log('Version cookie cleared')
 }
 
-function simulateNewVersion() {
-  // Simulate a version mismatch by setting a different cookie value
-  if (versionCookie.value) {
-    versionCookie.value.value = 'old-version-123'
+const isAnimating = ref(false)
+let animationInterval = null
+
+function startNewVersionAnimations() {
+  if (isAnimating.value) {
+    // Stop animation
+    isAnimating.value = false
+    if (animationInterval) {
+      clearInterval(animationInterval)
+      animationInterval = null
+    }
+    console.log('Stopped variant animations')
+    return
   }
-  console.log('Simulated old version in cookie, next check should trigger notification')
+
+  // Start animation
+  isAnimating.value = true
+  let currentIndex = 0
+
+  // Set initial variant and simulate update after a small delay
+  selectedVariant.value = notificationVariants[currentIndex].value
+  setTimeout(() => {
+    skew.simulateUpdate()
+    console.log(`Starting variant animations - showing: ${notificationVariants[currentIndex].label}`)
+  }, 100)
+
+  animationInterval = setInterval(() => {
+    currentIndex = (currentIndex + 1) % notificationVariants.length
+    selectedVariant.value = notificationVariants[currentIndex].value
+
+    // Add delay to allow component to unmount/remount before simulating update
+    setTimeout(() => {
+      skew.simulateUpdate()
+      console.log(`Cycling to variant: ${notificationVariants[currentIndex].label}`)
+    }, 100)
+  }, 2000)
 }
 
 const app = useNuxtApp()
 const modules = ref([])
 onMounted(async () => {
-  modules.value = await app.$skewServiceWorker.getLoadedModules()
+  modules.value = await app.$skewServiceWorker?.getLoadedModules() || []
+})
+
+onBeforeUnmount(() => {
+  if (animationInterval) {
+    clearInterval(animationInterval)
+  }
+})
+
+// Notification variant configuration
+const notificationVariants = [
+  { value: 'native', label: 'Native CSS (Default)', description: 'Custom CSS implementation' },
+  { value: 'minimal', label: 'Minimal', description: 'Compact pill design' },
+  { value: 'ualert', label: 'UAlert', description: 'Nuxt UI Alert component' },
+  { value: 'ucard', label: 'UCard', description: 'Nuxt UI Card component' },
+  { value: 'toast', label: 'Toast', description: 'Programmatic toast (useToast)' },
+]
+
+const selectedVariant = ref('native')
+
+// Toast notification handling
+const toast = useToast()
+
+watch(selectedVariant, (newVariant, oldVariant) => {
+  // Remove toast when switching away from toast variant
+  if (oldVariant === 'toast') {
+    toast.remove('skew-update')
+  }
+
+  // Add toast when switching to toast variant
+  if (newVariant === 'toast') {
+    toast.add({
+      id: 'skew-update',
+      title: 'New update available!',
+      duration: 0, // Persistent toast
+      color: 'primary',
+      actions: [{
+        label: 'Refresh',
+        color: 'primary',
+        click: async () => {
+          toast.remove('skew-update')
+          await reloadNuxtApp({
+            force: true,
+            persistState: true,
+          })
+        },
+      }, {
+        label: 'Dismiss',
+        color: 'gray',
+        variant: 'ghost',
+        click: () => {
+          toast.remove('skew-update')
+        },
+      }],
+    })
+  }
 })
 </script>
 
 <template>
-  <div>
-    <div style="padding: 2rem; max-width: 800px; margin: 0 auto;">
-      <h1>Nuxt Skew Protection Playgroundxx :3</h1>
-      <p>This playground demonstrates the skew protection module functionality.</p>
-
-      <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
-        <h3>Current Version Info</h3>
-        <p><strong>Build ID:</strong> {{ buildId }}</p>
-        <p><strong>Version Cookie:</strong> {{ versionCookie?.value || 'Not set' }}</p>
-      </div>
-
-      <div style="background: #e8f5e8; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
-        <h3>Test Actions</h3>
-        <button style="margin: 0.5rem; padding: 0.5rem 1rem;" @click="checkForUpdates">
-          Check for Updates (Nuxt API)
-        </button>
-        <button style="margin: 0.5rem; padding: 0.5rem 1rem;" @click="checkVersionStatus">
-          Check Version Status (Our API)
-        </button>
-        <button style="margin: 0.5rem; padding: 0.5rem 1rem;" @click="clearVersionCookie">
-          Clear Version Cookie
-        </button>
-        <button style="margin: 0.5rem; padding: 0.5rem 1rem;" @click="simulateNewVersion">
-          Simulate New Version
-        </button>
-      </div>
-
-      <div class="foo" style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
-        <h3>Loaded Modules</h3>
-        <div style="max-height: 400px; overflow-y: auto;">
-          <ul>
-            <li v-for="module in modules" :key="module">
-              {{ module }}
-            </li>
-          </ul>
+  <UApp>
+    <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div class="max-w-4xl mx-auto p-8 space-y-6">
+        <div class="text-center mb-8">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+            Nuxt Skew Protection Playground
+          </h1>
+          <p class="text-gray-600 dark:text-gray-400 mt-2">
+            Test and preview different notification variants
+          </p>
         </div>
+
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">
+              Current Version Info
+            </h3>
+          </template>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Build ID:</span>
+              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ buildId }}</code>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Version Cookie:</span>
+              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ versionCookie?.value || 'Not set' }}</code>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">
+              Notification Variant
+            </h3>
+          </template>
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Choose Notification Style
+            </label>
+            <USelectMenu
+              v-model="selectedVariant"
+              :items="notificationVariants"
+              value-key="value"
+              class="w-full"
+            >
+              <template #item-label="{ item }">
+                <div>
+                  <div class="font-medium">
+                    {{ item.label }}
+                  </div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ item.description }}
+                  </div>
+                </div>
+              </template>
+            </USelectMenu>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">
+              Test Actions
+            </h3>
+          </template>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <UButton
+              variant="outline"
+              color="primary"
+              icon="i-heroicons-arrow-path"
+              @click="checkForUpdates"
+            >
+              Check for Updates
+            </UButton>
+            <UButton
+              variant="outline"
+              color="blue"
+              icon="i-heroicons-check-circle"
+              @click="checkVersionStatus"
+            >
+              Check Version Status
+            </UButton>
+            <UButton
+              variant="outline"
+              color="red"
+              icon="i-heroicons-trash"
+              @click="clearVersionCookie"
+            >
+              Clear Version Cookie
+            </UButton>
+            <UButton
+              variant="solid"
+              :color="isAnimating ? 'red' : 'primary'"
+              :icon="isAnimating ? 'i-heroicons-stop' : 'i-heroicons-play'"
+              @click="startNewVersionAnimations"
+            >
+              {{ isAnimating ? 'Stop Animations' : 'Start Animations' }}
+            </UButton>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">
+              Loaded Modules ({{ modules.length }})
+            </h3>
+          </template>
+          <div class="max-h-96 overflow-y-auto">
+            <ul class="space-y-1">
+              <li
+                v-for="module in modules"
+                :key="module"
+                class="text-sm font-mono text-gray-600 dark:text-gray-400 py-1 border-b border-gray-100 dark:border-gray-800 last:border-0"
+              >
+                {{ module }}
+              </li>
+            </ul>
+          </div>
+        </UCard>
       </div>
     </div>
 
-    <!-- Skew Protection Notification Component -->
-    <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo }">
-      <div>
-        debug: {{ isOpen ? 'open' : 'closed' }}
-      </div>
+    <!-- Skew Protection Notification Components -->
+    <!-- UAlert Variant -->
+    <SkewNotificationUAlert v-if="selectedVariant === 'ualert'" />
+
+    <!-- UCard Variant -->
+    <SkewNotificationUCard v-else-if="selectedVariant === 'ucard'" />
+
+    <!-- Minimal Variant -->
+    <SkewNotificationMinimal v-else-if="selectedVariant === 'minimal'" />
+
+    <!-- Toast variant is handled via useToast in script section -->
+
+    <!-- Native CSS Variant (default) -->
+    <SkewNotification v-else-if="selectedVariant === 'native'" v-slot="{ isOpen, dismiss, reload, timeAgo }">
       <Transition name="slide-up">
         <div
           v-if="isOpen"
@@ -100,8 +278,8 @@ onMounted(async () => {
                 <div class="skew-notification-title">
                   New update available!
                 </div>
-                <div class="skew-notification-subtitle">
-                  {{ timeAgo || 'Just now' }}
+                <div v-if="timeAgo" class="skew-notification-subtitle">
+                  Released {{ timeAgo }}
                 </div>
               </div>
             </div>
@@ -117,14 +295,10 @@ onMounted(async () => {
         </div>
       </Transition>
     </SkewNotification>
-  </div>
+  </UApp>
 </template>
 
 <style>
-.foo {
-  color: green;
-}
-
 .skew-notification {
   position: fixed;
   bottom: 1.5rem;

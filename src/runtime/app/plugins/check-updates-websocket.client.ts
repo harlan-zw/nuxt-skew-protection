@@ -1,8 +1,9 @@
-import { defineNuxtPlugin, useRuntimeConfig } from '#app'
+import { defineNuxtPlugin } from '#app'
 import { useWebSocket } from '@vueuse/core'
 import { watch } from 'vue'
 import { logger } from '../../shared/logger'
-import { useSkewProtectionCookie } from '../composables/useSkewProtectionCookie'
+import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
+import { useSkewProtection } from '../composables/useSkewProtection'
 
 /**
  * WebSocket Version Updates Plugin
@@ -21,10 +22,9 @@ import { useSkewProtectionCookie } from '../composables/useSkewProtectionCookie'
 export default defineNuxtPlugin({
   name: 'skew-protection:websocket-updates',
   setup(nuxtApp) {
-    const config = useRuntimeConfig()
-    const skewConfig = config.public.skewProtection
-
-    const versionCookie = useSkewProtectionCookie()
+    const skewConfig = useRuntimeConfigSkewProtection()
+    const skewProtection = useSkewProtection()
+    const versionCookie = skewProtection.cookie
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = typeof window !== 'undefined'
       ? `${protocol}//${window.location.host}/_skew/ws`
@@ -72,19 +72,19 @@ export default defineNuxtPlugin({
               timestamp: parsed.timestamp || Date.now(),
             })
 
-            if (skewConfig?.debug) {
+            if (skewConfig.debug) {
               logger.info(`Version update received via WebSocket: ${newVersion}`)
             }
           }
         }
         else if (parsed.type === 'connected') {
-          if (skewConfig?.debug) {
+          if (skewConfig.debug) {
             logger.info('WebSocket connection acknowledged')
           }
         }
         else if (parsed.type === 'pong') {
           // Keepalive response received
-          if (skewConfig?.debug) {
+          if (skewConfig.debug) {
             logger.debug('Received pong from WebSocket')
           }
         }
@@ -96,7 +96,7 @@ export default defineNuxtPlugin({
 
     // Watch connection status
     watch(status, (newStatus: string) => {
-      if (skewConfig?.debug) {
+      if (skewConfig.debug) {
         if (newStatus === 'OPEN') {
           logger.info('WebSocket connection established')
         }

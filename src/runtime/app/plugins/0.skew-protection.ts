@@ -1,18 +1,17 @@
 import type { NuxtAppManifestMeta } from '#app'
-import type { NuxtApp } from 'nuxt/app'
 import { useRuntimeConfig } from '#app'
 import { useWindowFocus } from '@vueuse/core'
 import { defineNuxtPlugin } from 'nuxt/app'
 import { computed, ref, watch } from 'vue'
-import { useSkewProtectionCookie } from '../composables/useSkewProtectionCookie'
+import { useSkewProtection } from '../composables/useSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:root',
-  setup(nuxtApp: NuxtApp) {
+  setup(nuxtApp) {
     const runtimeConfig = useRuntimeConfig()
-    const cookie = useSkewProtectionCookie()
+    const skewProtection = useSkewProtection()
     // static
-    const currentVersion = runtimeConfig.app.buildId || cookie.value
+    const currentVersion = runtimeConfig.app.buildId || skewProtection.cookie.value
     // dynamic
     const latestVersion = ref(currentVersion)
     const manifest = ref(<NuxtAppManifestMeta | null>null)

@@ -1,22 +1,29 @@
+import type { CookieSerializeOptions } from 'cookie-es'
+
 export interface NuxtSkewProtectionRuntimeConfig {
   sse: boolean
   durableObjects: boolean
-  cookieName: string
-  cookie: {
-    path: string
-    sameSite: 'strict' | 'lax' | 'none' | boolean
-    maxAge: number
+  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+    name?: string
   }
   debug: boolean
 }
 
-export interface ModuleInvalidatedPayload {
+export interface SkewProtectionRuntimeConfig {
+  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+    name: string
+  }
+  debug: boolean
+}
+
+export interface ChunksOutdatedPayload {
   deletedChunks: string[]
   invalidatedModules: string[]
+  passedReleases: string[]
 }
 
 declare module '#app' {
   interface RuntimeNuxtHooks {
-    'skew-protection:module-invalidated': (payload: ModuleInvalidatedPayload) => void | Promise<void>
+    'skew-protection:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
   }
 }

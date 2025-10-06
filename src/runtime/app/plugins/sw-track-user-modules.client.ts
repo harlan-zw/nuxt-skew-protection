@@ -1,22 +1,38 @@
-import type { NuxtApp } from 'nuxt/app'
-import { defineNuxtPlugin } from 'nuxt/app'
-import { useSkewProtectionCookie } from '../composables/useSkewProtectionCookie'
+import type { NuxtAppManifestMeta } from '#app'
+import { defineNuxtPlugin } from '#app'
+import { ref } from 'vue'
+import { useSkewProtection } from '../composables/useSkewProtection'
+
+/**
+ * Normalize path to match format: _nuxt/chunk.js
+ * Handles both full URLs and relative paths
+ */
+function normalizePath(pathOrUrl: string): string {
+  try {
+    const url = new URL(pathOrUrl)
+    return url.pathname.replace(/^\//, '')
+  }
+  catch {
+    return pathOrUrl.replace(/^\//, '')
+  }
+}
 
 export default defineNuxtPlugin({
   name: 'skew-protection:service-worker',
-  setup(nuxtApp: NuxtApp) {
+  setup(nuxtApp) {
     if (!('serviceWorker' in navigator)) {
       return
     }
-
-    const versionCookie = useSkewProtectionCookie()
+    const skew = useSkewProtection()
+    const versionCookie = skew.cookie.value
+    const manifest = ref<NuxtAppManifestMeta>()
 
     // Register service worker
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.error('[skew-protection] Service Worker registration failed:', error)
-    })
+    navigator.serviceWorker.register('/sw.js')
 
-    // Helper function to get loaded modules from service worker
+    /**
+     * Get list of loaded modules from service worker
+     */
     function getLoadedModules(): Promise<string[]> {
       return new Promise((resolve) => {
         const messageHandler = (event: MessageEvent) => {
@@ -37,121 +53,91 @@ export default defineNuxtPlugin({
       })
     }
 
-    // Normalize path to match format: _nuxt/chunk.js
-    function normalizePath(pathOrUrl: string): string {
-      try {
-        const url = new URL(pathOrUrl)
-        // Remove leading slash from pathname and return
-        return url.pathname.replace(/^\//, '')
-      }
-      catch {
-        // Already a path, just remove leading slash if present
-        return pathOrUrl.replace(/^\//, '')
-      }
-    }
-
-    // Check if deleted chunks intersect with loaded modules
-    async function checkDeletedChunks(deletedChunks: string[]) {
-      console.log('[skew-protection] Checking for deleted chunks:', deletedChunks)
-      if (!deletedChunks || deletedChunks.length === 0) {
+    /**
+     * Check if any deleted chunks intersect with currently loaded modules
+     * and trigger the chunks-outdated hook if so
+     */
+    async function checkDeletedChunks(deletedChunks: string[], passedReleases: string[]) {
+      if (deletedChunks.length === 0) {
         return
       }
 
       const loadedModules = await getLoadedModules()
-      console.log('[skew-protection] Loaded modules:', loadedModules)
-      if (!loadedModules || loadedModules.length === 0) {
+      if (loadedModules.length === 0) {
         return
       }
 
-      // Normalize all deleted chunks to consistent format
       const normalizedDeletedChunks = new Set(deletedChunks.map(normalizePath))
-      console.log('[skew-protection] Normalized deleted chunks:', Array.from(normalizedDeletedChunks))
 
-      // Check if any loaded module was deleted
       const invalidatedModules = loadedModules.filter((module) => {
         const normalizedModule = normalizePath(module)
         return normalizedDeletedChunks.has(normalizedModule)
       })
 
-      console.log('[skew-protection] Invalidated modules:', invalidatedModules)
-
       if (invalidatedModules.length > 0) {
-        console.warn('[skew-protection] Module invalidated - deleted chunks detected:', invalidatedModules)
-
-        // Call the Nuxt hook
-        await nuxtApp.hooks.callHook('skew-protection:module-invalidated', {
+        await nuxtApp.hooks.callHook('skew-protection:chunks-outdated', {
           deletedChunks,
           invalidatedModules,
+          passedReleases,
         })
       }
     }
 
     // Listen for app:manifest:update to check for deleted chunks
-    nuxtApp.hook('app:manifest:update', async (manifest) => {
-      console.log('[skew-protection] Manifest updated:', manifest)
-      // Check if the manifest contains skewProtection data with versions
-      if (manifest?.skewProtection?.versions) {
-        const versions = manifest.skewProtection.versions
-        const newVersionId = manifest.id
+    nuxtApp.hook('app:manifest:update', async (_manifest) => {
+      manifest.value = _manifest
 
-        // Get current version from cookie
-        const currentVersionId = versionCookie.value
+      const versions = _manifest?.skewProtection?.versions
+      if (!versions) {
+        return
+      }
 
-        console.log('[skew-protection] Current version:', currentVersionId, 'New version:', newVersionId)
+      const newVersionId = _manifest.id
+      const currentVersionId = versionCookie.value
 
-        if (!currentVersionId || currentVersionId === newVersionId) {
-          return
-        }
+      if (!currentVersionId || currentVersionId === newVersionId) {
+        return
+      }
 
-        // Reset loaded modules in service worker on version change
-        navigator.serviceWorker.controller?.postMessage({ type: 'RESET_MODULES' })
+      // Reset loaded modules in service worker on version change
+      navigator.serviceWorker.controller?.postMessage({ type: 'RESET_MODULES' })
 
-        // Collect all deleted chunks between current version and new version
-        const allDeletedChunks: string[] = []
+      // Sort versions by timestamp to find the range
+      const sortedVersions = Object.entries(versions)
+        .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
+        .sort((a, b) => a.timestamp - b.timestamp)
 
-        // Sort versions by timestamp to find the range
-        const sortedVersions = Object.entries(versions)
-          .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
-          .sort((a, b) => a.timestamp - b.timestamp)
+      const currentIdx = sortedVersions.findIndex(v => v.id === currentVersionId)
+      const newIdx = sortedVersions.findIndex(v => v.id === newVersionId)
 
-        const currentIdx = sortedVersions.findIndex(v => v.id === currentVersionId)
-        const newIdx = sortedVersions.findIndex(v => v.id === newVersionId)
+      if (currentIdx === -1 || newIdx === -1) {
+        return
+      }
 
-        if (currentIdx === -1 || newIdx === -1) {
-          console.warn('[skew-protection] Could not find version indices')
-          return
-        }
+      // Collect deleted chunks and release IDs from all versions between current and new (inclusive of new)
+      const allDeletedChunks: string[] = []
+      const passedReleases: string[] = []
 
-        // Collect deleted chunks from all versions between current and new (inclusive of new)
-        for (let i = currentIdx + 1; i <= newIdx; i++) {
-          const version = sortedVersions[i]
-          if (version) {
-            const versionData = versions[version.id]
-            if (versionData?.deletedChunks) {
-              allDeletedChunks.push(...versionData.deletedChunks)
-            }
+      for (let i = currentIdx + 1; i <= newIdx; i++) {
+        const version = sortedVersions[i]
+        if (version) {
+          passedReleases.push(version.id)
+          const versionData = versions[version.id]
+          if (versionData?.deletedChunks) {
+            allDeletedChunks.push(...versionData.deletedChunks)
           }
         }
+      }
 
-        console.log('[skew-protection] All deleted chunks between versions:', allDeletedChunks)
-
-        if (allDeletedChunks.length > 0) {
-          await checkDeletedChunks(allDeletedChunks)
-        }
+      if (allDeletedChunks.length > 0) {
+        await checkDeletedChunks(allDeletedChunks, passedReleases)
       }
     })
 
-    // Listen for messages from service worker
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data.type === 'MODULE_LOADED') {
-        console.log('[skew-protection] New module loaded:', event.data.url)
-      }
-    })
-
-    // Expose helpers via provide
     return {
       provide: {
         skewServiceWorker: {
+          manifest,
           getLoadedModules,
         },
       },

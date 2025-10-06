@@ -1,5 +1,6 @@
 export default defineNuxtConfig({
-  modules: ['../src/module'],
+  modules: ['@nuxt/ui', '../src/module'],
+  css: ['~/assets/css/main.css'],
   experimental: {
     appManifest: true,
     checkOutdatedBuildInterval: 30 * 1000, // this is ms

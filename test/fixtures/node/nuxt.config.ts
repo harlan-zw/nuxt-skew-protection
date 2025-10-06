@@ -19,6 +19,9 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    app: {
+      buildId: process.env.NUXT_DEPLOYMENT_ID || undefined,
+    },
     public: {
       deploymentId: process.env.NUXT_DEPLOYMENT_ID || 'dpl-local-v1',
     },

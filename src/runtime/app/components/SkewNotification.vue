@@ -1,71 +1,80 @@
 <script setup lang="ts">
+import type { ChunksOutdatedPayload } from '../../types'
+import { reloadNuxtApp } from '#imports'
+import { useTimeAgo } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 interface Props {
-  open?: boolean
+  /**
+   * Force the notification to be open (for testing/debugging).
+   */
+  forceOpen?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
-  open: false,
-  auto: true,
-})
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'dismiss': []
   'reload': []
   'update:open': [value: boolean]
+  'chunksOutdated': [payload: ChunksOutdatedPayload]
 }>()
 
-// Use the composable if auto mode is enabled
 const skewProtection = useSkewProtection()
 
-// Track if modules have been invalidated
-const modulesInvalidated = ref(false)
-const releaseDate = ref<Date | null>(null)
+// State from chunks outdated event
+const chunksOutdated = ref(false)
+const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
 
-// Listen for module invalidation events
-skewProtection.onCurrentModulesInvalidated(async () => {
-  modulesInvalidated.value = true
-  // Fetch release date when new version is detected
-  // if (skewProtection.newVersion.value) {
-  //   releaseDate.value = await skewProtection.getReleaseDate(skewProtection.newVersion.value)
-  // }
+// Listen for chunks outdated events
+skewProtection.onChunksOutdated((payload) => {
+  chunksOutdated.value = true
+  outdatedPayload.value = payload
+  emit('chunksOutdated', payload)
 })
 
 // Determine if notification should be open
 const isOpen = computed(() => {
-  // In auto mode, show when modules are invalidated
-  return modulesInvalidated.value
+  if (props.forceOpen)
+    return true
+  return chunksOutdated.value
 })
 
-// Calculate time ago
-const timeAgo = computed(() => {
-  if (!releaseDate.value)
-    return null
+// Get latest release date from manifest
+const releaseDate = computed(() => {
+  const timestamp = skewProtection.manifest.value?.timestamp
+  return timestamp ? new Date(timestamp) : new Date()
+})
 
-  const now = new Date()
-  const diff = now.getTime() - releaseDate.value.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
+// Reactive time ago using VueUse
+const timeAgo = useTimeAgo(releaseDate, {
+  showSecond: true,
+})
 
-  if (days > 0)
-    return `${days} day${days > 1 ? 's' : ''} ago`
-  if (hours > 0)
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`
-  if (minutes > 0)
-    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
-  return 'just now'
+// Number of releases that passed
+const releaseCount = computed(() => {
+  return outdatedPayload.value?.passedReleases.length ?? 0
+})
+
+// Number of invalidated modules
+const invalidatedCount = computed(() => {
+  return outdatedPayload.value?.invalidatedModules.length ?? 0
 })
 
 function handleDismiss() {
+  chunksOutdated.value = false
+  outdatedPayload.value = null
   emit('update:open', false)
   emit('dismiss')
 }
 
-function handleReload() {
+async function handleReload() {
   emit('reload')
+  reloadNuxtApp({
+    force: true,
+    persistState: true,
+  })
 }
 </script>
 
@@ -76,5 +85,8 @@ function handleReload() {
     :reload="handleReload"
     :time-ago="timeAgo"
     :release-date="releaseDate"
+    :release-count="releaseCount"
+    :invalidated-count="invalidatedCount"
+    :payload="outdatedPayload"
   />
 </template>
