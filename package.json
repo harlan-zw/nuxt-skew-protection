@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.1",
   "packageManager": "pnpm@10.18.0",
-  "description": "Zero-config real-time notifications and long-lived build assets to prevent skew issues in Nuxt applications.",
+  "description": "Instantly adopted Nuxt releases with long-lived build assets.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -65,17 +65,9 @@
     "tinyexec": "^1.0.1",
     "ufo": "^1.6.1"
   },
-  "optionalDependencies": {
-    "cloudflare": "^5.2.0"
-  },
   "devDependencies": {
     "@antfu/eslint-config": "^5.4.1",
     "@arethetypeswrong/cli": "^0.18.2",
-    "@headlessui/vue": "^1.7.23",
-    "@iconify-json/carbon": "^1.2.13",
-    "@iconify-json/logos": "^1.2.9",
-    "@iconify-json/ri": "^1.2.5",
-    "@iconify-json/tabler": "^1.2.23",
     "@nuxt/content": "^3.7.1",
     "@nuxt/devtools-ui-kit": "^2.6.5",
     "@nuxt/module-builder": "^1.0.2",
