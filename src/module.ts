@@ -169,12 +169,6 @@ export {}
       from: resolver.resolve('./runtime/app/composables/useSkewProtection'),
     })
 
-    // cookie as well
-    addImports({
-      name: 'useSkewProtectionCookie',
-      from: resolver.resolve('./runtime/app/composables/useSkewProtectionCookie'),
-    })
-
     // add alias for nuxt-skew-protection/server -> src/runtime/server
     nuxt.options.alias['nuxt-skew-protection/server'] = resolver.resolve('./runtime/server')
     if (options.storage?.driver) {

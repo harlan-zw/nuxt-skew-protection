@@ -188,16 +188,19 @@ const skew = useSkewProtection()
 skew.manifest // NuxtAppManifestMeta | null
 skew.currentVersion // string (user's build ID)
 skew.isOutdated // Ref<boolean>
+skew.cookie // CookieRef<string> - reactive cookie reference
 
 // Methods
 skew.checkForUpdates() // Manually trigger update check
 skew.onChunksOutdated(callback) // Hook for when chunks become outdated
+skew.simulateUpdate() // Dev-only: trigger fake update for testing
 ```
 
-**useSkewProtectionCookie()** (src/runtime/app/composables/useSkewProtectionCookie.ts)
+**useRuntimeConfigSkewProtection()** (src/runtime/app/composables/useRuntimeConfigSkewProtection.ts)
 ```typescript
-const versionCookie = useSkewProtectionCookie()
-// Returns reactive cookie reference (CookieRef<string>)
+const config = useRuntimeConfigSkewProtection()
+// Returns typed runtime config with cookie config and debug flag
+// config.cookie, config.debug
 ```
 
 ### Component
@@ -223,14 +226,17 @@ Headless component that provides notification logic:
 ```
 
 Props:
-- `open` - Manual control over open state
+- `forceOpen` - Force the notification to be open (for testing/debugging)
 
 Slot props:
 - `isOpen` - Whether notification should be shown
 - `dismiss()` - Dismiss notification
 - `reload()` - Trigger reload
-- `timeAgo` - Human-readable time since release
+- `timeAgo` - Human-readable time since release (using VueUse)
 - `releaseDate` - Release date object
+- `releaseCount` - Number of releases that have passed
+- `invalidatedCount` - Number of invalidated modules
+- `payload` - Full ChunksOutdatedPayload object
 
 ### Hooks
 
@@ -259,11 +265,26 @@ nuxtApp.hooks.hook('skew-protection:chunks-outdated', (payload) => {
 **nuxt-skew-protection/server** (src/runtime/server/index.ts)
 
 ```typescript
-import { getSkewProtectionCookie, isClientOutdated, setSkewProtectionCookie } from 'nuxt-skew-protection/server'
+import {
+  getRuntimeConfigSkewProtection,
+  getSkewProtectionCookie,
+  getSkewProtectionCookieName,
+  isClientOutdated,
+  setSkewProtectionCookie
+} from 'nuxt-skew-protection/server'
 
 export default defineEventHandler((event) => {
+  // Get/set cookie
   const version = getSkewProtectionCookie(event)
   setSkewProtectionCookie(event, 'new-build-id')
+
+  // Get cookie name from runtime config
+  const cookieName = getSkewProtectionCookieName(event)
+
+  // Get runtime config
+  const config = getRuntimeConfigSkewProtection(event)
+
+  // Check if client is outdated
   const outdated = isClientOutdated(event) // boolean
 })
 ```
@@ -275,10 +296,16 @@ export default defineEventHandler((event) => {
 Instead of platform-specific implementations, the module uses a **single universal approach** that works everywhere:
 
 **Storage Strategy:**
-- Uses unstorage for flexibility (filesystem, S3, Redis, Cloudflare KV, etc.)
+- Uses unstorage for flexibility (filesystem, S3, Redis, Cloudflare KV, Vercel KV, Netlify Blobs, etc.)
 - Stores versioned assets in storage during build
 - Restores old assets to `public/` folder during build
 - Old assets become part of the deployment package
+
+**Build-Time Driver Resolution:**
+- For cloud storage platforms (Cloudflare KV, Vercel KV, Netlify Blobs, AWS S3), the module uses CLI-based drivers at build time
+- These drivers authenticate using platform-specific CLIs (wrangler, vercel, netlify, aws) instead of API tokens
+- Runtime uses native platform bindings for better performance
+- See `src/unstorage/utils.ts` for driver resolution logic
 
 **Benefits:**
 - ✅ Works on any platform (Node.js, Cloudflare, Vercel, Netlify, static hosting)
@@ -286,6 +313,7 @@ Instead of platform-specific implementations, the module uses a **single univers
 - ✅ Assets served as static files (fast, cacheable)
 - ✅ No CDN conflicts (assets always served from origin)
 - ✅ Simpler architecture (no platform-specific middleware for assets)
+- ✅ No API tokens needed for build-time storage access (uses platform CLIs)
 
 ### 2. Asset Deduplication
 
@@ -560,6 +588,30 @@ export default defineNuxtConfig({
 
 The module automatically uses wrangler CLI commands during build for authenticated access to Cloudflare KV (no API token needed).
 
+**Vercel KV:**
+```typescript
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 'vercel-kv',
+      // Configuration auto-detected from environment variables
+    }
+  }
+})
+```
+
+**Netlify Blobs:**
+```typescript
+export default defineNuxtConfig({
+  skewProtection: {
+    storage: {
+      driver: 'netlify-blobs',
+      // Configuration auto-detected from environment variables
+    }
+  }
+})
+```
+
 **Redis:**
 ```typescript
 export default defineNuxtConfig({
@@ -623,18 +675,22 @@ src/
 ├── logger.ts                          # Build-time logger
 ├── utils/
 │   └── version-manager.ts             # Asset versioning & storage logic
+├── unstorage/
+│   ├── utils.ts                       # Build-time driver resolver
+│   ├── cloudflare-kv-wrangler-driver.ts  # Cloudflare KV CLI driver
+│   ├── vercel-kv-cli-driver.ts        # Vercel KV CLI driver
+│   ├── netlify-blobs-cli-driver.ts    # Netlify Blobs CLI driver
+│   └── aws-s3-cli-driver.ts           # AWS S3 CLI driver
 ├── runtime/
 │   ├── types.ts                       # TypeScript types
 │   ├── shared/
-│   │   ├── cookie.ts                  # Shared cookie utilities
 │   │   └── logger.ts                  # Client-side logger
 │   ├── app/
 │   │   ├── components/
 │   │   │   └── SkewNotification.vue   # Headless notification component
 │   │   ├── composables/
 │   │   │   ├── useSkewProtection.ts   # Main composable
-│   │   │   ├── useSkewProtectionCookie.ts
-│   │   │   └── fetchLatestManifest.ts
+│   │   │   └── useRuntimeConfigSkewProtection.ts  # Runtime config helper
 │   │   └── plugins/
 │   │       ├── 0.skew-protection.ts   # Root plugin
 │   │       ├── sw-track-user-modules.client.ts  # Service worker integration
@@ -644,7 +700,8 @@ src/
 │       ├── index.ts                   # Server exports
 │       ├── imports/
 │       │   ├── cookie.ts              # Server cookie utilities
-│       │   └── utils.ts               # Server utilities
+│       │   ├── utils.ts               # Server utilities
+│       │   └── getRuntimeConfigSkewProtection.ts  # Server runtime config helper
 │       ├── middleware/
 │       │   ├── set-skew-protection-cookie.ts  # Cookie middleware
 │       │   └── vercel-skew.ts         # Vercel-specific middleware
