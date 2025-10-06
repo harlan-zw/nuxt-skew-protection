@@ -92,7 +92,7 @@
     "@unocss/runtime": "^66.5.2",
     "@vueuse/nuxt": "^13.9.0",
     "better-sqlite3": "^12.4.1",
-    "bumpp": "^10.3.0",
+    "bumpp": "^10.3.1",
     "eslint": "^9.37.0",
     "eventsource": "^4.0.0",
     "execa": "^9.6.0",
