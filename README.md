@@ -63,7 +63,9 @@ Nuxt Skew Protection is a [Nuxt SEO Pro](https://nuxtseo.com/pricing) module, **
 
 #### Commercial License
 
-Nuxt Skew Protection requires a [Nuxt SEO Pro License](https://nuxtseo.com/pro) when using it for commercial projects. With this license, your source code remains proprietary.
+Nuxt Skew Protection requires a paid license when using it for commercial projects. With this license, your source code remains proprietary.
+
+See the [Nuxt SEO Pro](https://nuxtseo.com/pricing) to purchase or contact me at harlan@harlanzw.com.
 
 Commercial use includes:
 - Use in commercial products or services
