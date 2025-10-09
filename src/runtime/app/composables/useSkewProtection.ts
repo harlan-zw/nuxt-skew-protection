@@ -15,6 +15,11 @@ export function useSkewProtection() {
     isOutdated: Ref<boolean>
     cookie: Ref<string | undefined>
   }
+  // throw error if not available
+  if (!skewProtection) {
+    throw new Error('useSkewProtection must be used after the skew-protection:root plugin')
+  }
+
   async function checkForUpdates() {
     const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
       return null
@@ -56,8 +61,7 @@ export function useSkewProtection() {
     })
   }
 
-  return {
-    ...skewProtection,
+  return Object.assign(skewProtection, {
     onCurrentChunksOutdated,
     onAppOutdated,
     checkForUpdates,
@@ -71,5 +75,5 @@ export function useSkewProtection() {
         passedReleases: [],
       })
     },
-  }
+  })
 }

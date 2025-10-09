@@ -5,6 +5,7 @@ import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigS
 
 export default defineNuxtPlugin({
   name: 'skew-protection:root',
+  enforce: 'pre',
   setup(nuxtApp) {
     const runtimeConfig = useRuntimeConfig()
     const { cookie: cookieConfig } = useRuntimeConfigSkewProtection()

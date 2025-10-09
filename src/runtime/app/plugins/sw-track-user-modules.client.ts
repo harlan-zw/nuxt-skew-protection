@@ -19,6 +19,9 @@ function normalizePath(pathOrUrl: string): string {
 
 export default defineNuxtPlugin({
   name: 'skew-protection:service-worker',
+  dependsOn: [
+    'skew-protection:root',
+  ],
   setup(nuxtApp) {
     if (!('serviceWorker' in navigator)) {
       return

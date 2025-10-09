@@ -6,6 +6,9 @@ import { useSkewProtection } from '../composables/useSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
+  dependsOn: [
+    'skew-protection:root',
+  ],
   setup() {
     const skew = useSkewProtection()
     const clientVersion = skew.cookie.value
