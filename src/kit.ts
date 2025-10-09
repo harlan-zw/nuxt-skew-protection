@@ -4,7 +4,7 @@ import { tryUseNuxt, useNuxt } from '@nuxt/kit'
 import { env, provider } from 'std-env'
 
 export function isStaticPreset(nuxt: Nuxt = useNuxt()) {
-  return nuxt.options.nitro.static || (nuxt.options as any)._generate /* TODO: remove in future */ || [
+  return nuxt.options.nitro?.static || (nuxt.options as any)._generate /* TODO: remove in future */ || [
     'static',
     'github-pages',
   ].includes(resolveNitroPreset())

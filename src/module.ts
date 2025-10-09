@@ -263,7 +263,7 @@ export {}
 
       // Add Durable Objects WebSocket route for real-time updates (if enabled and on Cloudflare)
       if (options.checkForUpdateStrategy === 'ws') {
-        if (!nuxt.options.nitro.experimental?.websocket) {
+        if (!nuxt.options.nitro?.experimental?.websocket) {
           logger.warn('You need to enable `experimental.websocket` in your Nitro config to use WebSockets. Falling back to polling.')
           options.checkForUpdateStrategy = 'polling'
         }
