@@ -15,8 +15,8 @@ const toast = useToast()
 </script>
 
 <template>
-  <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo }" :open="open">
-    <div v-if="isOpen" class="hidden">
+  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload, timeAgo }" :open="open">
+    <div v-if="isCurrentChunksOutdated" class="hidden">
       <!-- Trigger toast programmatically -->
       {{ toast.add({
         id: 'skew-update',

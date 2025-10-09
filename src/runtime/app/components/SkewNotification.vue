@@ -25,20 +25,30 @@ const skewProtection = useSkewProtection()
 
 // State from chunks outdated event
 const chunksOutdated = ref(false)
+const appOutdated = ref(false)
 const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
 
 // Listen for chunks outdated events
-skewProtection.onChunksOutdated((payload) => {
+skewProtection.onCurrentChunksOutdated((payload) => {
   chunksOutdated.value = true
   outdatedPayload.value = payload
-  emit('chunksOutdated', payload)
+})
+
+skewProtection.onAppOutdated(() => {
+  appOutdated.value = true
 })
 
 // Determine if notification should be open
-const isOpen = computed(() => {
+const isCurrentChunksOutdated = computed(() => {
   if (props.forceOpen)
     return true
   return chunksOutdated.value
+})
+
+const isAppOutdated = computed(() => {
+  if (props.forceOpen)
+    return true
+  return appOutdated.value
 })
 
 // Get latest release date from manifest
@@ -52,20 +62,8 @@ const timeAgo = useTimeAgo(releaseDate, {
   showSecond: true,
 })
 
-// Number of releases that passed
-const releaseCount = computed(() => {
-  return outdatedPayload.value?.passedReleases.length ?? 0
-})
-
-// Number of invalidated modules
-const invalidatedCount = computed(() => {
-  return outdatedPayload.value?.invalidatedModules.length ?? 0
-})
-
 function handleDismiss() {
   chunksOutdated.value = false
-  outdatedPayload.value = null
-  emit('update:open', false)
   emit('dismiss')
 }
 
@@ -80,13 +78,12 @@ async function handleReload() {
 
 <template>
   <slot
-    :is-open="isOpen"
+    :is-current-chunks-outdated="isCurrentChunksOutdated"
     :dismiss="handleDismiss"
     :reload="handleReload"
     :time-ago="timeAgo"
     :release-date="releaseDate"
-    :release-count="releaseCount"
-    :invalidated-count="invalidatedCount"
     :payload="outdatedPayload"
+    :is-app-outdated="isAppOutdated"
   />
 </template>

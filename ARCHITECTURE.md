@@ -192,7 +192,7 @@ skew.cookie // CookieRef<string> - reactive cookie reference
 
 // Methods
 skew.checkForUpdates() // Manually trigger update check
-skew.onChunksOutdated(callback) // Hook for when chunks become outdated
+skew.onCurrentChunksOutdated(callback) // Hook for when chunks become outdated
 skew.simulateUpdate() // Dev-only: trigger fake update for testing
 ```
 
@@ -210,9 +210,9 @@ const config = useRuntimeConfigSkewProtection()
 Headless component that provides notification logic:
 ```vue
 <template>
-  <SkewNotification v-slot="{ isOpen, dismiss, reload }">
+  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
     <!-- Your custom UI -->
-    <div v-if="isOpen">
+    <div v-if="isCurrentChunksOutdated">
       <p>New version available!</p>
       <button @click="reload">
         Reload
@@ -229,7 +229,7 @@ Props:
 - `forceOpen` - Force the notification to be open (for testing/debugging)
 
 Slot props:
-- `isOpen` - Whether notification should be shown
+- `isCurrentChunksOutdated` - Whether notification should be shown
 - `dismiss()` - Dismiss notification
 - `reload()` - Trigger reload
 - `timeAgo` - Human-readable time since release (using VueUse)
@@ -498,9 +498,9 @@ Polling Strategy (default)
 
 Component: SkewNotification.vue
 ├─► Calls useSkewProtection()
-├─► Listens to onChunksOutdated()
+├─► Listens to onCurrentChunksOutdated()
 └─► Shows notification when modules invalidated
-    ├─► Provides isOpen, dismiss(), reload() to slot
+    ├─► Provides isCurrentChunksOutdated, dismiss(), reload() to slot
     └─► User sees: "New version available, please reload"
 
 User Flow:

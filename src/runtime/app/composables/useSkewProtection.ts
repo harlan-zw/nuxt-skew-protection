@@ -37,7 +37,7 @@ export function useSkewProtection() {
    * Register a callback for when chunks become outdated
    * Returns an unsubscribe function
    */
-  function onChunksOutdated(callback: (payload: ChunksOutdatedPayload) => void | Promise<void>) {
+  function onCurrentChunksOutdated(callback: (payload: ChunksOutdatedPayload) => void | Promise<void>) {
     const hook = nuxtApp.hooks.hook('skew-protection:chunks-outdated', callback)
 
     // Cleanup on unmount
@@ -51,10 +51,24 @@ export function useSkewProtection() {
     return hook
   }
 
+  function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
+    // use nuxts own hook
+    const hook = nuxtApp.hooks.hook('app:manifest:update', callback)
+
+    // Cleanup on unmount
+    onUnmounted(() => {
+      // Remove the hook when component unmounts
+      if (typeof hook === 'function') {
+        hook()
+      }
+    })
+  }
+
   return {
     ...skewProtection,
     cookie,
-    onChunksOutdated,
+    onCurrentChunksOutdated,
+    onAppOutdated,
     checkForUpdates,
     async simulateUpdate() {
       if (!import.meta.dev) {

@@ -11,7 +11,7 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-  <SkewNotification v-slot="{ isOpen, dismiss, reload, timeAgo }" :open="open">
+  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload, timeAgo }" :open="open">
     <Transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 translate-y-2"
@@ -21,7 +21,7 @@ withDefaults(defineProps<Props>(), {
       leave-to-class="opacity-0 translate-y-2"
     >
       <div
-        v-if="isOpen"
+        v-if="isCurrentChunksOutdated"
         class="fixed bottom-4 right-4 z-50 max-w-md"
       >
         <UAlert

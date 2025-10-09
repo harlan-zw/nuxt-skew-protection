@@ -265,10 +265,10 @@ watch(selectedVariant, (newVariant, oldVariant) => {
     <!-- Toast variant is handled via useToast in script section -->
 
     <!-- Native CSS Variant (default) -->
-    <SkewNotification v-else-if="selectedVariant === 'native'" v-slot="{ isOpen, dismiss, reload, timeAgo }">
+    <SkewNotification v-else-if="selectedVariant === 'native'" v-slot="{ isCurrentChunksOutdated, dismiss, reload, timeAgo }">
       <Transition name="slide-up">
         <div
-          v-if="isOpen"
+          v-if="isCurrentChunksOutdated"
           class="skew-notification"
         >
           <div class="skew-notification-content">

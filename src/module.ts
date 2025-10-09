@@ -215,6 +215,7 @@ export {}
       nuxt.options.nitro.publicAssets.push({
         dir: swPath,
         maxAge: 0, // Service workers should not be cached
+        baseURL: '/_skew',
       })
 
       // Add build hooks for asset versioning (skip if bundling is disabled)
@@ -295,11 +296,6 @@ export {}
             mode: 'client',
           })
         }
-      }
-      if (options.checkForUpdateStrategy === 'polling') {
-        // no action needed?
-        // TODO remove this
-        nuxt.options.experimental.checkOutdatedBuildInterval = 20 // 20 seconds
       }
     }
   },

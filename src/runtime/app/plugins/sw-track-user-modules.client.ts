@@ -28,7 +28,7 @@ export default defineNuxtPlugin({
     const manifest = ref<NuxtAppManifestMeta>()
 
     // Register service worker
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('/_skew/sw.js')
 
     /**
      * Get list of loaded modules from service worker
