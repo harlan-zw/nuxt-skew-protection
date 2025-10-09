@@ -27,6 +27,7 @@ const skewProtection = useSkewProtection()
 const chunksOutdated = ref(false)
 const appOutdated = ref(false)
 const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
+const dismissed = ref(false)
 
 // Listen for chunks outdated events
 skewProtection.onCurrentChunksOutdated((payload) => {
@@ -40,29 +41,36 @@ skewProtection.onAppOutdated(() => {
 
 // Determine if notification should be open
 const isCurrentChunksOutdated = computed(() => {
+  if (dismissed.value)
+    return false
   if (props.forceOpen)
     return true
   return chunksOutdated.value
 })
 
 const isAppOutdated = computed(() => {
+  if (dismissed.value)
+    return false
   if (props.forceOpen)
     return true
   return appOutdated.value
 })
 
 // Get latest release date from manifest
-const releaseDate = computed(() => {
-  const timestamp = skewProtection.manifest.value?.timestamp
-  return timestamp ? new Date(timestamp) : new Date()
+const releaseTimestamp = computed(() => {
+  if (props.forceOpen)
+    return Date.now() - 5 * 60 * 1000 // Mock: 5 minutes ago
+  return skewProtection.manifest.value?.timestamp ?? Date.now()
 })
+const releaseDate = computed(() => new Date(releaseTimestamp.value))
 
 // Reactive time ago using VueUse
-const timeAgo = useTimeAgo(releaseDate, {
+const timeAgo = useTimeAgo(releaseTimestamp, {
   showSecond: true,
 })
 
 function handleDismiss() {
+  dismissed.value = true
   chunksOutdated.value = false
   emit('dismiss')
 }
