@@ -3,9 +3,7 @@ import type { ModuleOptions } from '../module'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { useNuxt } from '@nuxt/kit'
-import { awsS3CLIDriver } from './aws-s3-cli-driver'
 import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
-import { netlifyBlobsCLIDriver } from './netlify-blobs-cli-driver'
 import { vercelKVCLIDriver } from './vercel-kv-cli-driver'
 
 /**
@@ -62,15 +60,6 @@ export async function resolveBuildTimeDriver(
     case 'vercel-kv': {
       // @ts-expect-error untyped
       return vercelKVCLIDriver(driverOptions)
-    }
-    case 's3':
-    case 'aws-s3': {
-      // @ts-expect-error untyped
-      return awsS3CLIDriver(driverOptions)
-    }
-
-    case 'netlify-blobs': {
-      return netlifyBlobsCLIDriver(driverOptions)
     }
   }
   // For other drivers (fs, redis, etc.), no build-time equivalent needed
