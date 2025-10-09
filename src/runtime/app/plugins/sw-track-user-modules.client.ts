@@ -1,6 +1,4 @@
-import type { NuxtAppManifestMeta } from '#app'
 import { defineNuxtPlugin } from '#app'
-import { ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 /**
@@ -28,7 +26,6 @@ export default defineNuxtPlugin({
     }
     const skew = useSkewProtection()
     const versionCookie = skew.cookie
-    const manifest = ref<NuxtAppManifestMeta>()
 
     // Register service worker
     navigator.serviceWorker.register('/_skew/sw.js')
@@ -38,8 +35,11 @@ export default defineNuxtPlugin({
      */
     function getLoadedModules(): Promise<string[]> {
       return new Promise((resolve) => {
+        let timeoutId: ReturnType<typeof setTimeout>
+
         const messageHandler = (event: MessageEvent) => {
           if (event.data.type === 'MODULES_LIST') {
+            clearTimeout(timeoutId)
             navigator.serviceWorker.removeEventListener('message', messageHandler)
             resolve(event.data.modules)
           }
@@ -49,7 +49,7 @@ export default defineNuxtPlugin({
         navigator.serviceWorker.controller?.postMessage({ type: 'GET_MODULES' })
 
         // Timeout after 5 seconds
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           navigator.serviceWorker.removeEventListener('message', messageHandler)
           resolve([])
         }, 5000)
@@ -87,9 +87,7 @@ export default defineNuxtPlugin({
     }
 
     // Listen for app:manifest:update to check for deleted chunks
-    nuxtApp.hook('app:manifest:update', async (_manifest) => {
-      manifest.value = _manifest
-
+    skew.onAppOutdated(async (_manifest) => {
       const versions = _manifest?.skewProtection?.versions
       if (!versions) {
         return
@@ -140,7 +138,6 @@ export default defineNuxtPlugin({
     return {
       provide: {
         skewServiceWorker: {
-          manifest,
           getLoadedModules,
         },
       },

@@ -121,5 +121,12 @@ export default defineNuxtPlugin({
     nuxtApp.hook('app:error', () => {
       close()
     })
+
+    // Cleanup on page unload
+    if (import.meta.client) {
+      window.addEventListener('beforeunload', () => {
+        close()
+      })
+    }
   },
 })

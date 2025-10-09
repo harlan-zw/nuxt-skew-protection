@@ -17,7 +17,8 @@ export function useSkewProtection() {
   }
   // throw error if not available
   if (!skewProtection) {
-    throw new Error('useSkewProtection must be used after the skew-protection:root plugin')
+    console.error('useSkewProtection() is called but skewProtection is not available. Make sure the "skew-protection:root" plugin is registered and runs before this.')
+    throw new Error('skewProtection is not available')
   }
 
   async function checkForUpdates() {
@@ -59,9 +60,12 @@ export function useSkewProtection() {
         hook()
       }
     })
+
+    return hook
   }
 
-  return Object.assign(skewProtection, {
+  return {
+    ...skewProtection,
     onCurrentChunksOutdated,
     onAppOutdated,
     checkForUpdates,
@@ -75,5 +79,5 @@ export function useSkewProtection() {
         passedReleases: [],
       })
     },
-  })
+  }
 }

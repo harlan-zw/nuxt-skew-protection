@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChunksOutdatedPayload } from '../../types'
-import { reloadNuxtApp } from '#imports'
 import { useTimeAgo } from '@vueuse/core'
+import { reloadNuxtApp } from 'nuxt/app'
 import { computed, ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
