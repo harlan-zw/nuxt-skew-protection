@@ -1,17 +1,22 @@
-import type { NuxtAppManifestMeta } from '#app'
-import { useRuntimeConfig } from '#app'
-import { useWindowFocus } from '@vueuse/core'
-import { defineNuxtPlugin } from 'nuxt/app'
-import { computed, ref, watch } from 'vue'
-import { useSkewProtection } from '../composables/useSkewProtection'
+import type { NuxtAppManifestMeta } from 'nuxt/app'
+import { defineNuxtPlugin, useCookie, useRuntimeConfig } from 'nuxt/app'
+import { computed, ref } from 'vue'
+import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:root',
   setup(nuxtApp) {
     const runtimeConfig = useRuntimeConfig()
-    const skewProtection = useSkewProtection()
+    const { cookie: cookieConfig } = useRuntimeConfigSkewProtection()
+    const { name: cookieName, ...cookieOptions } = cookieConfig
+
+    const cookie = useCookie(cookieName, {
+      default: () => runtimeConfig.app.buildId,
+      ...cookieOptions,
+    })
+
     // static
-    const currentVersion = runtimeConfig.app.buildId || skewProtection.cookie.value
+    const currentVersion = runtimeConfig.app.buildId || cookie.value
     // dynamic
     const latestVersion = ref(currentVersion)
     const manifest = ref(<NuxtAppManifestMeta | null>null)
@@ -28,14 +33,6 @@ export default defineNuxtPlugin({
           }
         }
       })
-
-      const focused = useWindowFocus()
-      watch(focused, () => {
-        // if we're switching focus then we can check for a hard reload
-        if (isOutdated.value) {
-          // reloadNuxtApp()
-        }
-      })
     }
 
     // Expose helpers via provide
@@ -45,6 +42,7 @@ export default defineNuxtPlugin({
           manifest,
           currentVersion,
           isOutdated,
+          cookie,
         },
       },
     }

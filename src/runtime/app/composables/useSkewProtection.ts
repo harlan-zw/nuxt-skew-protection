@@ -1,27 +1,19 @@
-import type { NuxtAppManifestMeta } from '#app'
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { Ref } from 'vue'
 import type { ChunksOutdatedPayload } from '../../types'
-import { useCookie, useNuxtApp, useRuntimeConfig } from '#app'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
+import { useNuxtApp } from 'nuxt/app'
 import { onUnmounted } from 'vue'
-import { useRuntimeConfigSkewProtection } from './useRuntimeConfigSkewProtection'
 
 export function useSkewProtection() {
   const nuxtApp = useNuxtApp()
-  const config = useRuntimeConfig()
-  const { cookie: cookieConfig } = useRuntimeConfigSkewProtection()
-  const { name: cookieName, ...cookieOptions } = cookieConfig
-
-  const cookie = useCookie(cookieName, {
-    default: () => config.app.buildId,
-    ...cookieOptions,
-  })
 
   const skewProtection = nuxtApp.$skewProtection as {
     manifest: Ref<NuxtAppManifestMeta | null>
     currentVersion: string | undefined
     isOutdated: Ref<boolean>
+    cookie: Ref<string | undefined>
   }
   async function checkForUpdates() {
     const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
@@ -66,7 +58,6 @@ export function useSkewProtection() {
 
   return {
     ...skewProtection,
-    cookie,
     onCurrentChunksOutdated,
     onAppOutdated,
     checkForUpdates,
