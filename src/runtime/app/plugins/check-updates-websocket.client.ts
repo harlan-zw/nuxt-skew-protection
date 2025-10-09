@@ -21,9 +21,6 @@ import { checkForUpdates } from '../composables/useSkewProtection'
  */
 export default defineNuxtPlugin({
   name: 'skew-protection:websocket-updates',
-  dependsOn: [
-    'skew-protection:root',
-  ],
   setup(nuxtApp) {
     const skewConfig = useRuntimeConfigSkewProtection()
     const runtimeConfig = useRuntimeConfig()

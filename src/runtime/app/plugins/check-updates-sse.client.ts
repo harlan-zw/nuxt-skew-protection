@@ -6,9 +6,6 @@ import { checkForUpdates } from '../composables/useSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
-  dependsOn: [
-    'skew-protection:root',
-  ],
   setup(nuxtApp) {
     const runtimeConfig = useRuntimeConfig()
     const clientVersion = runtimeConfig.app.buildId
