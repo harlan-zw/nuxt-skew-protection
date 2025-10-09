@@ -114,7 +114,7 @@ export default defineNuxtModule<ModuleOptions>({
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
     // Detect Nitro preset
-    const nitroPreset = nuxt.options.nitro?.preset || resolveNitroPreset(nuxt)
+    const nitroPreset = nuxt.options.nitro?.preset || resolveNitroPreset(nuxt.options.nitro)
 
     // Add TypeScript types
     addTypeTemplate({
@@ -173,6 +173,7 @@ export {}
     nuxt.options.alias['nuxt-skew-protection/server'] = resolver.resolve('./runtime/server')
     if (options.storage?.driver) {
       // Mount storage for runtime access
+      nuxt.options.nitro = nuxt.options.nitro || {}
       nuxt.options.nitro.storage = nuxt.options.nitro.storage || {}
       nuxt.options.nitro.storage['skew-protection'] = options.storage
     }
@@ -211,6 +212,7 @@ export {}
         swPath = resolver.resolve('../sw')
       }
       // Add service worker as public asset
+      nuxt.options.nitro = nuxt.options.nitro || {}
       nuxt.options.nitro.publicAssets = nuxt.options.nitro.publicAssets || []
       nuxt.options.nitro.publicAssets.push({
         dir: swPath,
