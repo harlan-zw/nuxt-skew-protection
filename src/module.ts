@@ -43,7 +43,7 @@ export interface ModuleOptions {
   /**
    * Cookie configuration for storing deployment version
    */
-  cookie?: Omit<CookieSerializeOptions, 'encode'> & {
+  cookie?: false | Omit<CookieSerializeOptions, 'encode'> & {
     /**
      * Cookie name for storing deployment version
      * @default '__nkpv'
@@ -159,10 +159,6 @@ export {}
       filePath: resolver.resolve(`./runtime/app/components/SkewNotification.vue`),
     })
 
-    addPlugin({
-      src: resolver.resolve('./runtime/app/plugins/0.skew-protection'),
-    })
-
     // add useSkewProtection composable import
     addImports({
       name: 'useSkewProtection',
@@ -195,10 +191,12 @@ export {}
         })
       }
 
-      addServerHandler({
-        handler: resolver.resolve('./runtime/server/middleware/set-skew-protection-cookie'),
-        middleware: true,
-      })
+      if (options.cookie !== false) {
+        addServerHandler({
+          handler: resolver.resolve('./runtime/server/middleware/set-skew-protection-cookie'),
+          middleware: true,
+        })
+      }
 
       addPlugin({
         src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
