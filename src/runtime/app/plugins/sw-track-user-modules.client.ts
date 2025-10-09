@@ -27,7 +27,7 @@ export default defineNuxtPlugin({
       return
     }
     const skew = useSkewProtection()
-    const versionCookie = skew.cookie.value
+    const versionCookie = skew.cookie
     const manifest = ref<NuxtAppManifestMeta>()
 
     // Register service worker
