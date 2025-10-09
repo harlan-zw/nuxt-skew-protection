@@ -1,5 +1,4 @@
-import { defineNuxtPlugin } from '#app'
-import { useSkewProtection } from '../composables/useSkewProtection'
+import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 
 /**
  * Normalize path to match format: _nuxt/chunk.js
@@ -24,8 +23,8 @@ export default defineNuxtPlugin({
     if (!('serviceWorker' in navigator)) {
       return
     }
-    const skew = useSkewProtection()
-    const versionCookie = skew.cookie
+    const runtimeConfig = useRuntimeConfig()
+    const clientVersion = runtimeConfig.app.buildId
 
     // Register service worker
     navigator.serviceWorker.register('/_skew/sw.js')
@@ -87,16 +86,14 @@ export default defineNuxtPlugin({
     }
 
     // Listen for app:manifest:update to check for deleted chunks
-    skew.onAppOutdated(async (_manifest) => {
+    nuxtApp.hooks.hook('app:manifest:update', async (_manifest) => {
       const versions = _manifest?.skewProtection?.versions
       if (!versions) {
         return
       }
 
       const newVersionId = _manifest.id
-      const currentVersionId = versionCookie.value
-
-      if (!currentVersionId || currentVersionId === newVersionId) {
+      if (!clientVersion || clientVersion === newVersionId) {
         return
       }
 
@@ -108,7 +105,7 @@ export default defineNuxtPlugin({
         .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
         .sort((a, b) => a.timestamp - b.timestamp)
 
-      const currentIdx = sortedVersions.findIndex(v => v.id === currentVersionId)
+      const currentIdx = sortedVersions.findIndex(v => v.id === clientVersion)
       const newIdx = sortedVersions.findIndex(v => v.id === newVersionId)
 
       if (currentIdx === -1 || newIdx === -1) {

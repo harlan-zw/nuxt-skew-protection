@@ -1,17 +1,17 @@
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 import { useEventSource } from '@vueuse/core'
 import { watch } from 'vue'
 import { logger } from '../../shared/logger'
-import { useSkewProtection } from '../composables/useSkewProtection'
+import { checkForUpdates } from '../composables/useSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
   dependsOn: [
     'skew-protection:root',
   ],
-  setup() {
-    const skew = useSkewProtection()
-    const clientVersion = skew.cookie.value
+  setup(nuxtApp) {
+    const runtimeConfig = useRuntimeConfig()
+    const clientVersion = runtimeConfig.app.buildId
 
     const { data } = useEventSource(`/_skew/sse`, [], {
       autoReconnect: {
@@ -35,7 +35,7 @@ export default defineNuxtPlugin({
       if (message.type === 'connected' && message.version) {
         const newVersion = message.version
         if (newVersion !== clientVersion) {
-          skew.checkForUpdates()
+          nuxtApp.runWithContext(checkForUpdates)
         }
       }
     })

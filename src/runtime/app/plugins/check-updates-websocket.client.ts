@@ -1,9 +1,9 @@
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 import { useWebSocket } from '@vueuse/core'
 import { watch } from 'vue'
 import { logger } from '../../shared/logger'
 import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
-import { useSkewProtection } from '../composables/useSkewProtection'
+import { checkForUpdates } from '../composables/useSkewProtection'
 
 /**
  * WebSocket Version Updates Plugin
@@ -26,15 +26,15 @@ export default defineNuxtPlugin({
   ],
   setup(nuxtApp) {
     const skewConfig = useRuntimeConfigSkewProtection()
-    const skewProtection = useSkewProtection()
-    const versionCookie = skewProtection.cookie
+    const runtimeConfig = useRuntimeConfig()
+    const clientVersion = runtimeConfig.app.buildId
+
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = typeof window !== 'undefined'
       ? `${protocol}//${window.location.host}/_skew/ws`
       : ''
 
     const {
-      status,
       data,
       open,
       close,
@@ -68,12 +68,9 @@ export default defineNuxtPlugin({
         if (parsed.type === 'version-update' && parsed.version) {
           const newVersion = parsed.version
 
-          if (newVersion !== versionCookie.value) {
+          if (newVersion !== clientVersion) {
             // Fire Nuxt's standard hook - chunk-reload plugin will handle it
-            nuxtApp.hooks.callHook('app:manifest:update', {
-              id: newVersion,
-              timestamp: parsed.timestamp || Date.now(),
-            })
+            nuxtApp.runWithContext(checkForUpdates)
 
             if (skewConfig.debug) {
               logger.info(`Version update received via WebSocket: ${newVersion}`)
@@ -94,21 +91,6 @@ export default defineNuxtPlugin({
       }
       catch (error) {
         logger.error('Failed to parse WebSocket message:', error)
-      }
-    })
-
-    // Watch connection status
-    watch(status, (newStatus: string) => {
-      if (skewConfig.debug) {
-        if (newStatus === 'OPEN') {
-          logger.info('WebSocket connection established')
-        }
-        else if (newStatus === 'CONNECTING') {
-          logger.info('WebSocket connecting...')
-        }
-        else if (newStatus === 'CLOSED') {
-          logger.info('WebSocket connection closed')
-        }
       }
     })
 

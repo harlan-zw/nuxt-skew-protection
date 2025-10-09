@@ -1,35 +1,28 @@
 import type { NuxtAppManifestMeta } from 'nuxt/app'
-import type { Ref } from 'vue'
 import type { ChunksOutdatedPayload } from '../../types'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
-import { useNuxtApp } from 'nuxt/app'
-import { onUnmounted } from 'vue'
+import { useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { computed, onUnmounted, ref } from 'vue'
+
+export async function checkForUpdates() {
+  const nuxtApp = useNuxtApp()
+  const runtimeConfig = useRuntimeConfig()
+  const clientVersion = runtimeConfig.app.buildId
+  const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
+    return null
+  })
+  if (meta && meta?.id !== clientVersion) {
+    // will propegate to the app via the hook above
+    await nuxtApp.hooks.callHook('app:manifest:update', meta)
+  }
+}
 
 export function useSkewProtection() {
   const nuxtApp = useNuxtApp()
-
-  const skewProtection = nuxtApp.$skewProtection as {
-    manifest: Ref<NuxtAppManifestMeta | null>
-    currentVersion: string | undefined
-    isOutdated: Ref<boolean>
-    cookie: Ref<string | undefined>
-  }
-  // throw error if not available
-  if (!skewProtection) {
-    console.error('useSkewProtection() is called but skewProtection is not available. Make sure the "skew-protection:root" plugin is registered and runs before this.')
-    throw new Error('skewProtection is not available')
-  }
-
-  async function checkForUpdates() {
-    const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
-      return null
-    })
-    if (meta && meta?.id !== skewProtection.currentVersion) {
-      // will propegate to the app via the hook above
-      await nuxtApp.hooks.callHook('app:manifest:update', meta)
-    }
-  }
+  const runtimeConfig = useRuntimeConfig()
+  const clientVersion = runtimeConfig.app.buildId
+  const manifest = ref<NuxtAppManifestMeta | undefined>()
 
   /**
    * Register a callback for when chunks become outdated
@@ -51,7 +44,10 @@ export function useSkewProtection() {
 
   function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
     // use nuxts own hook
-    const hook = nuxtApp.hooks.hook('app:manifest:update', callback)
+    const hook = nuxtApp.hooks.hook('app:manifest:update', (_manifest) => {
+      manifest.value = _manifest
+      callback(_manifest)
+    })
 
     // Cleanup on unmount
     onUnmounted(() => {
@@ -65,7 +61,9 @@ export function useSkewProtection() {
   }
 
   return {
-    ...skewProtection,
+    manifest,
+    clientVersion,
+    isOutdated: computed(() => manifest.value && clientVersion !== manifest.value.id),
     onCurrentChunksOutdated,
     onAppOutdated,
     checkForUpdates,

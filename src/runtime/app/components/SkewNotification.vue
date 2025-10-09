@@ -82,10 +82,12 @@ async function handleReload() {
     persistState: true,
   })
 }
+const shouldRender = import.meta.client && !import.meta.prerender
 </script>
 
 <template>
   <slot
+    v-if="shouldRender"
     :is-current-chunks-outdated="isCurrentChunksOutdated"
     :dismiss="handleDismiss"
     :reload="handleReload"
