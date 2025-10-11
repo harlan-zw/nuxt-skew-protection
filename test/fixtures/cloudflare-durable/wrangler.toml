@@ -1,7 +1,7 @@
 # Cloudflare Durable Objects configuration for Nuxt Skew Protection
 name = "nuxt-skew-protection-durable-test"
 main = ".output/server/index.mjs"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-10-10"
 compatibility_flags = [ "nodejs_compat" ]
 account_id = "5904138d55ca25d5670dca6adf99894e"
 

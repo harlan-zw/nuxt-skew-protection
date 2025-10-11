@@ -215,47 +215,66 @@ export {}
       nuxt.options.nitro.publicAssets.push({
         dir: swPath,
         maxAge: 0, // Service workers should not be cached
-        baseURL: '/_skew',
       })
 
       // Add build hooks for asset versioning (skip if bundling is disabled)
       if (options.storage && options.bundlePreviousDeploymentChunks) {
-        // Track build-time storage config for build operations
-        // Use CLI drivers for build-time, native bindings for runtime
-        nuxt.hook('nitro:build:public-assets', async (nitro) => {
+        nuxt.hook('nitro:init', (nitro) => {
           const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
-          const outputDir = nitro.options.output.dir
+          let assetManager: ReturnType<typeof createAssetManager>
 
-          const assetManager = createAssetManager({
-            ...options,
-            driver: await resolveBuildTimeDriver(options.storage!),
+          // Process assets before rollup finalization
+          nitro.hooks.hook('compiled', async () => {
+            const outputDir = nitro.options.output.dir
+
+            assetManager = createAssetManager({
+              ...options,
+              driver: await resolveBuildTimeDriver(options.storage!),
+            })
+
+            // Get list of assets from build
+            const assets = await assetManager.getAssetsFromBuild(outputDir)
+
+            // Update versions manifest
+            const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
+
+            // Store assets in configured storage (can be slow with many assets)
+            logger.log(`Storing ${assets.length} assets in storage...`)
+            await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
+
+            // Count versions (excluding current)
+            const existingVersions = await assetManager.listExistingVersions()
+            const versionCount = existingVersions.filter(v => v.id !== buildId).length
+
+            // For static/prerendered builds: restore old versioned assets into public directory
+            if (versionCount > 0) {
+              // Calculate total size and asset count across all versions
+              const manifest = await assetManager.getManifest()
+              let totalAssets = 0
+              const versionSizes: string[] = []
+
+              for (const [vId, vData] of Object.entries(manifest.versions)) {
+                if (vId !== buildId) {
+                  totalAssets += vData.assets.length
+                  versionSizes.push(`${vId.slice(0, 8)}:${vData.assets.length}`)
+                }
+              }
+
+              logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
+            }
+
+            await assetManager.restoreOldAssetsToPublic(buildId, outputDir, assets, isExistingVersion)
+
+            // Augment Nuxt build metadata files with skew protection data
+            await assetManager.augmentBuildMetadata(buildId, outputDir)
           })
 
-          // Get list of assets from build
-          const assets = await assetManager.getAssetsFromBuild(outputDir)
-
-          // Update versions manifest
-          const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
-
-          // Store assets in configured storage
-          await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
-
-          // Count versions (excluding current)
-          const existingVersions = await assetManager.listExistingVersions()
-          const versionCount = existingVersions.filter(v => v.id !== buildId).length
-
-          // For static/prerendered builds: restore old versioned assets into public directory
-          if (versionCount > 0) {
-            logger.log(`Restoring build files from the last ${versionCount} release${versionCount > 1 ? 's' : ''}...`)
-          }
-
-          await assetManager.restoreOldAssetsToPublic(buildId, outputDir, assets, isExistingVersion)
-
-          // Augment Nuxt build metadata files with skew protection data
-          await assetManager.augmentBuildMetadata(buildId, outputDir)
-
-          // Clean up expired versions
-          await assetManager.cleanupExpiredVersions()
+          // Clean up expired versions on close
+          nitro.hooks.hook('close', async () => {
+            if (assetManager) {
+              await assetManager.cleanupExpiredVersions()
+            }
+          })
         })
       }
 

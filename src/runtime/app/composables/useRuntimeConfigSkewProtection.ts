@@ -7,5 +7,8 @@ import { useRuntimeConfig } from 'nuxt/app'
  */
 export function useRuntimeConfigSkewProtection(): SkewProtectionRuntimeConfig {
   const config = useRuntimeConfig()
-  return config.public.skewProtection as SkewProtectionRuntimeConfig
+  return {
+    ...config.public.skewProtection,
+    buildId: config.app.buildId,
+  } as SkewProtectionRuntimeConfig
 }

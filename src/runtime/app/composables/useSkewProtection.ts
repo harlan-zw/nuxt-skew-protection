@@ -2,13 +2,15 @@ import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { ChunksOutdatedPayload } from '../../types'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
-import { useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { useCookie, useNuxtApp } from 'nuxt/app'
 import { computed, onUnmounted, ref } from 'vue'
+import { useRuntimeConfigSkewProtection } from './useRuntimeConfigSkewProtection'
 
 export async function checkForUpdates() {
   const nuxtApp = useNuxtApp()
-  const runtimeConfig = useRuntimeConfig()
-  const clientVersion = runtimeConfig.app.buildId
+  const runtimeConfig = useRuntimeConfigSkewProtection()
+  const cookie = useCookie(runtimeConfig.cookie.name)
+  const clientVersion = import.meta.client ? cookie.value : runtimeConfig.buildId
   const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
     return null
   })
@@ -20,8 +22,13 @@ export async function checkForUpdates() {
 
 export function useSkewProtection() {
   const nuxtApp = useNuxtApp()
-  const runtimeConfig = useRuntimeConfig()
-  const clientVersion = runtimeConfig.app.buildId
+  const runtimeConfig = useRuntimeConfigSkewProtection()
+  const cookie = useCookie(runtimeConfig.cookie.name, {
+    default() {
+      return runtimeConfig.buildId
+    },
+  })
+  const clientVersion = import.meta.client ? cookie.value : runtimeConfig.buildId
   const manifest = ref<NuxtAppManifestMeta | undefined>()
 
   /**

@@ -491,5 +491,6 @@ export function createAssetManager(options: {
     listExistingVersions,
     restoreOldAssetsToPublic,
     augmentBuildMetadata,
+    getManifest: () => getVersionManifest(storage),
   }
 }

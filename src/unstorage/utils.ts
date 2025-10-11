@@ -54,8 +54,10 @@ export async function resolveBuildTimeDriver(
       if (!namespaceId) {
         namespaceId = await detectCloudflareKVNamespace()
       }
-      // @ts-expect-error untyped
-      return cloudflareKVWranglerDriver(driverOptions)
+      return cloudflareKVWranglerDriver({
+        namespaceId,
+        ...driverOptions,
+      })
     }
     case 'vercel-kv': {
       // @ts-expect-error untyped

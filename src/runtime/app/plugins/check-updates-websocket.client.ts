@@ -1,9 +1,8 @@
-import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 import { useWebSocket } from '@vueuse/core'
+import { defineNuxtPlugin } from 'nuxt/app'
 import { watch } from 'vue'
 import { logger } from '../../shared/logger'
-import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
-import { checkForUpdates } from '../composables/useSkewProtection'
+import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
 
 /**
  * WebSocket Version Updates Plugin
@@ -22,9 +21,7 @@ import { checkForUpdates } from '../composables/useSkewProtection'
 export default defineNuxtPlugin({
   name: 'skew-protection:websocket-updates',
   setup(nuxtApp) {
-    const skewConfig = useRuntimeConfigSkewProtection()
-    const runtimeConfig = useRuntimeConfig()
-    const clientVersion = runtimeConfig.app.buildId
+    const { clientVersion } = useSkewProtection()
 
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = typeof window !== 'undefined'
@@ -61,28 +58,12 @@ export default defineNuxtPlugin({
 
       try {
         const parsed = JSON.parse(message)
-
-        if (parsed.type === 'version-update' && parsed.version) {
+        if (parsed.version) {
           const newVersion = parsed.version
 
           if (newVersion !== clientVersion) {
             // Fire Nuxt's standard hook - chunk-reload plugin will handle it
             nuxtApp.runWithContext(checkForUpdates)
-
-            if (skewConfig.debug) {
-              logger.info(`Version update received via WebSocket: ${newVersion}`)
-            }
-          }
-        }
-        else if (parsed.type === 'connected') {
-          if (skewConfig.debug) {
-            logger.info('WebSocket connection acknowledged')
-          }
-        }
-        else if (parsed.type === 'pong') {
-          // Keepalive response received
-          if (skewConfig.debug) {
-            logger.debug('Received pong from WebSocket')
           }
         }
       }

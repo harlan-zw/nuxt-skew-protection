@@ -1,4 +1,5 @@
-import { defineNuxtPlugin, useRuntimeConfig } from '#app'
+import { defineNuxtPlugin } from 'nuxt/app'
+import { useSkewProtection } from '../composables/useSkewProtection'
 
 /**
  * Normalize path to match format: _nuxt/chunk.js
@@ -20,16 +21,39 @@ export default defineNuxtPlugin({
     if (!('serviceWorker' in navigator)) {
       return
     }
-    const runtimeConfig = useRuntimeConfig()
-    const clientVersion = runtimeConfig.app.buildId
+    const { clientVersion, onAppOutdated } = useSkewProtection()
 
-    // Register service worker
-    navigator.serviceWorker.register('/_skew/sw.js')
+    // Register service worker and sync already-loaded modules once ready
+    const swRegistration = navigator.serviceWorker.register('/_nuxt-skew-sw.js')
+
+    swRegistration.then((registration) => {
+      // Wait for SW to be active and controlling
+      const sw = registration.active || registration.installing || registration.waiting
+      if (!sw)
+        return
+
+      // Send modules that loaded before SW could intercept them
+      const alreadyLoadedModules = performance
+        .getEntriesByType('resource')
+        .filter(r => r.name.includes('/_nuxt/') && r.name.endsWith('.js'))
+        .map(r => r.name)
+
+      alreadyLoadedModules.forEach((url) => {
+        sw.postMessage({ type: 'ADD_MODULE', url })
+      })
+    })
 
     /**
      * Get list of loaded modules from service worker
      */
-    function getLoadedModules(): Promise<string[]> {
+    async function getLoadedModules(): Promise<string[]> {
+      const registration = await swRegistration
+      const sw = registration.active
+
+      if (!sw) {
+        return []
+      }
+
       return new Promise((resolve) => {
         let timeoutId: ReturnType<typeof setTimeout>
 
@@ -42,7 +66,7 @@ export default defineNuxtPlugin({
         }
 
         navigator.serviceWorker.addEventListener('message', messageHandler)
-        navigator.serviceWorker.controller?.postMessage({ type: 'GET_MODULES' })
+        sw.postMessage({ type: 'GET_MODULES' })
 
         // Timeout after 5 seconds
         timeoutId = setTimeout(() => {
@@ -67,7 +91,6 @@ export default defineNuxtPlugin({
       }
 
       const normalizedDeletedChunks = new Set(deletedChunks.map(normalizePath))
-
       const invalidatedModules = loadedModules.filter((module) => {
         const normalizedModule = normalizePath(module)
         return normalizedDeletedChunks.has(normalizedModule)
@@ -83,20 +106,12 @@ export default defineNuxtPlugin({
     }
 
     // Listen for app:manifest:update to check for deleted chunks
-    nuxtApp.hooks.hook('app:manifest:update', async (_manifest) => {
+    onAppOutdated(async (_manifest) => {
       const versions = _manifest?.skewProtection?.versions
       if (!versions) {
         return
       }
-
       const newVersionId = _manifest.id
-      if (!clientVersion || clientVersion === newVersionId) {
-        return
-      }
-
-      // Reset loaded modules in service worker on version change
-      navigator.serviceWorker.controller?.postMessage({ type: 'RESET_MODULES' })
-
       // Sort versions by timestamp to find the range
       const sortedVersions = Object.entries(versions)
         .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
@@ -105,17 +120,13 @@ export default defineNuxtPlugin({
       const currentIdx = sortedVersions.findIndex(v => v.id === clientVersion)
       const newIdx = sortedVersions.findIndex(v => v.id === newVersionId)
 
-      if (currentIdx === -1 || newIdx === -1) {
-        return
-      }
-
       // Collect deleted chunks and release IDs from all versions between current and new (inclusive of new)
       const allDeletedChunks: string[] = []
       const passedReleases: string[] = []
 
-      for (let i = currentIdx + 1; i <= newIdx; i++) {
-        const version = sortedVersions[i]
-        if (version) {
+      // If current version is missing (cleaned up or never tracked), check ALL versions
+      if (currentIdx === -1) {
+        for (const version of sortedVersions) {
           passedReleases.push(version.id)
           const versionData = versions[version.id]
           if (versionData?.deletedChunks) {
@@ -123,18 +134,42 @@ export default defineNuxtPlugin({
           }
         }
       }
+      // If new version is not in manifest, it's newer than all tracked versions - check all versions from current onwards
+      else if (newIdx === -1) {
+        for (let i = currentIdx + 1; i < sortedVersions.length; i++) {
+          const version = sortedVersions[i]
+          if (version) {
+            passedReleases.push(version.id)
+            const versionData = versions[version.id]
+            if (versionData?.deletedChunks) {
+              allDeletedChunks.push(...versionData.deletedChunks)
+            }
+          }
+        }
+      }
+      // Otherwise only check versions between current and new
+      else {
+        for (let i = currentIdx + 1; i <= newIdx; i++) {
+          const version = sortedVersions[i]
+          if (version) {
+            passedReleases.push(version.id)
+            const versionData = versions[version.id]
+            if (versionData?.deletedChunks) {
+              allDeletedChunks.push(...versionData.deletedChunks)
+            }
+          }
+        }
+      }
 
       if (allDeletedChunks.length > 0) {
+        // Small delay to ensure SW has received module list
+        await new Promise(resolve => setTimeout(resolve, 100))
         await checkDeletedChunks(allDeletedChunks, passedReleases)
       }
-    })
 
-    return {
-      provide: {
-        skewServiceWorker: {
-          getLoadedModules,
-        },
-      },
-    }
+      // Reset loaded modules in service worker on version change
+      // TODO: Disabled for testing - may not be needed if we track properly
+      swRegistration.then(reg => reg.active?.postMessage({ type: 'RESET_MODULES' }))
+    })
   },
 })

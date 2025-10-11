@@ -5,7 +5,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
   modules: ['../../../src/module'],
-  compatibilityDate: '2024-11-01',
+  compatibilityDate: '2025-10-10',
 
   nitro: {
     preset: 'cloudflare-durable',

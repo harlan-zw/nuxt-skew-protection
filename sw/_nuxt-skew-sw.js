@@ -1,13 +1,19 @@
 // sw.js
 const loadedModules = new Set()
 
+// Take control immediately on activation
+// eslint-disable-next-line no-restricted-globals
+self.addEventListener('activate', (event) => {
+  // eslint-disable-next-line no-restricted-globals
+  event.waitUntil(self.clients.claim())
+})
+
 // eslint-disable-next-line no-restricted-globals
 self.addEventListener('fetch', (event) => {
   const url = event.request.url
 
   if (event.request.destination === 'script' || url.endsWith('.js')) {
     loadedModules.add(url)
-
     // Notify all clients about the new module
     event.waitUntil(
       // eslint-disable-next-line no-restricted-globals
@@ -29,9 +35,10 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data.type === 'GET_MODULES') {
     // Send back all loaded modules
+    const modules = Array.from(loadedModules)
     event.source.postMessage({
       type: 'MODULES_LIST',
-      modules: Array.from(loadedModules),
+      modules,
     })
   }
 
@@ -51,5 +58,10 @@ self.addEventListener('message', (event) => {
       type: 'MODULES_RESET',
       success: true,
     })
+  }
+
+  if (event.data.type === 'ADD_MODULE') {
+    // Add a module that was loaded before SW activated
+    loadedModules.add(event.data.url)
   }
 })

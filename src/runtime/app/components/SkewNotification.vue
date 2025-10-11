@@ -12,6 +12,10 @@ interface Props {
   forceOpen?: boolean
 }
 
+defineOptions({
+  inheritAttrs: false,
+})
+
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
@@ -22,6 +26,8 @@ const emit = defineEmits<{
 }>()
 
 const skewProtection = useSkewProtection()
+
+const version = skewProtection.clientVersion
 
 // State from chunks outdated event
 const chunksOutdated = ref(false)
@@ -82,18 +88,19 @@ async function handleReload() {
     persistState: true,
   })
 }
-const shouldRender = import.meta.client && !import.meta.prerender
 </script>
 
 <template>
-  <slot
-    v-if="shouldRender"
-    :is-current-chunks-outdated="isCurrentChunksOutdated"
-    :dismiss="handleDismiss"
-    :reload="handleReload"
-    :time-ago="timeAgo"
-    :release-date="releaseDate"
-    :payload="outdatedPayload"
-    :is-app-outdated="isAppOutdated"
-  />
+  <ClientOnly>
+    <slot
+      :version="version"
+      :is-current-chunks-outdated="isCurrentChunksOutdated"
+      :dismiss="handleDismiss"
+      :reload="handleReload"
+      :time-ago="timeAgo"
+      :release-date="releaseDate"
+      :payload="outdatedPayload"
+      :is-app-outdated="isAppOutdated"
+    />
+  </ClientOnly>
 </template>
