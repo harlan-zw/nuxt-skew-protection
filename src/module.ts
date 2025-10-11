@@ -114,7 +114,7 @@ export default defineNuxtModule<ModuleOptions>({
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
     // Detect Nitro preset
-    const nitroPreset = nuxt.options.nitro?.preset || resolveNitroPreset(nuxt.options.nitro)
+    const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
 
     // Add TypeScript types
     addTypeTemplate({
