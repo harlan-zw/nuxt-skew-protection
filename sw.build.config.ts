@@ -6,8 +6,8 @@ export default defineBuildConfig({
   declaration: false,
   clean: false,
   name: 'minified',
-  entries: ['./sw/sw.js'],
-  outDir: 'src',
+  entries: ['./sw/_nuxt-skew-sw.js'],
+  outDir: 'dist',
   rollup: {
     esbuild: {
       minify: true,
@@ -16,7 +16,7 @@ export default defineBuildConfig({
   hooks: {
     'build:done': function (ctx) {
       // need to rename src/sw/sw.mjs to src/sw/sw.js
-      fs.renameSync(path.join(ctx.options.outDir, 'sw', 'sw.mjs'), path.join(ctx.options.outDir, 'sw', 'sw.js'))
+      fs.renameSync(path.join(ctx.options.outDir, 'sw', '_nuxt-skew-sw.mjs'), path.join(ctx.options.outDir, 'sw', '_nuxt-skew-sw.js'))
     },
   },
   failOnWarn: false,
