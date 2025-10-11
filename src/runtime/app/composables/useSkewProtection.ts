@@ -22,7 +22,7 @@ export async function checkForUpdates() {
 export function useSkewProtection() {
   const nuxtApp = useNuxtApp()
   const runtimeConfig = useRuntimeConfigSkewProtection()
-  const clientVersion = nuxtApp.$skewProtectionBuildId?.value || nuxtApp.skewProtectionCookie?.value || runtimeConfig.buildId
+  const clientVersion = nuxtApp.$skewProtectionBuildId?.value || nuxtApp.$skewProtectionCookie?.value || runtimeConfig.buildId
   const manifest = ref<NuxtAppManifestMeta | undefined>()
 
   /**
