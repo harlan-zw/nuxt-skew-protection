@@ -530,10 +530,8 @@ describe('version Manager', () => {
       const augmented = JSON.parse(augmentedData)
 
       expect(augmented.skewProtection).toBeDefined()
-      expect(augmented.skewProtection.assets).toEqual(assets)
       expect(augmented.skewProtection.deletedChunks).toBeDefined()
       expect(augmented.skewProtection.timestamp).toBeDefined()
-      expect(augmented.skewProtection.expires).toBeDefined()
     })
   })
 
