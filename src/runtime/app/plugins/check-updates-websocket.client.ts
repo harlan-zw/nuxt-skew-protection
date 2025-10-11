@@ -1,7 +1,7 @@
 import { useWebSocket } from '@vueuse/core'
-import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app'
+import { defineNuxtPlugin } from 'nuxt/app'
 import { watch } from 'vue'
-import { logger, setLoggerDebugMode } from '../../shared/logger'
+import { logger } from '../../shared/logger'
 import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
 
 /**
@@ -21,9 +21,6 @@ import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtec
 export default defineNuxtPlugin({
   name: 'skew-protection:websocket-updates',
   setup(nuxtApp) {
-    const config = useRuntimeConfig()
-    setLoggerDebugMode(config.public.skewProtection.debug)
-
     const { clientVersion } = useSkewProtection()
 
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'

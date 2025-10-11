@@ -446,8 +446,17 @@ export function createAssetManager(options: {
       const latestData = await fs.readFile(latestPath, 'utf-8')
       const latestJson = JSON.parse(latestData)
 
+      // Clean up versions - only expose what client needs
+      const clientVersions: Record<string, { timestamp: string, deletedChunks?: string[] }> = {}
+      for (const [versionId, versionData] of Object.entries(manifest.versions)) {
+        clientVersions[versionId] = {
+          timestamp: versionData.timestamp,
+          deletedChunks: versionData.deletedChunks,
+        }
+      }
+
       latestJson.skewProtection = {
-        versions: manifest.versions,
+        versions: clientVersions,
       }
 
       await fs.writeFile(latestPath, JSON.stringify(latestJson, null, 2), 'utf-8')
@@ -467,10 +476,8 @@ export function createAssetManager(options: {
       const versionData = manifest.versions[buildId]
       if (versionData) {
         metaJson.skewProtection = {
-          assets: versionData.assets,
           deletedChunks: versionData.deletedChunks,
           timestamp: versionData.timestamp,
-          expires: versionData.expires,
         }
       }
 

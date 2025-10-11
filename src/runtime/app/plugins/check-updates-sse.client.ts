@@ -1,15 +1,12 @@
 import { useEventSource } from '@vueuse/core'
-import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app'
+import { defineNuxtPlugin } from 'nuxt/app'
 import { watch } from 'vue'
-import { logger, setLoggerDebugMode } from '../../shared/logger'
+import { logger } from '../../shared/logger'
 import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
 
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
   setup(nuxtApp) {
-    const config = useRuntimeConfig()
-    setLoggerDebugMode(config.public.skewProtection.debug)
-
     const { clientVersion } = useSkewProtection()
 
     logger.debug('[SSE] Initializing SSE connection for version updates')

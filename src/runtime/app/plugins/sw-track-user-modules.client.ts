@@ -1,5 +1,5 @@
-import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app'
-import { logger, setLoggerDebugMode } from '../../shared/logger'
+import { defineNuxtPlugin } from 'nuxt/app'
+import { logger } from '../../shared/logger'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 /**
@@ -23,9 +23,6 @@ export default defineNuxtPlugin({
       logger.debug('[SW] Service Worker not supported in this browser')
       return
     }
-
-    const config = useRuntimeConfig()
-    setLoggerDebugMode(config.public.skewProtection.debug)
 
     const { clientVersion, onAppOutdated } = useSkewProtection()
     logger.debug('[SW] Initializing service worker tracking')

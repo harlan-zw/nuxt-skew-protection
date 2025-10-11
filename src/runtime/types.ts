@@ -22,9 +22,3 @@ export interface ChunksOutdatedPayload {
   invalidatedModules: string[]
   passedReleases: string[]
 }
-
-declare module '#app' {
-  interface RuntimeNuxtHooks {
-    'skew-protection:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
-  }
-}

@@ -1,4 +1,5 @@
 import { createConsola } from 'consola'
+import { useRuntimeConfig } from 'nuxt/app'
 
 export const logger = createConsola({
   defaults: {
@@ -7,8 +8,9 @@ export const logger = createConsola({
 })
 
 /**
- * Set logger level based on debug mode from runtime config
+ * Initialize logger with runtime config
  */
-export function setLoggerDebugMode(debug: boolean) {
-  logger.level = debug ? 4 : 3
+export function init() {
+  const config = useRuntimeConfig()
+  logger.level = config.public.skewProtection.debug ? 4 : 3
 }
