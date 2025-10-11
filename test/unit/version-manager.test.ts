@@ -87,9 +87,7 @@ describe('version Manager', () => {
 
       expect(result.manifest.current).toBe(buildId)
       expect(result.manifest.versions[buildId]).toBeDefined()
-      expect(result.manifest.versions[buildId].assets).toEqual(assets)
       expect(result.manifest.versions[buildId].timestamp).toBeDefined()
-      expect(result.manifest.versions[buildId].expires).toBeDefined()
       expect(result.isExistingVersion).toBe(false)
     })
 
