@@ -5,3 +5,10 @@ export const logger = createConsola({
     tag: 'nuxt-skew-protection',
   },
 })
+
+/**
+ * Set logger level based on debug mode from runtime config
+ */
+export function setLoggerDebugMode(debug: boolean) {
+  logger.level = debug ? 4 : 3
+}
