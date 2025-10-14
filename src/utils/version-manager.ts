@@ -36,10 +36,13 @@ function extractFileId(assetPath: string): string | null {
 
 /**
  * Calculate deleted chunks in the current version compared to a previous version
+ * Only includes .js files since CSS files are not tracked by the service worker
  */
 function calculateDeletedChunks(currentAssets: string[], previousAssets: string[]): string[] {
   const currentSet = new Set(currentAssets)
-  return previousAssets.filter(asset => !currentSet.has(asset))
+  return previousAssets
+    .filter(asset => !currentSet.has(asset))
+    .filter(asset => asset.endsWith('.js'))
 }
 
 /**
