@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { useNuxt } from '@nuxt/kit'
 import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
-import { vercelKVCLIDriver } from './vercel-kv-cli-driver'
 
 /**
  * Detect Cloudflare KV namespace from wrangler.toml
