@@ -45,7 +45,7 @@ Install `nuxt-skew-protection` dependency to your project:
 npx nuxi@latest module add nuxt-skew-protection
 ```
 
-## Early Access
+## License & Early Access
 
 **This module is in early access (v0.x).** All v0.x versions are MIT licensed for all projects to enable broader testing and feedback on stability.
 
