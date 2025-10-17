@@ -33,7 +33,7 @@ Nuxt Skew Protection aims to solve skews by providing better UX on top of app up
 ## Features
 
 - ⚡ **Instantly Adopted Releases** - Zero-config Real-time notifications to users when a new version is deployed.
-- 🎯 **Intelligent User Notifications** - Avoid spamming your users by only sending update notifications when their chunks are outdated. No annoying popups for unrelated updates.
+- 🎯 **Targeted User Notifications** - Send update notifications only when the chunks the user has loaded have invalidated. No annoying popups for unrelated updates.
 - 📦 **Long-lived Build Assets** - Avoid breaking crawlers or old sessions with previous build assets remain accessible.
 - 🎨 **Headless UI** - Ship it quicker with a headless notification component that works perfectly with Nuxt UI.
 
