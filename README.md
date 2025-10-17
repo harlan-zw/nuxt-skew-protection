@@ -18,12 +18,12 @@
 ## Why Nuxt Skew Protection?
 
 Congrats on shipping that latest release! Unfortunately, many of your users are going to be using the previous version of your app
-for hours to days afterwards until they refresh.
+for hours to days afterward until they refresh.
 
 Finally fixed that SEO issue? Great, but crawlers will often hit your site and request build chunks that no longer exist, leading
 to 500 errors and broken indexes.
 
-You've just been "skewed"! Skew is the version difference between what your users are running and what is currently deployed.
+You've just been "skewed"! Skew is the version difference between what your users are running and what is deployed.
 
 While Nuxt helps us by hard-reloading on navigation when it detects a new release, it's often not enough to ensure a smooth experience for all users
 and crawlers. Just check out one of Nuxt's top commented [issues](https://github.com/nuxt/nuxt/issues/29624).
