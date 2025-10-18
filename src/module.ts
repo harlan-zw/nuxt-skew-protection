@@ -277,14 +277,14 @@ export {}
             logger.log(`  Database: ${storageInfo}`)
             logger.log(`  Storing ${colors.yellow(assets.length.toString())} assets in storage...`)
 
-            try {
-              await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
-              logger.success(`  ✓ Successfully stored ${assets.length} assets`)
-            }
-            catch (error) {
-              logger.error(`  ✗ Failed to store assets:`, error?.message || error)
-              throw error
-            }
+            await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
+              .then(() => {
+                logger.success(`  ✓ Successfully stored ${assets.length} assets`)
+              })
+              .catch((error: unknown) => {
+                logger.error(`  ✗ Failed to store assets:`, error instanceof Error ? error.message : error)
+                throw error
+              })
 
             // Count versions (excluding current)
             const existingVersions = await assetManager.listExistingVersions()

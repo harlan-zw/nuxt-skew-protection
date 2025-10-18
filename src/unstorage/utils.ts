@@ -15,7 +15,7 @@ async function detectCloudflareKVNamespace(): Promise<string | null> {
   const kvNamespaces = nuxt.options.nitro?.cloudflare?.wrangler?.kv_namespaces
   if (kvNamespaces?.length) {
     // Prefer SKEW_PROTECTION binding if it exists
-    const skewNamespace = kvNamespaces.find(ns => ns.binding === 'SKEW_PROTECTION')
+    const skewNamespace = kvNamespaces.find(ns => ns?.binding === 'SKEW_PROTECTION')
     if (skewNamespace?.id) {
       return skewNamespace.id
     }
