@@ -4,20 +4,17 @@ import { onMounted, ref, useCookie, useRuntimeConfig, useSkewProtection } from '
 const config = useRuntimeConfig()
 const skew = useSkewProtection()
 
-// Build information
 const deploymentId = ref(config.public?.deploymentId || 'unknown')
 const buildId = ref(config.app?.buildId || 'unknown')
 const versionCookie = useCookie('__nkpv')
-const version = ref('v2') // Modified by test script
+const version = ref('v1')
 const timestamp = ref(new Date().toISOString())
 
-// Environment information
-const provider = ref('Cloudflare Workers')
-const platform = ref(process.env.CF_WORKER_NAME ? 'Cloudflare' : 'Development')
+const provider = ref('NuxtHub')
+const platform = ref(process.env.CF_WORKER_NAME ? 'Cloudflare (NuxtHub)' : 'Development')
 const workerName = ref(process.env.CF_WORKER_NAME || 'local')
 const previewDomain = ref(process.env.CF_PREVIEW_DOMAIN || 'localhost')
 
-// Request information
 const currentUrl = ref('')
 const requestHeaders = ref('')
 const testResult = ref('')
@@ -55,7 +52,7 @@ async function simulateUpdate() {
 
 <template>
   <div class="container">
-    <h1>🛡️ Nuxt Skew Protection - Cloudflare Test</h1>
+    <h1>🛡️ Nuxt Skew Protection - NuxtHub Test</h1>
     <p class="version">
       Version: {{ version }}
     </p>

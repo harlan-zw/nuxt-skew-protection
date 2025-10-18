@@ -8,6 +8,8 @@ export interface CloudflareKVWranglerOptions {
   namespaceId: string
   /** Use local KV storage instead of remote (for wrangler dev) */
   local?: boolean
+  /** Optional prefix for all keys (e.g., 'skew:') */
+  base?: string
 }
 
 /**
@@ -17,13 +19,18 @@ export interface CloudflareKVWranglerOptions {
  * Requires: wrangler CLI to be installed and authenticated
  */
 export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWranglerOptions) => {
-  const { namespaceId, local = false } = opts
+  const { namespaceId, local = false, base = '' } = opts
 
   if (!namespaceId) {
     throw new Error('[cloudflare-kv-wrangler] namespaceId is required')
   }
 
   const locationFlag = local ? '--local' : '--remote'
+
+  // Helper to add base prefix to keys
+  const prefixKey = (key: string): string => base ? `${base}${key}` : key
+  // Helper to remove base prefix from keys
+  const unprefixKey = (key: string): string => base && key.startsWith(base) ? key.slice(base.length) : key
 
   async function execWrangler(command: string, throwOnError = true): Promise<{ stdout: string, exitCode: number }> {
     const result = await x('sh', ['-c', `npx ${command}`])
@@ -45,12 +52,14 @@ export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWrangl
     options: opts,
 
     async hasItem(key: string) {
-      const result = await execWrangler(`wrangler kv key get "${key}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
+      const prefixedKey = prefixKey(key)
+      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
       return result.exitCode === 0
     },
 
     async getItem(key: string) {
-      const result = await execWrangler(`wrangler kv key get "${key}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
+      const prefixedKey = prefixKey(key)
+      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
       if (result.exitCode !== 0) {
         return null
       }
@@ -59,17 +68,19 @@ export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWrangl
     },
 
     async getItemRaw(key: string) {
-      const result = await execWrangler(`wrangler kv key get "${key}" --namespace-id="${namespaceId}" ${locationFlag}`)
+      const prefixedKey = prefixKey(key)
+      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`)
       return Buffer.from(result.stdout, 'utf-8')
     },
 
     async setItem(key: string, value: any) {
+      const prefixedKey = prefixKey(key)
       // Use temp file approach to avoid shell escaping issues with complex JSON
       const tmpFile = join(tmpdir(), `kv-${Date.now()}-${Math.random().toString(36).substring(7)}.json`)
       writeFileSync(tmpFile, JSON.stringify(value))
 
       try {
-        await execWrangler(`wrangler kv key put "${key}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
+        await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
       }
       finally {
         unlinkSync(tmpFile)
@@ -77,27 +88,32 @@ export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWrangl
     },
 
     async setItemRaw(key: string, value: any) {
+      const prefixedKey = prefixKey(key)
       // For binary data, write to temp file and use wrangler path option
       const tmpFile = join(tmpdir(), `kv-${Date.now()}.bin`)
       writeFileSync(tmpFile, value)
 
-      await execWrangler(`wrangler kv key put "${key}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
+      await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
       unlinkSync(tmpFile)
     },
 
     async removeItem(key: string) {
-      await execWrangler(`wrangler kv key delete "${key}" --namespace-id="${namespaceId}" ${locationFlag}`)
+      const prefixedKey = prefixKey(key)
+      await execWrangler(`wrangler kv key delete "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`)
     },
 
-    async getKeys(base?: string) {
-      const prefix = base ? `--prefix="${base}"` : ''
+    async getKeys(basePrefix?: string) {
+      // Combine the driver's base prefix with any additional prefix
+      const fullPrefix = base ? (basePrefix ? `${base}${basePrefix}` : base) : basePrefix
+      const prefix = fullPrefix ? `--prefix="${fullPrefix}"` : ''
       const result = await execWrangler(`wrangler kv key list ${prefix} --namespace-id="${namespaceId}" ${locationFlag}`)
       const keys = JSON.parse(result.stdout)
-      return keys.map((k: any) => k.name)
+      // Remove base prefix from returned keys to maintain consistency
+      return keys.map((k: any) => unprefixKey(k.name))
     },
 
-    async clear(base?: string) {
-      const keys = await driver.getKeys(base)
+    async clear(basePrefix?: string) {
+      const keys = await driver.getKeys(basePrefix)
       for (const key of keys) {
         await driver.removeItem(key)
       }

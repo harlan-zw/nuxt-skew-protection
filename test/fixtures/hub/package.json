@@ -1,0 +1,20 @@
+{
+  "name": "nuxt-skew-protection-hub-test",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "deploy": "nuxthub deploy"
+  },
+  "dependencies": {
+    "@nuxthub/core": "latest",
+    "nuxt": "^4.0.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.43.0"
+  }
+}

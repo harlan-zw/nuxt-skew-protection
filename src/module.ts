@@ -1,5 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { NuxtSkewProtectionRuntimeConfig } from '~/src/runtime/types'
+import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
 import {
   addComponent,
@@ -9,7 +9,10 @@ import {
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
+  hasNuxtModule,
 } from '@nuxt/kit'
+import { colors } from 'consola/utils'
+import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
@@ -99,6 +102,7 @@ export default defineNuxtModule<ModuleOptions>({
   },
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    const { version } = await readPackageJSON(resolver.resolve('../package.json'))
     logger.level = (options.debug || nuxt.options.debug) ? 4 : 3
     if (options.enabled === false) {
       logger.debug('The module is disabled, skipping setup.')
@@ -115,6 +119,14 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Detect Nitro preset
     const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
+
+    // Detect NuxtHub and guide users on KV configuration
+    const isNuxtHub = hasNuxtModule('@nuxthub/core')
+    if (isNuxtHub && options.storage?.driver === 'cloudflare-kv-binding' && !options.storage.namespaceId) {
+      logger.error('NuxtHub detected with cloudflare-kv-binding driver but no namespaceId configured.')
+      logger.info('Learn more: https://nuxtseo.com/docs/skew-protection/guides/cloudflare')
+      throw new Error('namespaceId required for cloudflare-kv-binding driver with NuxtHub')
+    }
 
     // Add TypeScript types
     addTypeTemplate({
@@ -258,8 +270,21 @@ export {}
             const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
 
             // Store assets in configured storage (can be slow with many assets)
-            logger.log(`Storing ${assets.length} assets in storage...`)
-            await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
+            logger.log(colors.cyan(`Initialising Nuxt Skew Protection v${version}...`))
+            const storageInfo = options.storage!.base
+              ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
+              : colors.green(options.storage!.driver)
+            logger.log(`  Database: ${storageInfo}`)
+            logger.log(`  Storing ${colors.yellow(assets.length.toString())} assets in storage...`)
+
+            try {
+              await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
+              logger.success(`  ✓ Successfully stored ${assets.length} assets`)
+            }
+            catch (error) {
+              logger.error(`  ✗ Failed to store assets:`, error?.message || error)
+              throw error
+            }
 
             // Count versions (excluding current)
             const existingVersions = await assetManager.listExistingVersions()

@@ -6,33 +6,60 @@ import { useNuxt } from '@nuxt/kit'
 import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
 
 /**
- * Detect Cloudflare KV namespace from wrangler.toml
+ * Detect Cloudflare KV namespace from nitro config or wrangler.toml
  */
 async function detectCloudflareKVNamespace(): Promise<string | null> {
   const nuxt = useNuxt()
-  const rootDir = nuxt.options.rootDir || process.cwd()
-  const wranglerPath = join(rootDir, 'wrangler.toml')
-  if (!existsSync(wranglerPath)) {
-    return null
+
+  // Check nitro config first
+  const kvNamespaces = nuxt.options.nitro?.cloudflare?.wrangler?.kv_namespaces
+  if (kvNamespaces?.length) {
+    // Prefer SKEW_PROTECTION binding if it exists
+    const skewNamespace = kvNamespaces.find(ns => ns.binding === 'SKEW_PROTECTION')
+    if (skewNamespace?.id) {
+      return skewNamespace.id
+    }
+    // Otherwise use the first namespace
+    if (kvNamespaces[0]?.id) {
+      return kvNamespaces[0].id
+    }
   }
 
-  try {
-    const content = readFileSync(wranglerPath, 'utf-8')
+  const rootDir = nuxt.options.rootDir || process.cwd()
 
-    // Look for kv_namespaces section
-    // [[kv_namespaces]]
-    // binding = "SKEW_STORAGE" or similar
-    // id = "namespace-id"
-    const kvNamespaceMatch = content.match(/\[\[kv_namespaces\]\][^[]*?id\s*=\s*"([^"]+)"/)
-    if (kvNamespaceMatch?.[1]) {
-      return kvNamespaceMatch[1]
+  // Check multiple possible locations for wrangler.toml
+  // Priority: root > app subdirectory
+  const possiblePaths = [
+    join(rootDir, 'wrangler.toml'),
+    join(rootDir, 'app', 'wrangler.toml'),
+  ]
+
+  for (const wranglerPath of possiblePaths) {
+    if (!existsSync(wranglerPath)) {
+      continue
     }
 
-    return null
+    try {
+      const content = readFileSync(wranglerPath, 'utf-8')
+
+      // Look for SKEW_PROTECTION binding first
+      const skewMatch = content.match(/\[\[kv_namespaces\]\][^[]*?binding\s*=\s*"SKEW_PROTECTION"[^[]*?id\s*=\s*"([^"]+)"/)
+      if (skewMatch?.[1]) {
+        return skewMatch[1]
+      }
+
+      // Otherwise use first kv_namespace
+      const kvNamespaceMatch = content.match(/\[\[kv_namespaces\]\][^[]*?id\s*=\s*"([^"]+)"/)
+      if (kvNamespaceMatch?.[1]) {
+        return kvNamespaceMatch[1]
+      }
+    }
+    catch {
+      // Continue to next path
+    }
   }
-  catch {
-    return null
-  }
+
+  return null
 }
 
 /**

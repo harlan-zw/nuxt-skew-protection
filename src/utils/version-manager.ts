@@ -267,9 +267,7 @@ export function createAssetManager(options: {
       if (assetData) {
         const storageKey = `${buildId}/${asset}`
         await storage.setItemRaw(storageKey, assetData).catch((error) => {
-          if (options.debug) {
-            logger.warn(`Failed to store ${storageKey}:`, error)
-          }
+          logger.error(`Failed to store ${storageKey}:`, error?.message || error)
         })
 
         // Check if this file ID already exists in a previous version
