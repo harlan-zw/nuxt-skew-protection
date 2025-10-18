@@ -1,11 +1,11 @@
 <script setup>
 import { reloadNuxtApp, useCookie, useNuxtApp, useRuntimeConfig } from '#app'
 import { useSkewProtection, useToast } from '#imports'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const runtimeConfig = useRuntimeConfig()
 const buildId = ref(runtimeConfig.app?.buildId)
-const versionCookie = useCookie('skew-version')
+const versionCookie = useCookie('__nkpv') // Correct cookie name per ARCHITECTURE.md
 const skew = useSkewProtection()
 
 async function checkForUpdates() {
@@ -13,18 +13,8 @@ async function checkForUpdates() {
   console.log(await skew.getDeploymentInfo())
 }
 
-async function checkVersionStatus() {
-  console.log('Checking version status via our API...')
-  // if ($skewProtection.value?.checkVersionStatus) {
-  //   const status = await $skewProtection.value.checkVersionStatus()
-  //   console.log('Version status:', status)
-  // }
-}
-
 function clearVersionCookie() {
-  if (versionCookie.value) {
-    versionCookie.value.value = null
-  }
+  versionCookie.value = null
   console.log('Version cookie cleared')
 }
 
@@ -33,7 +23,6 @@ let animationInterval = null
 
 function startNewVersionAnimations() {
   if (isAnimating.value) {
-    // Stop animation
     isAnimating.value = false
     if (animationInterval) {
       clearInterval(animationInterval)
@@ -43,11 +32,9 @@ function startNewVersionAnimations() {
     return
   }
 
-  // Start animation
   isAnimating.value = true
   let currentIndex = 0
 
-  // Set initial variant and simulate update after a small delay
   selectedVariant.value = notificationVariants[currentIndex].value
   setTimeout(() => {
     skew.simulateUpdate()
@@ -58,7 +45,6 @@ function startNewVersionAnimations() {
     currentIndex = (currentIndex + 1) % notificationVariants.length
     selectedVariant.value = notificationVariants[currentIndex].value
 
-    // Add delay to allow component to unmount/remount before simulating update
     setTimeout(() => {
       skew.simulateUpdate()
       console.log(`Cycling to variant: ${notificationVariants[currentIndex].label}`)
@@ -68,8 +54,16 @@ function startNewVersionAnimations() {
 
 const app = useNuxtApp()
 const modules = ref([])
+const chunksOutdatedPayload = ref(null)
+
 onMounted(async () => {
   modules.value = await app.$skewServiceWorker?.getLoadedModules() || []
+
+  // Listen to skew-protection:chunks-outdated hook (per ARCHITECTURE.md)
+  app.hooks.hook('skew-protection:chunks-outdated', (payload) => {
+    console.log('🚨 Chunks outdated detected:', payload)
+    chunksOutdatedPayload.value = payload
+  })
 })
 
 onBeforeUnmount(() => {
@@ -77,6 +71,11 @@ onBeforeUnmount(() => {
     clearInterval(animationInterval)
   }
 })
+
+// Computed values to show architecture state
+const latestVersion = computed(() => skew.manifest.value?.buildId)
+const isNewVersionAvailable = computed(() => buildId.value !== latestVersion.value)
+const versions = computed(() => skew.manifest.value?.skewProtection?.versions || {})
 
 // Notification variant configuration
 const notificationVariants = [
@@ -137,24 +136,66 @@ watch(selectedVariant, (newVariant, oldVariant) => {
             Nuxt Skew Protection Playground
           </h1>
           <p class="text-gray-600 dark:text-gray-400 mt-2">
-            Test and preview different notification variants
+            Intelligent module invalidation detection
+          </p>
+          <p class="text-sm text-gray-500 dark:text-gray-500 mt-1 max-w-2xl mx-auto">
+            Notifications only appear when your <strong>loaded JS modules</strong> are deleted by a new deployment.
+            Service worker tracks modules, checks against deletedChunks, fires <code class="text-xs">skew-protection:chunks-outdated</code> hook.
           </p>
         </div>
 
         <UCard>
           <template #header>
             <h3 class="text-lg font-semibold">
-              Current Version Info
+              Version State (per ARCHITECTURE.md)
+            </h3>
+          </template>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Current Build ID:</span>
+              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ buildId }}</code>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Latest Build ID:</span>
+              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ latestVersion || 'Unknown' }}</code>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Cookie (__nkpv):</span>
+              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ versionCookie || 'Not set' }}</code>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-gray-700 dark:text-gray-300">New Version Available:</span>
+              <UBadge :color="isNewVersionAvailable ? 'yellow' : 'gray'">
+                {{ isNewVersionAvailable ? 'Yes' : 'No' }}
+              </UBadge>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Chunks Outdated:</span>
+              <UBadge :color="skew.isOutdated ? 'red' : 'gray'">
+                {{ skew.isOutdated ? 'Yes' : 'No' }}
+              </UBadge>
+            </div>
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                ℹ️ <strong>New Version Available</strong> = new deployment detected<br>
+                ℹ️ <strong>Chunks Outdated</strong> = your loaded modules were deleted (notification triggers)
+              </p>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard v-if="Object.keys(versions).length > 0">
+          <template #header>
+            <h3 class="text-lg font-semibold">
+              Version Manifest (skewProtection.versions)
             </h3>
           </template>
           <div class="space-y-2">
-            <div class="flex justify-between">
-              <span class="font-medium text-gray-700 dark:text-gray-300">Build ID:</span>
-              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ buildId }}</code>
-            </div>
-            <div class="flex justify-between">
-              <span class="font-medium text-gray-700 dark:text-gray-300">Version Cookie:</span>
-              <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ versionCookie?.value || 'Not set' }}</code>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              From <code>builds/latest.json</code> - tracks all retained versions with assets and deletedChunks
+            </p>
+            <div class="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded p-2">
+              <pre class="text-xs">{{ JSON.stringify(versions, null, 2) }}</pre>
             </div>
           </div>
         </UCard>
@@ -206,11 +247,11 @@ watch(selectedVariant, (newVariant, oldVariant) => {
             </UButton>
             <UButton
               variant="outline"
-              color="blue"
-              icon="i-heroicons-check-circle"
-              @click="checkVersionStatus"
+              color="orange"
+              icon="i-heroicons-bolt"
+              @click="skew.simulateUpdate"
             >
-              Check Version Status
+              Simulate Update
             </UButton>
             <UButton
               variant="outline"
@@ -218,7 +259,7 @@ watch(selectedVariant, (newVariant, oldVariant) => {
               icon="i-heroicons-trash"
               @click="clearVersionCookie"
             >
-              Clear Version Cookie
+              Clear Cookie
             </UButton>
             <UButton
               variant="solid"
@@ -226,27 +267,60 @@ watch(selectedVariant, (newVariant, oldVariant) => {
               :icon="isAnimating ? 'i-heroicons-stop' : 'i-heroicons-play'"
               @click="startNewVersionAnimations"
             >
-              {{ isAnimating ? 'Stop Animations' : 'Start Animations' }}
+              {{ isAnimating ? 'Stop' : 'Start' }} Animations
             </UButton>
+          </div>
+        </UCard>
+
+        <UCard v-if="chunksOutdatedPayload">
+          <template #header>
+            <h3 class="text-lg font-semibold text-red-600 dark:text-red-400">
+              🚨 Chunks Outdated Event (skew-protection:chunks-outdated hook)
+            </h3>
+          </template>
+          <div class="space-y-3">
+            <div>
+              <span class="font-medium text-gray-700 dark:text-gray-300">Deleted Chunks:</span>
+              <code class="block text-xs bg-gray-100 dark:bg-gray-800 px-2 py-2 rounded mt-1">{{ chunksOutdatedPayload.deletedChunks?.length || 0 }} chunks</code>
+            </div>
+            <div>
+              <span class="font-medium text-gray-700 dark:text-gray-300">Invalidated Modules:</span>
+              <code class="block text-xs bg-gray-100 dark:bg-gray-800 px-2 py-2 rounded mt-1">{{ chunksOutdatedPayload.invalidatedModules?.join(', ') || 'None' }}</code>
+            </div>
+            <div>
+              <span class="font-medium text-gray-700 dark:text-gray-300">Passed Releases:</span>
+              <code class="block text-xs bg-gray-100 dark:bg-gray-800 px-2 py-2 rounded mt-1">{{ chunksOutdatedPayload.passedReleases?.length || 0 }} releases</code>
+            </div>
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                This event fires when your loaded JS modules are detected in deletedChunks. This is when the notification should appear.
+              </p>
+            </div>
           </div>
         </UCard>
 
         <UCard>
           <template #header>
             <h3 class="text-lg font-semibold">
-              Loaded Modules ({{ modules.length }})
+              Service Worker Tracked Modules ({{ modules.length }})
             </h3>
           </template>
-          <div class="max-h-96 overflow-y-auto">
-            <ul class="space-y-1">
-              <li
-                v-for="module in modules"
-                :key="module"
-                class="text-sm font-mono text-gray-600 dark:text-gray-400 py-1 border-b border-gray-100 dark:border-gray-800 last:border-0"
-              >
-                {{ module }}
-              </li>
-            </ul>
+          <div class="space-y-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              Service worker (<code>/sw.js</code>) intercepts JS fetches and tracks loaded modules.
+              When new deployment detected, checks if any loaded modules are in <code>deletedChunks</code>.
+            </p>
+            <div class="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded">
+              <ul class="space-y-1 p-2">
+                <li
+                  v-for="module in modules"
+                  :key="module"
+                  class="text-xs font-mono text-gray-600 dark:text-gray-400 py-1 border-b border-gray-100 dark:border-gray-800 last:border-0"
+                >
+                  {{ module }}
+                </li>
+              </ul>
+            </div>
           </div>
         </UCard>
       </div>
@@ -265,7 +339,7 @@ watch(selectedVariant, (newVariant, oldVariant) => {
     <!-- Toast variant is handled via useToast in script section -->
 
     <!-- Native CSS Variant (default) -->
-    <SkewNotification v-else-if="selectedVariant === 'native'" v-slot="{ isCurrentChunksOutdated, dismiss, reload, timeAgo }">
+    <SkewNotification v-else-if="selectedVariant === 'native'" v-slot="{ isCurrentChunksOutdated, dismiss, reload, timeAgo, invalidatedCount }">
       <Transition name="slide-up">
         <div
           v-if="isCurrentChunksOutdated"
@@ -273,13 +347,14 @@ watch(selectedVariant, (newVariant, oldVariant) => {
         >
           <div class="skew-notification-content">
             <div class="skew-notification-message">
-              <span class="skew-notification-icon">✨</span>
+              <span class="skew-notification-icon">🚨</span>
               <div>
                 <div class="skew-notification-title">
-                  New update available!
+                  Update required
                 </div>
-                <div v-if="timeAgo" class="skew-notification-subtitle">
-                  Released {{ timeAgo }}
+                <div class="skew-notification-subtitle">
+                  {{ invalidatedCount }} loaded module{{ invalidatedCount !== 1 ? 's' : '' }} invalidated
+                  <span v-if="timeAgo">{{ timeAgo }}</span>
                 </div>
               </div>
             </div>
