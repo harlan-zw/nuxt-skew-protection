@@ -72,7 +72,7 @@ async function detectCloudflareKVNamespace(): Promise<string | null> {
 export async function resolveBuildTimeDriver(
   storage: Required<ModuleOptions>['storage'],
 ): Promise<Driver> {
-  const { driver, ...driverOptions } = storage
+  const { driver, base, ...driverOptions } = storage
   switch (driver) {
     case 'cloudflare-kv-binding': {
       let namespaceId = storage.namespaceId
@@ -80,19 +80,21 @@ export async function resolveBuildTimeDriver(
       if (!namespaceId) {
         namespaceId = await detectCloudflareKVNamespace()
       }
+
+      // Use a simple prefix for KV keys to avoid polluting shared namespaces
+      // Don't use filesystem paths as prefixes - those are for fs driver only
+      const kvBase = base?.includes('/') ? 'skew-protection:' : (base || 'skew-protection:')
+
       return cloudflareKVWranglerDriver({
         namespaceId,
+        base: kvBase,
         ...driverOptions,
       })
     }
-    case 'vercel-kv': {
-      // @ts-expect-error untyped
-      return vercelKVCLIDriver(driverOptions)
-    }
   }
-  // For other drivers (fs, redis, etc.), no build-time equivalent needed
+  // For other drivers (fs, redis, etc.), keep the base prefix
   // need to do an dynamic import for the driver to avoid loading native bindings
   const lazyDriver = await import(`unstorage/drivers/${storage.driver}`)
     .then(m => m.default)
-  return lazyDriver(driverOptions)
+  return lazyDriver({ base, ...driverOptions })
 }

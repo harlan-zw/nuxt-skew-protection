@@ -6,7 +6,7 @@ This module provides version skew protection for Nuxt applications through:
 1. **Version Tracking** - Maintains multiple build versions to prevent 404 errors on old sessions
 2. **Real-time Updates** - Notifies users when a new version is deployed using polling, SSE, or WebSockets
 3. **Intelligent Notifications** - Only prompts users when their loaded modules become invalidated
-4. **Universal Storage** - Works on any platform using unstorage (filesystem, S3, Redis, etc.)
+4. **Universal Storage** - Works on any platform using unstorage (filesystem, Cloudflare KV)
 
 ## Architecture
 
@@ -296,14 +296,14 @@ export default defineEventHandler((event) => {
 Instead of platform-specific implementations, the module uses a **single universal approach** that works everywhere:
 
 **Storage Strategy:**
-- Uses unstorage for flexibility (filesystem, S3, Redis, Cloudflare KV, Vercel KV, Netlify Blobs, etc.)
+- Uses unstorage for flexibility (filesystem, Cloudflare KV, etc.)
 - Stores versioned assets in storage during build
 - Restores old assets to `public/` folder during build
 - Old assets become part of the deployment package
 
 **Build-Time Driver Resolution:**
-- For cloud storage platforms (Cloudflare KV, Vercel KV, Netlify Blobs, AWS S3), the module uses CLI-based drivers at build time
-- These drivers authenticate using platform-specific CLIs (wrangler, vercel, netlify, aws) instead of API tokens
+- For cloud storage platforms (Cloudflare KV), the module uses CLI-based drivers at build time
+- These drivers authenticate using platform-specific CLIs (wrangler) instead of API tokens
 - Runtime uses native platform bindings for better performance
 - See `src/unstorage/utils.ts` for driver resolution logic
 
@@ -525,11 +525,10 @@ export default defineNuxtConfig({
   modules: ['nuxt-skew-protection'],
 
   skewProtection: {
-    // Storage configuration (required for non-Vercel platforms)
+    // Storage configuration
     storage: {
-      driver: 'fs', // or 's3', 'redis', 'cloudflare-kv', etc.
+      driver: 'fs', // or 'cloudflare-kv-binding'
       base: 'node_modules/.cache/nuxt/skew-protection', // for fs driver
-      // For other drivers, see unstorage documentation
     },
 
     // Retention settings
@@ -588,61 +587,6 @@ export default defineNuxtConfig({
 
 The module automatically uses wrangler CLI commands during build for authenticated access to Cloudflare KV (no API token needed).
 
-**Vercel KV:**
-```typescript
-export default defineNuxtConfig({
-  skewProtection: {
-    storage: {
-      driver: 'vercel-kv',
-      // Configuration auto-detected from environment variables
-    }
-  }
-})
-```
-
-**Netlify Blobs:**
-```typescript
-export default defineNuxtConfig({
-  skewProtection: {
-    storage: {
-      driver: 'netlify-blobs',
-      // Configuration auto-detected from environment variables
-    }
-  }
-})
-```
-
-**Redis:**
-```typescript
-export default defineNuxtConfig({
-  skewProtection: {
-    storage: {
-      driver: 'redis',
-      host: 'localhost',
-      port: 6379,
-      base: 'skew-protection'
-    }
-  }
-})
-```
-
-**S3:**
-```typescript
-export default defineNuxtConfig({
-  skewProtection: {
-    storage: {
-      driver: 's3',
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-  }
-})
-```
-
-See [unstorage documentation](https://unstorage.unjs.io/) for all available drivers.
-
 ### Platform-Specific Configuration
 
 **Vercel:**
@@ -677,10 +621,7 @@ src/
 │   └── version-manager.ts             # Asset versioning & storage logic
 ├── unstorage/
 │   ├── utils.ts                       # Build-time driver resolver
-│   ├── cloudflare-kv-wrangler-driver.ts  # Cloudflare KV CLI driver
-│   ├── vercel-kv-cli-driver.ts        # Vercel KV CLI driver
-│   ├── netlify-blobs-cli-driver.ts    # Netlify Blobs CLI driver
-│   └── aws-s3-cli-driver.ts           # AWS S3 CLI driver
+│   └── cloudflare-kv-wrangler-driver.ts  # Cloudflare KV CLI driver
 ├── runtime/
 │   ├── types.ts                       # TypeScript types
 │   ├── shared/

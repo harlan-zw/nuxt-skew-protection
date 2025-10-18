@@ -31,16 +31,38 @@ interface DeploymentInfo {
   port: number
 }
 
+async function getBuildId(fixtureDir: string): Promise<string> {
+  const latestPath = join(fixtureDir, '.output/public/_nuxt/builds/latest.json')
+  const latestData = await import('node:fs').then(fs => fs.promises.readFile(latestPath, 'utf-8'))
+  const latest = JSON.parse(latestData)
+  return latest.id
+}
+
 const results: TestResult[] = []
 
-async function startWranglerDev(deploymentId: string, port: number, skipBuild = false): Promise<DeploymentInfo> {
-  log(`\n📦 Starting Wrangler Dev for version: ${deploymentId}`, 'magenta')
+async function clearKVManifest(): Promise<void> {
+  log(`🧹 Clearing KV namespace...`, 'yellow')
+  await execCommand(
+    'npx wrangler kv key delete "skew-protection:version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
+    fixtureDir,
+  ).catch(() => {
+    // Ignore errors if key doesn't exist
+  })
+  log(`  ✅ KV namespace cleared`, 'green')
+}
+
+async function startWranglerDev(port: number, skipBuild = false): Promise<DeploymentInfo> {
+  log(`\n📦 Starting Wrangler Dev`, 'magenta')
 
   if (!skipBuild) {
-    // Build the application
+    // Build the application (let Nuxt generate its own build ID)
     log('  🔨 Building application...', 'yellow')
-    await execCommand(`NUXT_DEPLOYMENT_ID=${deploymentId} npm run build`, fixtureDir)
+    await execCommand(`npm run build`, fixtureDir)
   }
+
+  // Read the actual build ID that Nuxt generated
+  const deploymentId = await getBuildId(fixtureDir)
+  log(`  📋 Build ID: ${deploymentId}`, 'cyan')
 
   // Start wrangler dev
   log('  🚀 Starting wrangler dev...', 'yellow')
@@ -52,11 +74,8 @@ async function startWranglerDev(deploymentId: string, port: number, skipBuild = 
     '.output/public',
     '--port',
     port.toString(),
-    '--var',
-    `NUXT_DEPLOYMENT_ID:${deploymentId}`,
   ], {
     cwd: fixtureDir,
-    env: { ...process.env, NUXT_DEPLOYMENT_ID: deploymentId },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -176,10 +195,13 @@ async function main() {
   const port = 8787 // Default Cloudflare Workers port
 
   try {
+    // Clear KV store before tests
+    await clearKVManifest()
+
     // Test 1: Deploy first version
     await runTest('Deploy first version (v1) with wrangler dev', async () => {
       modifyAppContent(join(fixtureDir, 'app.vue'), 1)
-      deployment1 = await startWranglerDev('cf-durable-v1', port)
+      deployment1 = await startWranglerDev(port)
     }, results)
 
     // Test 2: Verify WebSocket connection returns v1
@@ -226,7 +248,7 @@ async function main() {
 
       // Build v2 while v1 is still running (in separate process)
       log(`  🔨 Building v2...`, 'yellow')
-      await execCommand(`NUXT_DEPLOYMENT_ID=cf-durable-v2 npm run build`, fixtureDir)
+      await execCommand(`npm run build`, fixtureDir)
 
       // Now stop v1 wrangler process
       log(`  🛑 Stopping v1 wrangler dev...`, 'yellow')
@@ -237,7 +259,7 @@ async function main() {
       await sleep(2000) // Wait for port to be released
 
       // Start v2 (skip build since we already built it)
-      deployment2 = await startWranglerDev('cf-durable-v2', port, true)
+      deployment2 = await startWranglerDev(port, true)
 
       log(`  ✅ v2 deployed successfully`, 'green')
     }, results)
@@ -266,7 +288,7 @@ async function main() {
 
       try {
         const kvOutput = await execCommand(
-          'npx wrangler kv key get "version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
+          'npx wrangler kv key get "skew-protection:version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
           fixtureDir,
         )
 
@@ -310,7 +332,7 @@ async function main() {
 
       try {
         const kvOutput = await execCommand(
-          'npx wrangler kv key get "version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
+          'npx wrangler kv key get "skew-protection:version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
           fixtureDir,
         )
 
