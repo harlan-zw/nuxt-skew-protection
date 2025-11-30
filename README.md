@@ -2,18 +2,9 @@
 
 [![npm version][npm-version-src]][npm-version-href]
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
-[![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-<p align="center">
-<table>
-<tbody>
-<td align="center">
-<sub>Made possible by my <a href="https://github.com/sponsors/harlan-zw">Sponsor Program 💖</a><br> Follow me <a href="https://twitter.com/harlan_zw">@harlan_zw</a> 🐦 • Join <a href="https://discord.gg/275MBUBvgP">Discord</a> for help</sub><br>
-</td>
-</tbody>
-</table>
-</p>
+> Solve Nuxt version skew with persistent assets and instant updates.
 
 ## Why Nuxt Skew Protection?
 
@@ -70,9 +61,6 @@ Nuxt Skew Protection requires a [Nuxt SEO Pro license](https://nuxtseo.com/prici
 
 [npm-downloads-src]: https://img.shields.io/npm/dm/nuxt-skew-protection.svg?style=flat&colorA=18181B&colorB=28CF8D
 [npm-downloads-href]: https://npmjs.com/package/nuxt-skew-protection
-
-[license-src]: https://img.shields.io/github/license/harlan-zw/nuxt-skew-protection.svg?style=flat&colorA=18181B&colorB=28CF8D
-[license-href]: https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE.md
 
 [nuxt-src]: https://img.shields.io/badge/Nuxt-18181B?logo=nuxt
 [nuxt-href]: https://nuxt.com
