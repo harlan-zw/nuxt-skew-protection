@@ -17,25 +17,22 @@
 
 ## Why Nuxt Skew Protection?
 
-Congrats on shipping that latest release! Unfortunately, many of your users are going to be using the previous version of your app
-for hours to days afterward until they refresh.
+**Version skew** is a mismatch between your deployed build and the chunks running in user browsers and crawler sessions. It can lead to several issues:
 
-Finally fixed that SEO issue? Great, but crawlers will often hit your site and request build chunks that no longer exist, leading
-to 500 errors and broken indexes.
+- 🕷️ **Crawlers 404 on stale chunks** - Googlebot requests `_nuxt/builds/abc123.js` which no longer exists post-deploy, logging 500s and potentially impacting indexing
+- 💥 **ChunkLoadError in production** - Users mid-session get `Failed to fetch dynamically imported module` when navigating to routes with invalidated chunks
+- 🔄 **Delayed rollout** - Your latest release sits unloaded until users hard refresh, sometimes hours or days later
 
-You've just been "skewed"! Skew is the version difference between what your users are running and what is deployed.
+Nuxt's built-in behavior (hard-reload when a new deployment is detected) helps, but in many cases it's [not enough](https://github.com/nuxt/nuxt/issues/29624).
 
-While Nuxt helps us by hard-reloading on navigation when it detects a new release, it's often not enough to ensure a smooth experience for all users
-and crawlers. Just check out one of Nuxt's top commented [issues](https://github.com/nuxt/nuxt/issues/29624).
-
-Nuxt Skew Protection aims to solve skews by providing better UX on top of app updates as well as long-lived build assets to avoid breaking crawlers and old sessions.
+Nuxt Skew Protection solves this with proactive update prompts and persistent build assets across deploys.
 
 ## Features
 
-- ⚡ **Instantly Adopted Releases** - Zero-config Real-time notifications to users when a new version is deployed.
-- 🎯 **Targeted User Notifications** - Send update notifications only when the chunks the user has loaded have invalidated. No annoying popups for unrelated updates.
-- 📦 **Long-lived Build Assets** - Avoid breaking crawlers or old sessions with previous build assets remain accessible.
-- 🎨 **Headless UI** - Ship it quicker with a headless notification component that works perfectly with Nuxt UI.
+- 🕷️ **Persistent Build Assets** - Previous build artifacts remain accessible, so crawlers and stale sessions never hit dead ends.
+- ⚡ **Instant Update Prompts** - Zero-config real-time notifications on deploy. Users adopt your latest build immediately.
+- 🎯 **Chunk-Aware Targeting** - Notifications fire only when the user's loaded chunks are invalidated. No noise for unrelated updates.
+- 🎨 **Headless UI** - Drop-in notification component with first-class Nuxt UI support.
 
 ## Installation
 
@@ -65,22 +62,7 @@ Nuxt Skew Protection is a [Nuxt SEO Pro](https://nuxtseo.com/pricing) module. On
 
 ## License
 
-#### Commercial License
-
-Nuxt Skew Protection requires a paid license when using it for commercial projects. With this license, your source code remains proprietary.
-
-See the [Nuxt SEO Pro](https://nuxtseo.com/pricing) to purchase or contact me at harlan@harlanzw.com.
-
-Commercial use includes:
-- Use in commercial products or services
-- Use in projects generating revenue
-- Use in closed-source commercial applications
-
-#### Open Source & Non-Commercial License
-
-If you are creating an open source project or using this for non-commercial purposes (personal projects, educational use, non-profit organizations), you may use this project under the terms of the MIT License.
-
-See [LICENSE](https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE) for full details.
+Nuxt Skew Protection requires a [Nuxt SEO Pro license](https://nuxtseo.com/pricing), see [LICENSE](https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE) for full details.
 
 <!-- Badges -->
 [npm-version-src]: https://img.shields.io/npm/v/nuxt-skew-protection/latest.svg?style=flat&colorA=18181B&colorB=28CF8D
@@ -92,5 +74,5 @@ See [LICENSE](https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENS
 [license-src]: https://img.shields.io/github/license/harlan-zw/nuxt-skew-protection.svg?style=flat&colorA=18181B&colorB=28CF8D
 [license-href]: https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE.md
 
-[nuxt-src]: https://img.shields.io/badge/Nuxt-18181B?logo=nuxt.js
+[nuxt-src]: https://img.shields.io/badge/Nuxt-18181B?logo=nuxt
 [nuxt-href]: https://nuxt.com
