@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.3.0",
   "packageManager": "pnpm@10.24.0",
-  "description": "Instantly adopted Nuxt releases with long-lived build assets.",
+  "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
