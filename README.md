@@ -47,7 +47,7 @@ npx nuxi@latest module add nuxt-skew-protection
 
 ## License
 
-Nuxt Skew Protection requires a [Nuxt SEO Pro license](https://nuxtseo.com/pricing), see [LICENSE](https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE) for full details.
+Nuxt Skew Protection requires a [Nuxt SEO Pro license](https://nuxtseo.com/pro), see [LICENSE](https://github.com/harlan-zw/nuxt-skew-protection/blob/main/LICENSE) for full details.
 
 <!-- Badges -->
 [npm-version-src]: https://img.shields.io/npm/v/nuxt-skew-protection/latest.svg?style=flat&colorA=18181B&colorB=28CF8D
