@@ -269,8 +269,17 @@ export {}
             // Update versions manifest
             const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
 
+            // Get release info for logging
+            const manifest = await assetManager.getManifest()
+            const totalReleases = Object.keys(manifest.versions).length
+            const timestamps = Object.values(manifest.versions).map(v => new Date(v.timestamp).getTime())
+            const oldestTimestamp = Math.min(...timestamps)
+            const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
+            const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
+
             // Store assets in configured storage (can be slow with many assets)
             logger.log(colors.cyan(`Initialising Nuxt Skew Protection v${version}...`))
+            logger.log(`  ${totalReleases} releases stored (oldest from ${timeInfo})`)
             const storageInfo = options.storage!.base
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
@@ -286,14 +295,12 @@ export {}
             // Count versions (excluding current)
             const existingVersions = await assetManager.listExistingVersions()
             const versionCount = existingVersions.filter(v => v.id !== buildId).length
-            const totalReleases = versionCount + 1
 
-            logger.success(`Successfully stored ${assets.length} assets across ${totalReleases} release${totalReleases > 1 ? 's' : ''}`)
+            logger.success(`Successfully stored ${assets.length} assets for latest release`)
 
             // For static/prerendered builds: restore old versioned assets into public directory
             if (versionCount > 0) {
               // Calculate total size and asset count across all versions
-              const manifest = await assetManager.getManifest()
               let totalAssets = 0
               const versionSizes: string[] = []
 
