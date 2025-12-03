@@ -28,7 +28,11 @@ export default defineEventHandler(async (event) => {
     })
   }, 30000)
 
+  let cleanupDone = false
   const close = async () => {
+    if (cleanupDone)
+      return
+    cleanupDone = true
     clearInterval(keepaliveInterval)
     await stream.close()
   }

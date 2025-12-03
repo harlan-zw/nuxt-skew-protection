@@ -93,8 +93,12 @@ export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWrangl
       const tmpFile = join(tmpdir(), `kv-${Date.now()}.bin`)
       writeFileSync(tmpFile, value)
 
-      await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
-      unlinkSync(tmpFile)
+      try {
+        await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
+      }
+      finally {
+        unlinkSync(tmpFile)
+      }
     },
 
     async removeItem(key: string) {
