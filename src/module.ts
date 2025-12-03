@@ -278,17 +278,17 @@ export {}
             logger.log(`  Storing ${colors.yellow(assets.length.toString())} assets in storage...`)
 
             await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
-              .then(() => {
-                logger.success(`  ✓ Successfully stored ${assets.length} assets`)
-              })
               .catch((error: unknown) => {
-                logger.error(`  ✗ Failed to store assets:`, error instanceof Error ? error.message : error)
+                logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
                 throw error
               })
 
             // Count versions (excluding current)
             const existingVersions = await assetManager.listExistingVersions()
             const versionCount = existingVersions.filter(v => v.id !== buildId).length
+            const totalReleases = versionCount + 1
+
+            logger.success(`Successfully stored ${assets.length} assets across ${totalReleases} release${totalReleases > 1 ? 's' : ''}`)
 
             // For static/prerendered builds: restore old versioned assets into public directory
             if (versionCount > 0) {
