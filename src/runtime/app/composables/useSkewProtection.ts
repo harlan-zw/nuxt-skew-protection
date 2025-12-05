@@ -2,11 +2,16 @@ import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { ChunksOutdatedPayload } from '../../types'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
+import { useOnline } from '@vueuse/core'
 import { useNuxtApp } from 'nuxt/app'
 import { computed, onUnmounted, ref } from 'vue'
 import { useRuntimeConfigSkewProtection } from './useRuntimeConfigSkewProtection'
 
 export async function checkForUpdates() {
+  // Don't check for updates when offline
+  if (import.meta.client && !useOnline().value)
+    return
+
   const nuxtApp = useNuxtApp()
   const runtimeConfig = useRuntimeConfigSkewProtection()
   const clientVersion = nuxtApp.$skewProtectionBuildId?.value || runtimeConfig.buildId
@@ -64,6 +69,7 @@ export function useSkewProtection() {
   return {
     manifest,
     clientVersion,
+    isOnline: useOnline(),
     isOutdated: computed(() => manifest.value && clientVersion !== manifest.value.id),
     onCurrentChunksOutdated,
     onAppOutdated,

@@ -28,6 +28,7 @@ const emit = defineEmits<{
 const skewProtection = useSkewProtection()
 
 const version = skewProtection.clientVersion
+const isOnline = skewProtection.isOnline
 
 // State from chunks outdated event
 const chunksOutdated = ref(false)
@@ -47,6 +48,8 @@ skewProtection.onAppOutdated(() => {
 
 // Determine if notification should be open
 const isCurrentChunksOutdated = computed(() => {
+  if (!isOnline.value)
+    return false
   if (dismissed.value)
     return false
   if (props.forceOpen)
@@ -55,6 +58,8 @@ const isCurrentChunksOutdated = computed(() => {
 })
 
 const isAppOutdated = computed(() => {
+  if (!isOnline.value)
+    return false
   if (dismissed.value)
     return false
   if (props.forceOpen)
