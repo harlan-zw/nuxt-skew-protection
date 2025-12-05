@@ -96,7 +96,7 @@ export default defineNuxtModule<ModuleOptions>({
     },
     storage: {
       driver: 'fs',
-      base: 'node_modules/.cache/nuxt/skew-protection',
+      base: 'node_modules/.cache/nuxt-seo/skew-protection',
     },
     debug: false,
   },

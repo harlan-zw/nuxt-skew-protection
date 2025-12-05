@@ -528,7 +528,7 @@ export default defineNuxtConfig({
     // Storage configuration
     storage: {
       driver: 'fs', // or 'cloudflare-kv-binding'
-      base: 'node_modules/.cache/nuxt/skew-protection', // for fs driver
+      base: 'node_modules/.cache/nuxt-seo', // for fs driver
     },
 
     // Retention settings
@@ -567,7 +567,7 @@ export default defineNuxtConfig({
   skewProtection: {
     storage: {
       driver: 'fs',
-      base: 'node_modules/.cache/nuxt/skew-protection'
+      base: 'node_modules/.cache/nuxt-seo'
     }
   }
 })
