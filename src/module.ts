@@ -282,7 +282,12 @@ export {}
 
             // Store assets in configured storage (can be slow with many assets)
             logger.log(colors.cyan(`Initialising Nuxt Skew Protection v${version}...`))
-            logger.log(`  ${totalReleases} releases stored (oldest from ${timeInfo})`)
+            if (totalReleases === 1) {
+              logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
+            }
+            else {
+              logger.log(`  ${totalReleases} releases stored (oldest from ${timeInfo})`)
+            }
             const storageInfo = options.storage!.base
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
