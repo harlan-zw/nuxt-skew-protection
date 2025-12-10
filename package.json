@@ -69,7 +69,7 @@
     "ufo": "^1.6.1"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^6.5.1",
+    "@antfu/eslint-config": "^6.6.1",
     "@arethetypeswrong/cli": "^0.18.2",
     "@nuxt/content": "^3.9.0",
     "@nuxt/devtools-ui-kit": "^3.1.1",
