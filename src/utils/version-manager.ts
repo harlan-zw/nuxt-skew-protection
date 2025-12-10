@@ -37,18 +37,16 @@ export interface VersionManifest {
 }
 
 /**
- * Extract file ID (hash + extension) from asset path
- * Assumes format like: /_nuxt/ABC123.js or /_nuxt/ABC123.DEF456.js
- * Returns the first segment including extension (e.g., "ABC123.js")
+ * Extract file ID from asset path
+ * Returns the filename (e.g., "entry.BBOLE4X7.js" from "_nuxt/entry.BBOLE4X7.js")
+ * Used for deduplication - same filename = same content (Nuxt uses content hashing)
  */
-function extractFileId(assetPath: string): string | null {
+export function extractFileId(assetPath: string): string | null {
   const filename = assetPath.split('/').pop()
-  if (!filename)
+  if (!filename || !filename.includes('.'))
     return null
 
-  // Extract the first hash segment with its extension (e.g., "ABC123.js" from "ABC123.DEF456.js")
-  const match = filename.match(/^([^.]+\.\w+)/)
-  return match ? match[1] ?? null : null
+  return filename
 }
 
 /**
@@ -315,10 +313,12 @@ export function createAssetManager(options: {
             const previousAssets = manifest.versions[previousVersionId].assets
             const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
             if (assetIndex !== -1) {
+              // Get the actual old asset path (may differ from current asset path)
+              const oldAssetPath = previousAssets[assetIndex]
               previousAssets.splice(assetIndex, 1)
 
-              // Remove from storage
-              const oldStorageKey = `${previousVersionId}/${asset}`
+              // Remove from storage using the correct old path
+              const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
               await storage.removeItem(oldStorageKey).catch((error) => {
                 if (options.debug) {
                   logger.warn(`Failed to remove duplicate asset ${oldStorageKey}:`, error)

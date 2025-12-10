@@ -2,7 +2,45 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveBuildTimeDriver } from '../../src/unstorage/utils'
-import { createAssetManager } from '../../src/utils/version-manager'
+import { createAssetManager, extractFileId } from '../../src/utils/version-manager'
+
+describe('extractFileId', () => {
+  it('extracts filename from simple path', () => {
+    expect(extractFileId('_nuxt/BBOLE4X7.js')).toBe('BBOLE4X7.js')
+  })
+
+  it('extracts filename from prefixed path', () => {
+    expect(extractFileId('_nuxt/entry.BBOLE4X7.js')).toBe('entry.BBOLE4X7.js')
+  })
+
+  it('extracts filename from chunk-prefixed path', () => {
+    expect(extractFileId('_nuxt/chunk-BBOLE4X7.js')).toBe('chunk-BBOLE4X7.js')
+  })
+
+  it('handles nested paths', () => {
+    expect(extractFileId('_nuxt/chunks/BBOLE4X7.js')).toBe('BBOLE4X7.js')
+  })
+
+  it('handles css files', () => {
+    expect(extractFileId('_nuxt/styles.ABC123.css')).toBe('styles.ABC123.css')
+  })
+
+  it('handles mjs extension', () => {
+    expect(extractFileId('_nuxt/entry.BBOLE4X7.mjs')).toBe('entry.BBOLE4X7.mjs')
+  })
+
+  it('returns null for empty path', () => {
+    expect(extractFileId('')).toBe(null)
+  })
+
+  it('returns null for path without filename', () => {
+    expect(extractFileId('_nuxt/')).toBe(null)
+  })
+
+  it('returns null for filename without extension', () => {
+    expect(extractFileId('_nuxt/BBOLE4X7')).toBe(null)
+  })
+})
 
 describe('version Manager', () => {
   const testDir = join(import.meta.dirname, '.tmp', 'version-manager-test')
@@ -227,12 +265,12 @@ describe('version Manager', () => {
       await mkdir(nuxtDir, { recursive: true })
 
       // Version 1 with vendor chunk
-      const sharedAsset = '_nuxt/vendors.ABC123.js'
+      const sharedAsset = '_nuxt/vendors.ABC12345.js'
       await writeFile(join(outputDir, 'public', sharedAsset), 'shared content')
       await manager.updateVersionsManifest('v1', [sharedAsset])
       await manager.storeAssetsInStorage('v1', outputDir, [sharedAsset])
 
-      // Version 2 with same vendor chunk (same hash)
+      // Version 2 with same vendor chunk (same filename = same content due to content hashing)
       await manager.updateVersionsManifest('v2', [sharedAsset])
       await manager.storeAssetsInStorage('v2', outputDir, [sharedAsset])
 
@@ -245,9 +283,47 @@ describe('version Manager', () => {
       expect(manifest.versions.v1.assets).not.toContain(sharedAsset)
       // v2 should have the asset
       expect(manifest.versions.v2.assets).toContain(sharedAsset)
-      // fileIdToVersion should point to v2
-      // File ID format is: vendors.ABC123 (first segment + extension from filename pattern)
-      expect(manifest.fileIdToVersion?.['vendors.ABC123']).toBe('v2')
+      // fileIdToVersion should point to v2 (fileId is now the full filename)
+      expect(manifest.fileIdToVersion?.['vendors.ABC12345.js']).toBe('v2')
+    })
+
+    it('should restore assets at correct path when filename differs across versions', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+      })
+
+      const nuxtDir = join(outputDir, 'public', '_nuxt')
+      await mkdir(nuxtDir, { recursive: true })
+
+      // Version 1: entry point and a lazy chunk
+      const v1Entry = '_nuxt/entry.AAA11111.js'
+      const v1Chunk = '_nuxt/lazy-about.BBB22222.js'
+      await writeFile(join(outputDir, 'public', v1Entry), 'v1 entry')
+      await writeFile(join(outputDir, 'public', v1Chunk), 'v1 lazy chunk')
+      await manager.updateVersionsManifest('v1', [v1Entry, v1Chunk])
+      await manager.storeAssetsInStorage('v1', outputDir, [v1Entry, v1Chunk])
+
+      // Version 2: new entry (different hash), keeps same lazy chunk filename
+      const v2Entry = '_nuxt/entry.CCC33333.js'
+      await writeFile(join(outputDir, 'public', v2Entry), 'v2 entry')
+      await writeFile(join(outputDir, 'public', v1Chunk), 'v1 lazy chunk') // same chunk
+      await manager.updateVersionsManifest('v2', [v2Entry, v1Chunk])
+      await manager.storeAssetsInStorage('v2', outputDir, [v2Entry, v1Chunk])
+
+      // Simulate fresh build output - only v2 assets exist
+      await rm(join(outputDir, 'public', v1Entry), { force: true })
+
+      // Restore old assets
+      await manager.restoreOldAssetsToPublic('v2', outputDir, [v2Entry, v1Chunk])
+
+      // v1 entry should be restored at the CORRECT path
+      const restoredV1Entry = await readFile(join(outputDir, 'public', v1Entry), 'utf-8')
+      expect(restoredV1Entry).toBe('v1 entry')
+
+      // v2 entry should still exist
+      const v2EntryContent = await readFile(join(outputDir, 'public', v2Entry), 'utf-8')
+      expect(v2EntryContent).toBe('v2 entry')
     })
 
     it('should handle assets with different hashes', async () => {
