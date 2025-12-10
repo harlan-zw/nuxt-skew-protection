@@ -214,8 +214,16 @@ export {}
       // const nitroPreset = await resolveNitroPreset(nuxt) - already declared above
       const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+      const isStatic = isStaticPreset(nuxt)
+
+      // Validate strategy compatibility with static generation
+      if (isStatic && options.checkForUpdateStrategy && options.checkForUpdateStrategy !== 'polling') {
+        logger.warn(`Strategy "${options.checkForUpdateStrategy}" requires a server but static generation detected. Falling back to polling.`)
+        options.checkForUpdateStrategy = 'polling'
+      }
+
       if (!options.checkForUpdateStrategy) {
-        options.checkForUpdateStrategy = isStaticPreset(nuxt) ? 'polling' : isCloudflareRuntime ? 'ws' : options.checkForUpdateStrategy || 'sse'
+        options.checkForUpdateStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
       }
 
       if (isVercel) {
@@ -356,11 +364,7 @@ export {}
         }
       }
       else if (options.checkForUpdateStrategy === 'sse') {
-        if (isStaticPreset(nuxt) || isCloudflareRuntime) {
-          logger.warn('SSE not supported for static sites or Cloudflare Workers. Falling back to polling.')
-          options.checkForUpdateStrategy = 'polling'
-        }
-        else if (isCloudflareRuntime) {
+        if (isCloudflareRuntime) {
           logger.warn('SSE not supported on Cloudflare Workers (no persistent connections). Falling back to polling.')
           options.checkForUpdateStrategy = 'polling'
         }
