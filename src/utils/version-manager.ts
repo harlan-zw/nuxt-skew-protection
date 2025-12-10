@@ -127,6 +127,20 @@ async function setVersionManifest(manifest: VersionManifest, storage: Storage): 
 // ASSET MANAGER: Full asset versioning with copy/storage
 // ============================================================================
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024)
+    return `${bytes}B`
+  if (bytes < 1024 * 1024)
+    return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000)
+    return `${ms}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
 export function createAssetManager(options: {
   driver?: Driver
   retentionDays?: number
@@ -141,7 +155,10 @@ export function createAssetManager(options: {
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
 
   async function getAssetsFromBuild(outputDir: string) {
+    const startTime = Date.now()
     const nuxtDir = join(outputDir, 'public', '_nuxt')
+
+    logger.debug(`Scanning build assets from ${nuxtDir}`)
 
     const assets: string[] = []
     const nuxtFiles = await getFilesRecursively(nuxtDir)
@@ -151,14 +168,20 @@ export function createAssetManager(options: {
       assets.push(`_nuxt${relativePath}`)
     }
 
+    logger.debug(`Found ${assets.length} assets in ${formatDuration(Date.now() - startTime)}`)
     return assets
   }
 
   async function updateVersionsManifest(buildId: string, assets: string[]) {
+    const startTime = Date.now()
+    logger.debug(`updateVersionsManifest: starting for ${buildId}`)
+
     const now = new Date()
     const expires = new Date(now.getTime() + (retentionDays * 24 * 60 * 60 * 1000))
 
+    const manifestStart = Date.now()
     const manifest = await getVersionManifest(storage)
+    logger.debug(`updateVersionsManifest: loaded manifest in ${formatDuration(Date.now() - manifestStart)} (${Object.keys(manifest.versions).length} versions)`)
 
     // Check if this version already exists (for skipping restoration later)
     const isExistingVersion = !!manifest.versions[buildId]
@@ -172,7 +195,10 @@ export function createAssetManager(options: {
       deletedChunks: [],
     }
 
+    const saveStart = Date.now()
     await setVersionManifest(manifest, storage)
+    logger.debug(`updateVersionsManifest: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
+    logger.debug(`updateVersionsManifest: total ${formatDuration(Date.now() - startTime)}`)
 
     return { manifest, isExistingVersion }
   }
@@ -266,8 +292,14 @@ export function createAssetManager(options: {
   }
 
   async function storeAssetsInStorage(buildId: string, outputDir: string, assets: string[]) {
+    const startTime = Date.now()
+    logger.debug(`storeAssetsInStorage: starting for ${buildId} (${assets.length} assets)`)
+
     const publicDir = join(outputDir, 'public')
+
+    const manifestStart = Date.now()
     const manifest = await getVersionManifest(storage)
+    logger.debug(`storeAssetsInStorage: loaded manifest in ${formatDuration(Date.now() - manifestStart)}`)
 
     // Initialize fileIdToVersion map if it doesn't exist
     if (!manifest.fileIdToVersion) {
@@ -275,6 +307,8 @@ export function createAssetManager(options: {
     }
 
     const fileIdToVersion = manifest.fileIdToVersion
+    const existingFileIds = Object.keys(fileIdToVersion).length
+    logger.debug(`storeAssetsInStorage: fileIdToVersion has ${existingFileIds} entries`)
 
     // Calculate deletedChunks BEFORE deduplication, comparing current assets vs previous version's current state
     const currentVersion = manifest.versions[buildId]
@@ -282,26 +316,42 @@ export function createAssetManager(options: {
       const previousVersionId = getPreviousVersion(manifest, buildId)
       const previousAssets = previousVersionId ? manifest.versions[previousVersionId]?.assets || [] : []
       currentVersion.deletedChunks = calculateDeletedChunks(assets, previousAssets)
+      logger.debug(`storeAssetsInStorage: calculated ${currentVersion.deletedChunks.length} deleted chunks vs ${previousVersionId || 'none'}`)
     }
 
+    // Stats for logging
+    let storedCount = 0
+    let deduplicatedCount = 0
+    let totalBytes = 0
+    let skippedCount = 0
+
+    const storeStart = Date.now()
+
     // Process assets in batches to limit memory usage
-    await processBatch(assets, 50, async (asset) => {
+    // Use smaller batches for memory efficiency
+    await processBatch(assets, 25, async (asset) => {
       const fileId = extractFileId(asset)
+
+      // Check if already deduplicated BEFORE reading file (memory optimization)
+      if (fileId && fileIdToVersion[fileId] === buildId) {
+        skippedCount++
+        return
+      }
 
       // Store the file in current build's storage
       const assetPath = join(publicDir, asset)
       const assetData = await fs.readFile(assetPath).catch((error) => {
-        if (options.debug) {
-          logger.warn(`Failed to read ${assetPath}:`, error)
-        }
+        logger.debug(`Failed to read ${assetPath}: ${error}`)
         return null
       })
 
       if (assetData) {
+        totalBytes += assetData.byteLength
         const storageKey = `${buildId}/${asset}`
         await storage.setItemRaw(storageKey, assetData).catch((error) => {
           logger.error(`Failed to store ${storageKey}:`, error?.message || error)
         })
+        storedCount++
 
         // Check if this file ID already exists in a previous version
         // If so, remove it from the old location since we now have it in the new location
@@ -320,10 +370,9 @@ export function createAssetManager(options: {
               // Remove from storage using the correct old path
               const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
               await storage.removeItem(oldStorageKey).catch((error) => {
-                if (options.debug) {
-                  logger.warn(`Failed to remove duplicate asset ${oldStorageKey}:`, error)
-                }
+                logger.debug(`Failed to remove duplicate asset ${oldStorageKey}: ${error}`)
               })
+              deduplicatedCount++
             }
           }
         }
@@ -335,8 +384,14 @@ export function createAssetManager(options: {
       }
     })
 
+    logger.debug(`storeAssetsInStorage: stored ${storedCount} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - storeStart)}`)
+    logger.debug(`storeAssetsInStorage: deduplicated ${deduplicatedCount}, skipped ${skippedCount}`)
+
     // Save updated manifest with fileIdToVersion mapping
+    const saveStart = Date.now()
     await setVersionManifest(manifest, storage)
+    logger.debug(`storeAssetsInStorage: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
+    logger.debug(`storeAssetsInStorage: total ${formatDuration(Date.now() - startTime)}`)
   }
 
   async function listExistingVersions(): Promise<{ id: string, createdAt: number }[]> {
@@ -352,20 +407,27 @@ export function createAssetManager(options: {
   }
 
   async function restoreOldAssetsToPublic(currentBuildId: string, outputDir: string, currentAssets: string[] = [], isExistingVersion = false) {
+    const startTime = Date.now()
+    logger.debug(`restoreOldAssetsToPublic: starting for ${currentBuildId}`)
+
+    const manifestStart = Date.now()
     const manifest = await getVersionManifest(storage)
+    logger.debug(`restoreOldAssetsToPublic: loaded manifest in ${formatDuration(Date.now() - manifestStart)}`)
 
     if (!manifest || !manifest.versions) {
+      logger.debug(`restoreOldAssetsToPublic: no manifest or versions, skipping`)
       return
     }
 
     // If this build ID already existed before this build, no need to restore
     // because the assets are already in place
     if (isExistingVersion) {
-      if (options.debug) {
-        logger.info(`Build ID ${currentBuildId} already exists, skipping restore`)
-      }
+      logger.debug(`restoreOldAssetsToPublic: build ${currentBuildId} already exists, skipping restore`)
       return
     }
+
+    const versionCount = Object.keys(manifest.versions).length - 1 // exclude current
+    logger.debug(`restoreOldAssetsToPublic: checking ${versionCount} previous versions`)
 
     const publicDir = join(outputDir, 'public')
     const restoredAssets: Array<{ asset: string, size: number, versionId: string, age: string }> = []
@@ -379,11 +441,14 @@ export function createAssetManager(options: {
         currentFileIds.add(fileId)
       }
     }
+    logger.debug(`restoreOldAssetsToPublic: current build has ${currentAssets.length} assets, ${currentFileIds.size} unique fileIds`)
 
     const now = Date.now()
 
     // Collect all asset restoration tasks across versions
     const assetTasks: Array<{ versionId: string, asset: string, versionData: any }> = []
+    let skippedSamePath = 0
+    let skippedSameFileId = 0
 
     for (const [versionId, versionData] of Object.entries(manifest.versions)) {
       if (versionId === currentBuildId) {
@@ -393,12 +458,14 @@ export function createAssetManager(options: {
       for (const asset of versionData.assets) {
         // Skip if this asset path is already in the current version
         if (currentAssetsSet.has(asset)) {
+          skippedSamePath++
           continue
         }
 
         // Skip if a file with the same file ID exists in current version
         const fileId = extractFileId(asset)
         if (fileId && currentFileIds.has(fileId)) {
+          skippedSameFileId++
           continue
         }
 
@@ -406,8 +473,20 @@ export function createAssetManager(options: {
       }
     }
 
+    logger.debug(`restoreOldAssetsToPublic: ${assetTasks.length} assets to restore (skipped: ${skippedSamePath} same path, ${skippedSameFileId} same fileId)`)
+
+    if (assetTasks.length === 0) {
+      logger.debug(`restoreOldAssetsToPublic: nothing to restore, total ${formatDuration(Date.now() - startTime)}`)
+      return
+    }
+
+    const restoreStart = Date.now()
+    let totalBytes = 0
+    let failedCount = 0
+
     // Process restoration tasks in batches to limit memory
-    const batchResults = await processBatch(assetTasks, 50, async ({ versionId, asset, versionData }) => {
+    // Use smaller batches for memory efficiency
+    const batchResults = await processBatch(assetTasks, 25, async ({ versionId, asset, versionData }) => {
       const storageKey = `${versionId}/${asset}`
       return await storage.getItemRaw(storageKey)
         .then(async (assetData) => {
@@ -428,6 +507,7 @@ export function createAssetManager(options: {
               dataToWrite = Buffer.from(assetData)
             }
             await fs.writeFile(targetPath, dataToWrite)
+            totalBytes += dataToWrite.byteLength
 
             // Calculate time ago
             const versionTimestamp = new Date(versionData.timestamp).getTime()
@@ -460,15 +540,16 @@ export function createAssetManager(options: {
           return null
         })
         .catch((error) => {
-          if (options.debug) {
-            logger.warn(`Failed to restore asset ${asset} from version ${versionId}:`, error)
-          }
+          failedCount++
+          logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
           return null
         })
     })
 
     // Filter out null results and add to restoredAssets
     restoredAssets.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null))
+
+    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
 
     if (restoredAssets.length > 0) {
       restoredAssets.forEach((item, index) => {
@@ -483,6 +564,8 @@ export function createAssetManager(options: {
         logger.log(colors.gray(`${prefix} ${displayPath} ${sizeInfo} ${versionInfo} ${ageInfo}`))
       })
     }
+
+    logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
   }
 
   async function augmentBuildMetadata(buildId: string, outputDir: string) {
