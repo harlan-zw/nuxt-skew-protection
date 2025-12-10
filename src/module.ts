@@ -12,8 +12,9 @@ import {
   hasNuxtModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
+import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { isStaticPreset, resolveNitroPreset } from './kit'
+import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { createAssetManager } from './utils/version-manager'
@@ -109,6 +110,8 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
+    await installNuxtSiteConfig()
+    hookNuxtSeoProLicense()
     // Add runtime config for client access to module options
     nuxt.options.runtimeConfig.public = nuxt.options.runtimeConfig.public || {}
     // @ts-expect-error untyped

@@ -23,7 +23,7 @@ dist
 .output
 .vercel_build_output
 .build-*
-.env
+playground/.env
 .netlify
 
 # Env
