@@ -156,8 +156,8 @@ describe('version Management Integration', () => {
       expect(manifest.versions['build-3'].assets).toContain(sharedVendor)
 
       // fileIdToVersion should point to build-3
-      // File ID is extracted as first segment: "vendors.SHARED123"
-      expect(manifest.fileIdToVersion?.['vendors.SHARED123']).toBe('build-3')
+      // File ID is the full filename: "vendors.SHARED123.js"
+      expect(manifest.fileIdToVersion?.['vendors.SHARED123.js']).toBe('build-3')
     })
   })
 
