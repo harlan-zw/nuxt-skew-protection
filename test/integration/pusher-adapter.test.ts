@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { broadcast } from '../../src/adapters/pusher/node'
+import { broadcast } from '../../src/runtime/adapters/pusher/node'
 
 describe.skipIf(!process.env.PUSHER_KEY)('pusher Adapter Integration', () => {
   const config = {

@@ -1,13 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ablyAdapter } from '../../src/adapters/ably'
-import { broadcast as ablyBroadcast } from '../../src/adapters/ably/node'
-import { pusherAdapter } from '../../src/adapters/pusher'
-import { isSkewAdapter } from '../../src/adapters/types'
+import { ablyAdapter } from '../../src/runtime/adapters/ably'
+import { pusherAdapter } from '../../src/runtime/adapters/pusher'
+import { isSkewAdapter } from '../../src/runtime/adapters/types'
+
+// Mock Ably SDK
+const mockPublish = vi.fn()
+class MockRest {
+  channels = {
+    get: () => ({ publish: mockPublish }),
+  }
+}
+class MockRealtime {
+  channels = {
+    get: () => ({
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+    }),
+  }
+  connection = { on: vi.fn() }
+  close = vi.fn()
+}
+vi.mock('ably', () => ({
+  Rest: MockRest,
+  Realtime: MockRealtime,
+}))
 
 // Mock window for browser-side adapter tests
 const mockWindow = {} as any
 beforeEach(() => {
   ;(globalThis as any).window = mockWindow
+  mockPublish.mockReset()
 })
 afterEach(() => {
   delete (globalThis as any).window
@@ -117,31 +139,18 @@ describe('adapters', () => {
       expect(adapter.name).toBe('ably')
     })
 
-    it('broadcast should call Ably REST API', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }))
-
+    it('broadcast should call Ably SDK', async () => {
+      const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
       await ablyBroadcast(config, 'test-version-123')
 
-      expect(fetchSpy).toHaveBeenCalledWith(
-        'https://rest.ably.io/channels/skew-protection/messages',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'Authorization': expect.stringMatching(/^Basic /),
-          }),
-        }),
-      )
-
-      fetchSpy.mockRestore()
+      expect(mockPublish).toHaveBeenCalledWith('VersionUpdated', { version: 'test-version-123' })
     })
 
-    it('broadcast should throw on API error', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('Unauthorized', { status: 401 }))
+    it('broadcast should throw on SDK error', async () => {
+      mockPublish.mockRejectedValueOnce(new Error('SDK error'))
+      const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
 
-      await expect(ablyBroadcast(config, 'test-version')).rejects.toThrow('Ably broadcast failed: 401')
-
-      fetchSpy.mockRestore()
+      await expect(ablyBroadcast(config, 'test-version')).rejects.toThrow('SDK error')
     })
   })
 })
