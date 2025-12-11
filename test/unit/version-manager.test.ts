@@ -355,6 +355,73 @@ describe('version Manager', () => {
       expect(manifest.versions.v1.assets).toContain(v1Asset)
       expect(manifest.versions.v2.assets).toContain(v2Asset)
     })
+
+    it('should correctly update manifest asset counts after deduplication across multiple builds', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+      })
+
+      const nuxtDir = join(outputDir, 'public', '_nuxt')
+      await mkdir(nuxtDir, { recursive: true })
+
+      // Simulate multiple consecutive builds with partial overlap (like real Nuxt builds)
+      // Build 1: assets A, B, C
+      const build1Assets = ['_nuxt/entry.AAA111.js', '_nuxt/vendor.BBB222.js', '_nuxt/chunk.CCC333.js']
+      for (const asset of build1Assets) {
+        await writeFile(join(outputDir, 'public', asset), 'content')
+      }
+      await manager.updateVersionsManifest('b1', build1Assets)
+      await manager.storeAssetsInStorage('b1', outputDir, build1Assets)
+
+      // Build 2: assets A (same), B (same), D (new) - simulates partial non-determinism
+      const build2Assets = ['_nuxt/entry.AAA111.js', '_nuxt/vendor.BBB222.js', '_nuxt/chunk.DDD444.js']
+      for (const asset of build2Assets) {
+        await writeFile(join(outputDir, 'public', asset), 'content')
+      }
+      await manager.updateVersionsManifest('b2', build2Assets)
+      await manager.storeAssetsInStorage('b2', outputDir, build2Assets)
+
+      // Build 3: assets A (same), B (same), E (new) - more non-determinism
+      const build3Assets = ['_nuxt/entry.AAA111.js', '_nuxt/vendor.BBB222.js', '_nuxt/chunk.EEE555.js']
+      for (const asset of build3Assets) {
+        await writeFile(join(outputDir, 'public', asset), 'content')
+      }
+      await manager.updateVersionsManifest('b3', build3Assets)
+      await manager.storeAssetsInStorage('b3', outputDir, build3Assets)
+
+      // Verify manifest after all builds
+      const manifestPath = join(storageDir, 'version-manifest.json')
+      const manifestData = await readFile(manifestPath, 'utf-8')
+      const manifest = JSON.parse(manifestData)
+
+      // b1 should only have C (A and B deduplicated to newer versions)
+      expect(manifest.versions.b1.assets).toHaveLength(1)
+      expect(manifest.versions.b1.assets).toContain('_nuxt/chunk.CCC333.js')
+
+      // b2 should only have D (A and B deduplicated to b3)
+      expect(manifest.versions.b2.assets).toHaveLength(1)
+      expect(manifest.versions.b2.assets).toContain('_nuxt/chunk.DDD444.js')
+
+      // b3 should have all 3 (A, B, E)
+      expect(manifest.versions.b3.assets).toHaveLength(3)
+      expect(manifest.versions.b3.assets).toContain('_nuxt/entry.AAA111.js')
+      expect(manifest.versions.b3.assets).toContain('_nuxt/vendor.BBB222.js')
+      expect(manifest.versions.b3.assets).toContain('_nuxt/chunk.EEE555.js')
+
+      // Total unique assets across all versions should be 5 (A, B, C, D, E)
+      const totalAssets = manifest.versions.b1.assets.length
+        + manifest.versions.b2.assets.length
+        + manifest.versions.b3.assets.length
+      expect(totalAssets).toBe(5)
+
+      // fileIdToVersion should point to correct latest version for each fileId
+      expect(manifest.fileIdToVersion['entry.AAA111.js']).toBe('b3')
+      expect(manifest.fileIdToVersion['vendor.BBB222.js']).toBe('b3')
+      expect(manifest.fileIdToVersion['chunk.CCC333.js']).toBe('b1')
+      expect(manifest.fileIdToVersion['chunk.DDD444.js']).toBe('b2')
+      expect(manifest.fileIdToVersion['chunk.EEE555.js']).toBe('b3')
+    })
   })
 
   describe('restoring Old Assets', () => {

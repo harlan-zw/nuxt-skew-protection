@@ -24,6 +24,7 @@ Nuxt Skew Protection solves this with proactive update prompts and persistent bu
 - ⚡ **Instant Update Prompts** - Zero-config real-time notifications on deploy. Users adopt your latest build immediately.
 - 🎯 **Chunk-Aware Targeting** - Notifications fire only when the user's loaded chunks are invalidated. No noise for unrelated updates.
 - 🎨 **Headless UI** - Drop-in notification component with first-class Nuxt UI support.
+- 🔌 **Third-Party Adapters** - Real-time updates on any platform (including static sites) via [Pusher](https://pusher.com), [Ably](https://ably.com), or [Laravel Reverb](https://reverb.laravel.com).
 
 ## Installation
 

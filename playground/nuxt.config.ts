@@ -6,7 +6,7 @@ export default defineNuxtConfig({
     checkOutdatedBuildInterval: 30 * 1000, // this is ms
   },
   skewProtection: {
-    checkForUpdateStrategy: 'ws',
+    updateStrategy: 'ws',
     retentionDays: 1, // Short retention for testing
     debug: true,
   },

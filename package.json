@@ -36,6 +36,10 @@
       "types": "./dist/adapters/pusher/web.d.mts",
       "import": "./dist/adapters/pusher/web.mjs"
     },
+    "./adapters/pusher/node": {
+      "types": "./dist/adapters/pusher/node.d.mts",
+      "import": "./dist/adapters/pusher/node.mjs"
+    },
     "./adapters/reverb": {
       "types": "./dist/adapters/reverb/index.d.mts",
       "import": "./dist/adapters/reverb/index.mjs"
@@ -44,6 +48,10 @@
       "types": "./dist/adapters/reverb/web.d.mts",
       "import": "./dist/adapters/reverb/web.mjs"
     },
+    "./adapters/reverb/node": {
+      "types": "./dist/adapters/reverb/node.d.mts",
+      "import": "./dist/adapters/reverb/node.mjs"
+    },
     "./adapters/ably": {
       "types": "./dist/adapters/ably/index.d.mts",
       "import": "./dist/adapters/ably/index.mjs"
@@ -51,6 +59,10 @@
     "./adapters/ably/web": {
       "types": "./dist/adapters/ably/web.d.mts",
       "import": "./dist/adapters/ably/web.mjs"
+    },
+    "./adapters/ably/node": {
+      "types": "./dist/adapters/ably/node.d.mts",
+      "import": "./dist/adapters/ably/node.mjs"
     }
   },
   "main": "./dist/module.mjs",
@@ -79,6 +91,18 @@
     "test:vercel-sse": "node --experimental-strip-types scripts/test-vercel-sse.ts",
     "typecheck": "nuxt typecheck",
     "test:attw": "attw --pack"
+  },
+  "peerDependencies": {
+    "laravel-echo": ">=1",
+    "pusher-js": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "laravel-echo": {
+      "optional": true
+    },
+    "pusher-js": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
@@ -123,8 +147,10 @@
     "firebase-functions": "^7.0.1",
     "happy-dom": "^20.0.11",
     "ioredis": "^5.8.2",
+    "laravel-echo": "^2.2.6",
     "nuxt": "^4.2.2",
     "playwright-core": "^1.57.0",
+    "pusher-js": "^8.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "unocss": "66.5.10",

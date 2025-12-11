@@ -13,7 +13,7 @@ export default defineNuxtConfig({
 
   skewProtection: {
     debug: true,
-    checkForUpdateStrategy: 'polling',
+    updateStrategy: 'polling',
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),

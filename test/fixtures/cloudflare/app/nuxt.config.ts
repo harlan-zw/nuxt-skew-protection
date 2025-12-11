@@ -7,7 +7,7 @@ export default defineNuxtConfig({
     debug: true,
     retentionDays: 7,
     maxNumberOfVersions: 10,
-    checkForUpdateStrategy: 'polling', // Cloudflare Workers uses polling
+    updateStrategy: 'polling', // Cloudflare Workers uses polling
     storage: {
       driver: 'cloudflare-kv-binding',
       binding: 'SKEW_STORAGE',
