@@ -1,30 +1,7 @@
 import { defineBuildConfig } from 'unbuild'
 
+// This config is read by nuxt-module-build (which uses unbuild internally)
+// We set failOnWarn: false because adapters are built in a separate step
 export default defineBuildConfig({
-  entries: [
-    './src/adapters/index',
-    './src/adapters/logger',
-    // Main entry (user imports from nuxt.config)
-    './src/adapters/pusher/index',
-    './src/adapters/ably/index',
-    // Platform-specific (module loads these internally)
-    './src/adapters/pusher/web',
-    './src/adapters/ably/web',
-    './src/adapters/pusher/node',
-    './src/adapters/ably/node',
-  ],
-  externals: [
-    'h3',
-    'std-env',
-    'nitropack',
-    'consola',
-    'unstorage',
-    'pathe',
-    'unstorage/drivers/fs',
-    '#skew-adapter',
-    'pusher-js',
-    '@unhead/vue',
-    'nuxt/app',
-  ],
   failOnWarn: false,
 })
