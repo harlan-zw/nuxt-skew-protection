@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ablyAdapter } from '../../src/adapters/ably'
 import { broadcast as ablyBroadcast } from '../../src/adapters/ably/node'
-import { subscribe as ablySubscribe } from '../../src/adapters/ably/web'
-import { logger } from '../../src/adapters/logger'
 import { pusherAdapter } from '../../src/adapters/pusher'
-import { reverbAdapter } from '../../src/adapters/reverb'
-import { subscribe as reverbSubscribe } from '../../src/adapters/reverb/web'
 import { isSkewAdapter } from '../../src/adapters/types'
 
 // Mock window for browser-side adapter tests
@@ -115,17 +111,6 @@ describe('adapters', () => {
       expect(adapter.name).toBe('ably')
     })
 
-    it('subscribe should return cleanup when Echo not loaded', () => {
-      const loggerSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
-
-      const cleanup = ablySubscribe(config, () => {})
-
-      expect(typeof cleanup).toBe('function')
-      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Laravel Echo not found'))
-
-      loggerSpy.mockRestore()
-    })
-
     it('should use custom channel when provided', () => {
       const customConfig = { ...config, channel: 'my-channel' }
       const adapter = ablyAdapter(customConfig)
@@ -157,44 +142,6 @@ describe('adapters', () => {
       await expect(ablyBroadcast(config, 'test-version')).rejects.toThrow('Ably broadcast failed: 401')
 
       fetchSpy.mockRestore()
-    })
-  })
-
-  describe('reverbAdapter', () => {
-    const config = {
-      host: 'localhost',
-      port: 8080,
-      key: 'test-key',
-      appId: 'test-app-id',
-      secret: 'test-secret',
-    }
-
-    it('should create valid adapter', () => {
-      const adapter = reverbAdapter(config)
-      expect(isSkewAdapter(adapter)).toBe(true)
-      expect(adapter.name).toBe('reverb')
-    })
-
-    it('subscribe should return cleanup when Echo not loaded', () => {
-      const loggerSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
-
-      const cleanup = reverbSubscribe(config, () => {})
-
-      expect(typeof cleanup).toBe('function')
-      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Laravel Echo not found'))
-
-      loggerSpy.mockRestore()
-    })
-
-    it('should use custom channel when provided', () => {
-      const customConfig = { ...config, channel: 'my-channel' }
-      const adapter = reverbAdapter(customConfig)
-      expect(adapter.name).toBe('reverb')
-    })
-
-    it('should default to TLS enabled', () => {
-      const adapter = reverbAdapter(config)
-      expect(adapter.name).toBe('reverb')
     })
   })
 })

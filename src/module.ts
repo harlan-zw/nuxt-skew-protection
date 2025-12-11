@@ -45,7 +45,7 @@ export interface ModuleOptions {
    * - 'polling': Nuxt's native polling of builds/latest.json (default)
    * - 'sse': Use Server-Sent Events for real-time updates
    * - 'ws': Use WebSocket (requires cloudflare-durable preset or experimental.websocket)
-   * - SkewAdapter: Third-party WebSocket provider (Pusher, Supabase, Reverb)
+   * - SkewAdapter: Third-party WebSocket provider (Pusher, Ably)
    * @default Static: 'polling', Node: 'sse', Cloudflare: 'ws'
    */
   updateStrategy?: 'polling' | 'sse' | 'ws' | SkewAdapter
@@ -377,16 +377,21 @@ export {}
           throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
         }
 
-        // Check for laravel-echo dependencies at build time
-        const echoAdapters = ['pusher', 'reverb', 'ably']
-        if (echoAdapters.includes(adapter.name)) {
-          const missingDeps: string[] = []
-          if (!await tryResolveModule('laravel-echo', nuxt.options.rootDir))
-            missingDeps.push('\`laravel-echo\`')
-          if (!await tryResolveModule('pusher-js', nuxt.options.rootDir))
-            missingDeps.push('\`pusher-js\`')
-          if (missingDeps.length) {
-            const msg = `The ${adapter.name} adapter requires ${missingDeps.join(' and ')}. Install with: npx nypm add ${missingDeps.join(' ')}`
+        // Check for adapter dependencies at build time
+        if (adapter.name === 'pusher') {
+          if (!await tryResolveModule('pusher-js', nuxt.options.rootDir)) {
+            const msg = `The pusher adapter requires \`pusher-js\`. Install with: npx nypm add pusher-js`
+            if (!nuxt.options.dev && !nuxt.options._prepare) {
+              throw new Error(msg)
+            }
+            else {
+              logger.warn(msg)
+            }
+          }
+        }
+        else if (adapter.name === 'ably') {
+          if (!await tryResolveModule('ably', nuxt.options.rootDir)) {
+            const msg = `The ably adapter requires \`ably\`. Install with: npx nypm add ably`
             if (!nuxt.options.dev && !nuxt.options._prepare) {
               throw new Error(msg)
             }
@@ -426,11 +431,6 @@ export { subscribe }`,
               }
               case 'ably': {
                 const { broadcast } = await import('./adapters/ably/node')
-                broadcastFn = broadcast
-                break
-              }
-              case 'reverb': {
-                const { broadcast } = await import('./adapters/reverb/node')
                 broadcastFn = broadcast
                 break
               }

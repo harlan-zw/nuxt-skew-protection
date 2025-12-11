@@ -40,18 +40,6 @@
       "types": "./dist/adapters/pusher/node.d.mts",
       "import": "./dist/adapters/pusher/node.mjs"
     },
-    "./adapters/reverb": {
-      "types": "./dist/adapters/reverb/index.d.mts",
-      "import": "./dist/adapters/reverb/index.mjs"
-    },
-    "./adapters/reverb/web": {
-      "types": "./dist/adapters/reverb/web.d.mts",
-      "import": "./dist/adapters/reverb/web.mjs"
-    },
-    "./adapters/reverb/node": {
-      "types": "./dist/adapters/reverb/node.d.mts",
-      "import": "./dist/adapters/reverb/node.mjs"
-    },
     "./adapters/ably": {
       "types": "./dist/adapters/ably/index.d.mts",
       "import": "./dist/adapters/ably/index.mjs"
@@ -93,11 +81,11 @@
     "test:attw": "attw --pack"
   },
   "peerDependencies": {
-    "laravel-echo": ">=1",
+    "ably": ">=2",
     "pusher-js": ">=8"
   },
   "peerDependenciesMeta": {
-    "laravel-echo": {
+    "ably": {
       "optional": true
     },
     "pusher-js": {
@@ -139,6 +127,7 @@
     "@unocss/preset-uno": "66.5.10",
     "@unocss/runtime": "66.5.10",
     "@vueuse/nuxt": "^14.1.0",
+    "ably": "^2.15.0",
     "better-sqlite3": "^12.5.0",
     "bumpp": "^10.3.2",
     "eslint": "^9.39.1",
@@ -147,7 +136,6 @@
     "firebase-functions": "^7.0.1",
     "happy-dom": "^20.0.11",
     "ioredis": "^5.8.2",
-    "laravel-echo": "^2.2.6",
     "nuxt": "^4.2.2",
     "playwright-core": "^1.57.0",
     "pusher-js": "^8.4.0",

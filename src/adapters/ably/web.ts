@@ -1,21 +1,27 @@
 import type { AblyAdapterConfig } from './types'
-import { logger } from '../logger'
+import { onNuxtReady } from 'nuxt/app'
 import { defineWebSubscribe } from '../types'
 
 export const subscribe = defineWebSubscribe<AblyAdapterConfig>((config, onMessage) => {
-  const Echo = (window as any).Echo
-  if (!Echo) {
-    logger.error('[Skew:Ably] Laravel Echo not found. Install laravel-echo and pusher-js.')
-    return () => {}
-  }
+  let cleanup: (() => void) | undefined
 
-  const channelName = config.channel || 'skew-protection'
-  const eventName = config.event || 'VersionUpdated'
+  onNuxtReady(async () => {
+    const { Realtime } = await import('ably')
+    const ably = new Realtime({ key: config.key })
+    const channelName = config.channel || 'skew-protection'
+    const eventName = config.event || 'VersionUpdated'
 
-  const channel = Echo.channel(channelName)
-  channel.listen(`.${eventName}`, (e: { version: string }) => {
-    onMessage({ version: e.version })
+    const channel = ably.channels.get(channelName)
+    await channel.subscribe(eventName, (message) => {
+      const data = typeof message.data === 'string' ? JSON.parse(message.data) : message.data
+      onMessage({ version: data.version })
+    })
+
+    cleanup = () => {
+      channel.unsubscribe()
+      ably.close()
+    }
   })
 
-  return () => Echo.leave(channelName)
+  return () => cleanup?.()
 })

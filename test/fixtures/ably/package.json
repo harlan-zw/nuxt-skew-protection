@@ -1,0 +1,7 @@
+{
+  "name": "nuxt-skew-protection-ably-fixture",
+  "private": true,
+  "dependencies": {
+    "ably": "^2.6.3"
+  }
+}
