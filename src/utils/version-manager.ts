@@ -551,17 +551,27 @@ export function createAssetManager(options: {
 
     logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
 
-    if (restoredAssets.length > 0) {
-      restoredAssets.forEach((item, index) => {
-        const isLast = index === restoredAssets.length - 1
-        const prefix = isLast ? '  └─' : '  ├─'
-        const sizeKB = (item.size / 1024).toFixed(2)
-        const displayPath = `public/${item.asset}`
-        const sizeInfo = `(${sizeKB} kB)`
-        const versionInfo = `[${item.versionId.slice(0, 8)}]`
-        const ageInfo = `(${item.age})`
+    // Count restored assets per version
+    const restoredByVersion = new Map<string, number>()
+    for (const item of restoredAssets) {
+      restoredByVersion.set(item.versionId, (restoredByVersion.get(item.versionId) || 0) + 1)
+    }
 
-        logger.log(colors.gray(`${prefix} ${displayPath} ${sizeInfo} ${versionInfo} ${ageInfo}`))
+    // Log summary per version showing restored/total
+    const otherVersions = Object.entries(manifest.versions).filter(([id]) => id !== currentBuildId)
+    if (otherVersions.length > 0) {
+      otherVersions.forEach(([versionId, versionData], index) => {
+        const isLast = index === otherVersions.length - 1
+        const prefix = isLast ? '  └─' : '  ├─'
+        const versionTimestamp = new Date(versionData.timestamp).getTime()
+        const ageMs = now - versionTimestamp
+        const ageMinutes = Math.floor(ageMs / 60000)
+        const ageHours = Math.floor(ageMinutes / 60)
+        const ageDays = Math.floor(ageHours / 24)
+        const ageStr = ageDays > 0 ? `${ageDays}d ago` : ageHours > 0 ? `${ageHours}h ago` : ageMinutes > 0 ? `${ageMinutes}m ago` : 'just now'
+        const restored = restoredByVersion.get(versionId) || 0
+        const total = versionData.assets.length
+        logger.log(colors.gray(`${prefix} ${versionId.slice(0, 8)} (${restored}/${total} files restored, ${ageStr})`))
       })
     }
 
