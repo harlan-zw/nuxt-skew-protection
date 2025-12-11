@@ -16,7 +16,7 @@ export default defineNuxtConfig({
 
   skewProtection: {
     debug: true,
-    checkForUpdateStrategy: 'ws',
+    updateStrategy: 'ws',
     storage: {
       driver: 'cloudflare-kv-binding',
       binding: 'SKEW_STORAGE',

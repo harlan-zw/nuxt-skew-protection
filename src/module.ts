@@ -1,4 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
+import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
 import {
@@ -6,16 +7,19 @@ import {
   addImports,
   addPlugin,
   addServerHandler,
+  addTemplate,
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
   hasNuxtModule,
+  tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
 import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
 import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
+import { isSkewAdapter } from './runtime/adapters/types'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { createAssetManager } from './utils/version-manager'
 
@@ -39,11 +43,12 @@ export interface ModuleOptions {
   /**
    * Strategy for checking for version updates
    * - 'polling': Nuxt's native polling of builds/latest.json (default)
-   * - 'sse': Use Server-Sent Events for real-time updates (requires sse: true)
-   * - 'ws': Use WebSocket via Cloudflare Durable Objects (requires durableObjects: true)
+   * - 'sse': Use Server-Sent Events for real-time updates
+   * - 'ws': Use WebSocket (requires cloudflare-durable preset or experimental.websocket)
+   * - SkewAdapter: Third-party WebSocket provider (Pusher, Ably)
    * @default Static: 'polling', Node: 'sse', Cloudflare: 'ws'
    */
-  checkForUpdateStrategy: 'polling' | 'sse' | 'ws'
+  updateStrategy?: 'polling' | 'sse' | 'ws' | SkewAdapter
   /**
    * Cookie configuration for storing deployment version
    */
@@ -118,6 +123,7 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.public.skewProtection = {
       cookie: options.cookie as Required<NuxtSkewProtectionRuntimeConfig['cookie']>,
       debug: options.debug,
+      version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
     // Detect Nitro preset
@@ -216,14 +222,28 @@ export {}
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
 
-      // Validate strategy compatibility with static generation
-      if (isStatic && options.checkForUpdateStrategy && options.checkForUpdateStrategy !== 'polling') {
-        logger.warn(`Strategy "${options.checkForUpdateStrategy}" requires a server but static generation detected. Falling back to polling.`)
-        options.checkForUpdateStrategy = 'polling'
+      // Determine resolved strategy
+      const isAdapter = isSkewAdapter(options.updateStrategy)
+      let resolvedStrategy: 'polling' | 'sse' | 'ws' | 'adapter' = 'polling'
+
+      if (isAdapter) {
+        resolvedStrategy = 'adapter'
+      }
+      else if (options.updateStrategy === 'ws') {
+        resolvedStrategy = 'ws'
+      }
+      else if (options.updateStrategy === 'sse') {
+        resolvedStrategy = 'sse'
+      }
+      else if (!options.updateStrategy) {
+        // Auto-detect: static = polling, cloudflare = ws, otherwise sse
+        resolvedStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
       }
 
-      if (!options.checkForUpdateStrategy) {
-        options.checkForUpdateStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
+      // Validate strategy compatibility with static generation
+      if (isStatic && resolvedStrategy !== 'polling' && resolvedStrategy !== 'adapter') {
+        logger.warn(`Strategy "${resolvedStrategy}" requires a server but static generation detected. Falling back to polling.`)
+        resolvedStrategy = 'polling'
       }
 
       if (isVercel) {
@@ -289,18 +309,15 @@ export {}
             const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
 
             // Store assets in configured storage (can be slow with many assets)
-            logger.log(colors.cyan(`Initialising Nuxt Skew Protection v${version}...`))
+            const storageInfo = options.storage!.base
+              ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
+              : colors.green(options.storage!.driver)
             if (totalReleases === 1) {
               logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
             }
             else {
-              logger.log(`  ${totalReleases} releases stored (oldest from ${timeInfo})`)
+              logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
             }
-            const storageInfo = options.storage!.base
-              ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
-              : colors.green(options.storage!.driver)
-            logger.log(`  Database: ${storageInfo}`)
-            logger.log(`  Storing ${colors.yellow(assets.length.toString())} assets in storage...`)
 
             await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
               .catch((error: unknown) => {
@@ -316,11 +333,12 @@ export {}
 
             // For static/prerendered builds: restore old versioned assets into public directory
             if (versionCount > 0) {
-              // Calculate total size and asset count across all versions
+              // Re-read manifest after storeAssetsInStorage to get post-deduplication counts
+              const updatedManifest = await assetManager.getManifest()
               let totalAssets = 0
               const versionSizes: string[] = []
 
-              for (const [vId, vData] of Object.entries(manifest.versions)) {
+              for (const [vId, vData] of Object.entries(updatedManifest.versions)) {
                 if (vId !== buildId) {
                   totalAssets += vData.assets.length
                   versionSizes.push(`${vId.slice(0, 8)}:${vData.assets.length}`)
@@ -345,28 +363,106 @@ export {}
         })
       }
 
-      // Add Durable Objects WebSocket route for real-time updates (if enabled and on Cloudflare)
-      if (options.checkForUpdateStrategy === 'ws') {
+      // Register update strategy plugins
+      if (resolvedStrategy === 'adapter' && isAdapter) {
+        const adapter = options.updateStrategy as SkewAdapter
+        // Store serializable adapter info
+        // @ts-expect-error extending runtime config
+        nuxt.options.runtimeConfig.public.skewProtection.adapterName = adapter.name
+
+        // Validate adapter config at build time using zod schema
+        const result = adapter.schema.safeParse(adapter.config)
+        if (!result.success) {
+          const errors = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+          throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
+        }
+
+        // Check for adapter dependencies at build time
+        if (adapter.name === 'pusher') {
+          if (!await tryResolveModule('pusher-js', nuxt.options.rootDir)) {
+            const msg = `The pusher adapter requires \`pusher-js\`. Install with: npx nypm add pusher-js`
+            if (!nuxt.options.dev && !nuxt.options._prepare) {
+              throw new Error(msg)
+            }
+            else {
+              logger.warn(msg)
+            }
+          }
+        }
+        else if (adapter.name === 'ably') {
+          if (!await tryResolveModule('ably', nuxt.options.rootDir)) {
+            const msg = `The ably adapter requires \`ably\`. Install with: npx nypm add ably`
+            if (!nuxt.options.dev && !nuxt.options._prepare) {
+              throw new Error(msg)
+            }
+            else {
+              logger.warn(msg)
+            }
+          }
+        }
+
+        // Create template that imports from the actual adapter module (web build for client)
+        const template = addTemplate({
+          filename: 'skew-adapter.mjs',
+          getContents: () => `import { subscribe } from 'nuxt-skew-protection/adapters/${adapter.name}/web'
+export const config = ${JSON.stringify(adapter.config)}
+export { subscribe }`,
+        })
+        nuxt.options.alias['#skew-adapter'] = template.dst
+
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/check-updates-adapter.client'),
+          mode: 'client',
+        })
+
+        // Broadcast version update after build completes (not dev/prepare)
+        if (!nuxt.options.dev && !nuxt.options._prepare) {
+          nuxt.hook('close', async () => {
+            const buildId = nuxt.options.runtimeConfig.app.buildId || nuxt.options.buildId
+            const channel = (adapter.config as { channel?: string }).channel || 'skew-protection'
+            logger.log(`Broadcasting update ${colors.cyan(buildId.slice(0, 8))} via ${colors.green(adapter.name)} (channel: ${colors.gray(channel)})`)
+
+            let broadcastFn: BroadcastFn<any>
+            switch (adapter.name) {
+              case 'pusher': {
+                const { broadcast } = await import('./runtime/adapters/pusher/node')
+                broadcastFn = broadcast
+                break
+              }
+              case 'ably': {
+                const { broadcast } = await import('./runtime/adapters/ably/node')
+                broadcastFn = broadcast
+                break
+              }
+              default:
+                logger.warn(`No broadcast implementation for adapter: ${adapter.name}`)
+                return
+            }
+
+            await broadcastFn(adapter.config, buildId)
+              .then(() => logger.success(`Broadcast complete`))
+              .catch((err: Error) => logger.error(`Broadcast failed: ${err.message}`))
+          })
+        }
+      }
+      else if (resolvedStrategy === 'ws') {
         if (!nuxt.options.nitro?.experimental?.websocket) {
           logger.warn('You need to enable `experimental.websocket` in your Nitro config to use WebSockets. Falling back to polling.')
-          options.checkForUpdateStrategy = 'polling'
         }
         else if (isCloudflareRuntime && nitroPreset !== 'cloudflare-durable') {
           logger.warn('Websockets are only supported in Cloudflare using `cloudflare-durable` preset. Falling back to polling.')
-          options.checkForUpdateStrategy = 'polling'
         }
         else {
           addServerHandler({
             route: '/_skew/ws',
-            handler: resolver.resolve(`./runtime/server/routes/_skew/ws`),
+            handler: resolver.resolve('./runtime/server/routes/_skew/ws'),
           })
           addPlugin(resolver.resolve('./runtime/app/plugins/check-updates-websocket.client'))
         }
       }
-      else if (options.checkForUpdateStrategy === 'sse') {
+      else if (resolvedStrategy === 'sse') {
         if (isCloudflareRuntime) {
           logger.warn('SSE not supported on Cloudflare Workers (no persistent connections). Falling back to polling.')
-          options.checkForUpdateStrategy = 'polling'
         }
         else {
           addServerHandler({

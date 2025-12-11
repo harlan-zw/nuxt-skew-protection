@@ -8,5 +8,5 @@ import { useRuntimeConfig } from 'nitropack/runtime'
  */
 export function getRuntimeConfigSkewProtection(event?: H3Event): SkewProtectionRuntimeConfig {
   const config = useRuntimeConfig(event)
-  return config.public.skewProtection as SkewProtectionRuntimeConfig
+  return config.public.skewProtection as any as SkewProtectionRuntimeConfig
 }

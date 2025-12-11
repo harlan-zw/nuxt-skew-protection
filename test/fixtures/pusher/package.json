@@ -1,0 +1,8 @@
+{
+  "name": "nuxt-skew-protection-pusher-fixture",
+  "private": true,
+  "dependencies": {
+    "laravel-echo": "^2.2.6",
+    "pusher-js": "^8.4.0"
+  }
+}

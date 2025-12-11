@@ -28,7 +28,10 @@ export interface VersionManifest {
   versions: Record<string, {
     timestamp: string
     expires: string
+    // Assets currently stored for this version (shrinks as newer versions deduplicate)
     assets: string[]
+    // Original assets at build time (never changes, used for deletedChunks calculation)
+    originalAssets?: string[]
     // Chunks deleted in this version compared to previous version
     deletedChunks?: string[]
   }>
@@ -191,7 +194,9 @@ export function createAssetManager(options: {
       timestamp: now.toISOString(),
       expires: expires.toISOString(),
       assets,
-      // deletedChunks will be calculated after deduplication in storeAssetsInStorage
+      // Store original assets for deletedChunks calculation (assets array gets modified by deduplication)
+      originalAssets: [...assets],
+      // deletedChunks will be calculated in storeAssetsInStorage
       deletedChunks: [],
     }
 
@@ -310,11 +315,13 @@ export function createAssetManager(options: {
     const existingFileIds = Object.keys(fileIdToVersion).length
     logger.debug(`storeAssetsInStorage: fileIdToVersion has ${existingFileIds} entries`)
 
-    // Calculate deletedChunks BEFORE deduplication, comparing current assets vs previous version's current state
+    // Calculate deletedChunks using originalAssets (not deduplicated assets array)
     const currentVersion = manifest.versions[buildId]
     if (currentVersion) {
       const previousVersionId = getPreviousVersion(manifest, buildId)
-      const previousAssets = previousVersionId ? manifest.versions[previousVersionId]?.assets || [] : []
+      // Use originalAssets for accurate diff (falls back to assets for older manifests)
+      const previousVersion = previousVersionId ? manifest.versions[previousVersionId] : null
+      const previousAssets = previousVersion?.originalAssets || previousVersion?.assets || []
       currentVersion.deletedChunks = calculateDeletedChunks(assets, previousAssets)
       logger.debug(`storeAssetsInStorage: calculated ${currentVersion.deletedChunks.length} deleted chunks vs ${previousVersionId || 'none'}`)
     }
@@ -570,7 +577,7 @@ export function createAssetManager(options: {
         const ageDays = Math.floor(ageHours / 24)
         const ageStr = ageDays > 0 ? `${ageDays}d ago` : ageHours > 0 ? `${ageHours}h ago` : ageMinutes > 0 ? `${ageMinutes}m ago` : 'just now'
         const restored = restoredByVersion.get(versionId) || 0
-        const total = versionData.assets.length
+        const total = versionData.originalAssets?.length || versionData.assets.length
         logger.log(colors.gray(`${prefix} ${versionId.slice(0, 8)} (${restored}/${total} files restored, ${ageStr})`))
       })
     }

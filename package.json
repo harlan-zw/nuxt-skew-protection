@@ -24,34 +24,13 @@
       "import": "./dist/module.mjs"
     },
     "./server": "./dist/runtime/server/index.js",
-    "./adapters": {
-      "types": "./dist/adapters/index.d.mts",
-      "import": "./dist/adapters/index.mjs"
-    },
-    "./adapters/pusher": {
-      "types": "./dist/adapters/pusher/index.d.mts",
-      "import": "./dist/adapters/pusher/index.mjs"
-    },
-    "./adapters/pusher/web": {
-      "types": "./dist/adapters/pusher/web.d.mts",
-      "import": "./dist/adapters/pusher/web.mjs"
-    },
-    "./adapters/reverb": {
-      "types": "./dist/adapters/reverb/index.d.mts",
-      "import": "./dist/adapters/reverb/index.mjs"
-    },
-    "./adapters/reverb/web": {
-      "types": "./dist/adapters/reverb/web.d.mts",
-      "import": "./dist/adapters/reverb/web.mjs"
-    },
-    "./adapters/ably": {
-      "types": "./dist/adapters/ably/index.d.mts",
-      "import": "./dist/adapters/ably/index.mjs"
-    },
-    "./adapters/ably/web": {
-      "types": "./dist/adapters/ably/web.d.mts",
-      "import": "./dist/adapters/ably/web.mjs"
-    }
+    "./adapters": "./dist/runtime/adapters/index.js",
+    "./adapters/pusher": "./dist/runtime/adapters/pusher/index.js",
+    "./adapters/pusher/web": "./dist/runtime/adapters/pusher/web.js",
+    "./adapters/pusher/node": "./dist/runtime/adapters/pusher/node.js",
+    "./adapters/ably": "./dist/runtime/adapters/ably/index.js",
+    "./adapters/ably/web": "./dist/runtime/adapters/ably/web.js",
+    "./adapters/ably/node": "./dist/runtime/adapters/ably/node.js"
   },
   "main": "./dist/module.mjs",
   "files": [
@@ -80,6 +59,18 @@
     "typecheck": "nuxt typecheck",
     "test:attw": "attw --pack"
   },
+  "peerDependencies": {
+    "ably": ">=2",
+    "pusher-js": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "ably": {
+      "optional": true
+    },
+    "pusher-js": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@nuxt/kit": "^4.2.2",
@@ -95,6 +86,7 @@
     "std-env": "^3.10.0",
     "tinyexec": "^1.0.2",
     "ufo": "^1.6.1",
+    "unstorage": "^1.17.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
@@ -115,6 +107,7 @@
     "@unocss/preset-uno": "66.5.10",
     "@unocss/runtime": "66.5.10",
     "@vueuse/nuxt": "^14.1.0",
+    "ably": "^2.15.0",
     "better-sqlite3": "^12.5.0",
     "bumpp": "^10.3.2",
     "eslint": "^9.39.1",
@@ -125,10 +118,10 @@
     "ioredis": "^5.8.2",
     "nuxt": "^4.2.2",
     "playwright-core": "^1.57.0",
+    "pusher-js": "^8.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "unocss": "66.5.10",
-    "unstorage": "^1.17.3",
     "vitest": "^4.0.15",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3",

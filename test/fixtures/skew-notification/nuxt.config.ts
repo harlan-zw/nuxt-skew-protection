@@ -10,7 +10,7 @@ export default defineNuxtConfig({
   skewProtection: {
     debug: true,
     // Use SSE for real-time update detection
-    checkForUpdateStrategy: 'sse',
+    updateStrategy: 'sse',
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),
