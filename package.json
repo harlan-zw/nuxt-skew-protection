@@ -1,7 +1,7 @@
 {
   "name": "nuxt-skew-protection",
   "type": "module",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "packageManager": "pnpm@10.25.0",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
@@ -23,7 +23,35 @@
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
     },
-    "./server": "./dist/runtime/server/index.js"
+    "./server": "./dist/runtime/server/index.js",
+    "./adapters": {
+      "types": "./dist/adapters/index.d.mts",
+      "import": "./dist/adapters/index.mjs"
+    },
+    "./adapters/pusher": {
+      "types": "./dist/adapters/pusher/index.d.mts",
+      "import": "./dist/adapters/pusher/index.mjs"
+    },
+    "./adapters/pusher/web": {
+      "types": "./dist/adapters/pusher/web.d.mts",
+      "import": "./dist/adapters/pusher/web.mjs"
+    },
+    "./adapters/reverb": {
+      "types": "./dist/adapters/reverb/index.d.mts",
+      "import": "./dist/adapters/reverb/index.mjs"
+    },
+    "./adapters/reverb/web": {
+      "types": "./dist/adapters/reverb/web.d.mts",
+      "import": "./dist/adapters/reverb/web.mjs"
+    },
+    "./adapters/ably": {
+      "types": "./dist/adapters/ably/index.d.mts",
+      "import": "./dist/adapters/ably/index.mjs"
+    },
+    "./adapters/ably/web": {
+      "types": "./dist/adapters/ably/web.d.mts",
+      "import": "./dist/adapters/ably/web.mjs"
+    }
   },
   "main": "./dist/module.mjs",
   "files": [
@@ -66,7 +94,8 @@
     "pkg-types": "^2.3.0",
     "std-env": "^3.10.0",
     "tinyexec": "^1.0.2",
-    "ufo": "^1.6.1"
+    "ufo": "^1.6.1",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.6.1",
