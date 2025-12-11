@@ -24,34 +24,13 @@
       "import": "./dist/module.mjs"
     },
     "./server": "./dist/runtime/server/index.js",
-    "./adapters": {
-      "types": "./dist/adapters/index.d.mts",
-      "import": "./dist/adapters/index.mjs"
-    },
-    "./adapters/pusher": {
-      "types": "./dist/adapters/pusher/index.d.mts",
-      "import": "./dist/adapters/pusher/index.mjs"
-    },
-    "./adapters/pusher/web": {
-      "types": "./dist/adapters/pusher/web.d.mts",
-      "import": "./dist/adapters/pusher/web.mjs"
-    },
-    "./adapters/pusher/node": {
-      "types": "./dist/adapters/pusher/node.d.mts",
-      "import": "./dist/adapters/pusher/node.mjs"
-    },
-    "./adapters/ably": {
-      "types": "./dist/adapters/ably/index.d.mts",
-      "import": "./dist/adapters/ably/index.mjs"
-    },
-    "./adapters/ably/web": {
-      "types": "./dist/adapters/ably/web.d.mts",
-      "import": "./dist/adapters/ably/web.mjs"
-    },
-    "./adapters/ably/node": {
-      "types": "./dist/adapters/ably/node.d.mts",
-      "import": "./dist/adapters/ably/node.mjs"
-    }
+    "./adapters": "./dist/runtime/adapters/index.js",
+    "./adapters/pusher": "./dist/runtime/adapters/pusher/index.js",
+    "./adapters/pusher/web": "./dist/runtime/adapters/pusher/web.js",
+    "./adapters/pusher/node": "./dist/runtime/adapters/pusher/node.js",
+    "./adapters/ably": "./dist/runtime/adapters/ably/index.js",
+    "./adapters/ably/web": "./dist/runtime/adapters/ably/web.js",
+    "./adapters/ably/node": "./dist/runtime/adapters/ably/node.js"
   },
   "main": "./dist/module.mjs",
   "files": [
@@ -59,7 +38,7 @@
   ],
   "scripts": {
     "lint": "eslint . --fix",
-    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config adapters.build.config.ts && unbuild --config sw.build.config.ts",
+    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config sw.build.config.ts",
     "dev": "nuxi dev playground",
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && nuxi prepare playground",
@@ -103,11 +82,11 @@
     "nuxt-site-config": "^3.2.11",
     "ofetch": "^1.5.1",
     "pathe": "^2.0.3",
-    "unstorage": "^1.17.3",
     "pkg-types": "^2.3.0",
     "std-env": "^3.10.0",
     "tinyexec": "^1.0.2",
     "ufo": "^1.6.1",
+    "unstorage": "^1.17.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {

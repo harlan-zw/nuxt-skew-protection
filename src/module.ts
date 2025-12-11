@@ -1,5 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { BroadcastFn, SkewAdapter } from './adapters/types'
+import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
 import {
@@ -17,9 +17,9 @@ import {
 import { colors } from 'consola/utils'
 import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { isSkewAdapter } from './adapters/types'
 import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
+import { isSkewAdapter } from './runtime/adapters/types'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { createAssetManager } from './utils/version-manager'
 
@@ -425,12 +425,12 @@ export { subscribe }`,
             let broadcastFn: BroadcastFn<any>
             switch (adapter.name) {
               case 'pusher': {
-                const { broadcast } = await import('./adapters/pusher/node')
+                const { broadcast } = await import('./runtime/adapters/pusher/node')
                 broadcastFn = broadcast
                 break
               }
               case 'ably': {
-                const { broadcast } = await import('./adapters/ably/node')
+                const { broadcast } = await import('./runtime/adapters/ably/node')
                 broadcastFn = broadcast
                 break
               }
