@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ablyAdapter } from '../../src/runtime/adapters/ably'
 import { pusherAdapter } from '../../src/runtime/adapters/pusher'
-import { isSkewAdapter } from '../../src/runtime/adapters/types'
+import { isSkewAdapter } from '../../src/utils'
 
 // Mock Ably SDK
 const mockPublish = vi.fn()
@@ -17,6 +17,7 @@ class MockRealtime {
       unsubscribe: vi.fn(),
     }),
   }
+
   connection = { on: vi.fn() }
   close = vi.fn()
 }

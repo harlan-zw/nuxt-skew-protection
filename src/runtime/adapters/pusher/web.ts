@@ -1,6 +1,6 @@
 import type { PusherAdapterConfig } from './types'
 import { onNuxtReady } from 'nuxt/app'
-import { defineWebSubscribe } from '../types'
+import { defineWebSubscribe } from '../../../utils'
 
 export const subscribe = defineWebSubscribe<PusherAdapterConfig>((config, onMessage) => {
   let cleanup: (() => void) | undefined

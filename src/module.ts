@@ -19,8 +19,8 @@ import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
 import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
-import { isSkewAdapter } from './runtime/adapters/types'
 import { resolveBuildTimeDriver } from './unstorage/utils'
+import { isSkewAdapter } from './utils'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {

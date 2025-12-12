@@ -1,6 +1,6 @@
 import type { PusherAdapterConfig } from './types'
 import { createHash, createHmac } from 'node:crypto'
-import { defineNodeBroadcast } from '../types'
+import { defineNodeBroadcast } from '../../../utils'
 
 export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config, version) => {
   const channelName = config.channel || 'skew-protection'

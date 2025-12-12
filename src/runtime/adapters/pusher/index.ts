@@ -1,4 +1,4 @@
-import { defineAdapter } from '../types'
+import { defineAdapter } from '../../../utils'
 import { pusherConfigSchema } from './types'
 
 export type { PusherAdapterConfig } from './types'

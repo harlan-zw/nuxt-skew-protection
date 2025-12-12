@@ -1,4 +1,4 @@
-import type { SkewAdapter } from '../../../src/adapters/types'
+import type { SkewAdapter } from '../../../src/runtime/adapters/types'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

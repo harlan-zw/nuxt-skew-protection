@@ -1,4 +1,4 @@
-import { defineAdapter } from '../types'
+import { defineAdapter } from '../../../utils'
 import { ablyConfigSchema } from './types'
 
 export type { AblyAdapterConfig } from './types'

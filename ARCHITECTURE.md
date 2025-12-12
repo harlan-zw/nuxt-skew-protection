@@ -536,7 +536,7 @@ export default defineNuxtConfig({
     maxNumberOfVersions: 10, // Maximum versions to retain
 
     // Update detection strategy
-    checkForUpdateStrategy: 'sse', // 'polling' | 'sse' | 'ws'
+    updateStrategy: 'sse', // 'polling' | 'sse' | 'ws'
     // Auto-detected based on platform if not specified:
     // - Static sites → 'polling'
     // - Cloudflare Durable → 'ws'
@@ -605,7 +605,7 @@ export default defineNuxtConfig({
     }
   },
   skewProtection: {
-    checkForUpdateStrategy: 'ws'
+    updateStrategy: 'ws'
   }
 })
 ```

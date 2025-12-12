@@ -1,6 +1,6 @@
 import type { AblyAdapterConfig } from './types'
 import { Rest } from 'ably'
-import { defineNodeBroadcast } from '../types'
+import { defineNodeBroadcast } from '../../../utils'
 
 export const broadcast = defineNodeBroadcast<AblyAdapterConfig>(async (config, version) => {
   const ably = new Rest({ key: config.key })
