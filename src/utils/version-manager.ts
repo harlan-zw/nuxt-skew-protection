@@ -456,6 +456,7 @@ export function createAssetManager(options: {
     const assetTasks: Array<{ versionId: string, asset: string, versionData: any }> = []
     let skippedSamePath = 0
     let skippedSameFileId = 0
+    const collectedPaths = new Set<string>()
 
     for (const [versionId, versionData] of Object.entries(manifest.versions)) {
       if (versionId === currentBuildId) {
@@ -476,6 +477,12 @@ export function createAssetManager(options: {
           continue
         }
 
+        // Skip if already collected from another old version
+        if (collectedPaths.has(asset)) {
+          continue
+        }
+        collectedPaths.add(asset)
+
         assetTasks.push({ versionId, asset, versionData })
       }
     }
@@ -490,6 +497,7 @@ export function createAssetManager(options: {
     const restoreStart = Date.now()
     let totalBytes = 0
     let failedCount = 0
+    const createdDirs = new Set<string>()
 
     // Process restoration tasks in batches to limit memory
     // Use smaller batches for memory efficiency
@@ -499,7 +507,12 @@ export function createAssetManager(options: {
         .then(async (assetData) => {
           if (assetData) {
             const targetPath = join(publicDir, asset)
-            await fs.mkdir(dirname(targetPath), { recursive: true })
+            const dir = dirname(targetPath)
+
+            if (!createdDirs.has(dir)) {
+              await fs.mkdir(dir, { recursive: true })
+              createdDirs.add(dir)
+            }
 
             // Ensure we write Buffer data directly without JSON serialization
             let dataToWrite: Buffer
@@ -513,7 +526,8 @@ export function createAssetManager(options: {
             else {
               dataToWrite = Buffer.from(assetData)
             }
-            await fs.writeFile(targetPath, dataToWrite)
+            // wx flag = exclusive write, fails if file exists (atomic check+write)
+            await fs.writeFile(targetPath, dataToWrite, { flag: 'wx' })
             totalBytes += dataToWrite.byteLength
 
             // Calculate time ago
@@ -546,9 +560,12 @@ export function createAssetManager(options: {
           }
           return null
         })
-        .catch((error) => {
-          failedCount++
-          logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
+        .catch((error: NodeJS.ErrnoException) => {
+          // EEXIST = file already exists, expected with wx flag - not a failure
+          if (error.code !== 'EEXIST') {
+            failedCount++
+            logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
+          }
           return null
         })
     })
