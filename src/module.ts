@@ -358,7 +358,8 @@ export {}
           // Clean up expired versions on close
           nitro.hooks.hook('close', async () => {
             if (assetManager) {
-              await assetManager.cleanupExpiredVersions()
+              await assetManager.cleanupExpiredVersions().catch(() => {})
+              await assetManager.dispose()
             }
           })
         })

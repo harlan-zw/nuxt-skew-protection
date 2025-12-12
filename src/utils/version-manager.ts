@@ -660,5 +660,6 @@ export function createAssetManager(options: {
     restoreOldAssetsToPublic,
     augmentBuildMetadata,
     getManifest: () => getVersionManifest(storage),
+    dispose: () => storage.dispose(),
   }
 }
