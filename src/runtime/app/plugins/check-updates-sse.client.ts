@@ -25,22 +25,23 @@ export default defineNuxtPlugin({
       },
     })
 
-    // Watch connection status
     watch(status, (newStatus) => {
       logger.debug(`[SSE] Connection status changed: ${newStatus}`)
     })
 
-    // Watch for errors
     watch(error, (err) => {
       if (err)
         logger.debug('[SSE] Connection error:', err)
     })
 
-    // Watch for incoming messages
     watch(data, (message) => {
       logger.debug('[SSE] Message received:', message)
       if (!message)
         return
+
+      // @ts-expect-error custom hook
+      nuxtApp.hooks.callHook('skew:message', message)
+
       if (message.type === 'connected' && message.version) {
         const newVersion = message.version
         logger.debug(`[SSE] Server version: ${newVersion}, Client version: ${clientVersion}`)
