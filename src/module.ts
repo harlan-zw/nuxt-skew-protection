@@ -287,7 +287,8 @@ export {}
 
           // Process assets before rollup finalization
           nitro.hooks.hook('compiled', async () => {
-            const outputDir = nitro.options.output.dir
+            // Use publicDir directly - handles different nitro preset structures (Netlify, Vercel, etc.)
+            const publicDir = nitro.options.output.publicDir
 
             assetManager = createAssetManager({
               ...options,
@@ -295,7 +296,7 @@ export {}
             })
 
             // Get list of assets from build
-            const assets = await assetManager.getAssetsFromBuild(outputDir)
+            const assets = await assetManager.getAssetsFromBuild(publicDir)
 
             // Update versions manifest
             const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
@@ -319,7 +320,7 @@ export {}
               logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
             }
 
-            await assetManager.storeAssetsInStorage(buildId, outputDir, assets)
+            await assetManager.storeAssetsInStorage(buildId, publicDir, assets)
               .catch((error: unknown) => {
                 logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
                 throw error
@@ -348,10 +349,10 @@ export {}
               logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
             }
 
-            await assetManager.restoreOldAssetsToPublic(buildId, outputDir, assets, isExistingVersion)
+            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
 
             // Augment Nuxt build metadata files with skew protection data
-            await assetManager.augmentBuildMetadata(buildId, outputDir)
+            await assetManager.augmentBuildMetadata(buildId, publicDir)
           })
 
           // Clean up expired versions on close

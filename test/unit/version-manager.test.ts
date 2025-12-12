@@ -71,7 +71,7 @@ describe('version Manager', () => {
       await writeFile(join(nuxtDir, 'entry.ABC123.js'), 'console.log("entry")')
       await writeFile(join(nuxtDir, 'chunk-vendors.DEF456.js'), 'console.log("vendors")')
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       expect(assets).toContain('_nuxt/entry.ABC123.js')
       expect(assets).toContain('_nuxt/chunk-vendors.DEF456.js')
@@ -89,7 +89,7 @@ describe('version Manager', () => {
       await writeFile(join(nuxtDir, 'entry.ABC123.js'), 'entry')
       await writeFile(join(nuxtDir, 'components', 'Button.XYZ789.js'), 'button')
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       expect(assets).toContain('_nuxt/entry.ABC123.js')
       expect(assets).toContain('_nuxt/components/Button.XYZ789.js')
@@ -104,7 +104,7 @@ describe('version Manager', () => {
 
       await mkdir(join(outputDir, 'public', '_nuxt'), { recursive: true })
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       expect(assets).toEqual([])
     })
@@ -184,7 +184,7 @@ describe('version Manager', () => {
         await writeFile(join(outputDir, 'public', asset), 'content')
       }
       await manager.updateVersionsManifest('v1', v1Assets)
-      await manager.storeAssetsInStorage('v1', outputDir, v1Assets)
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), v1Assets)
 
       // Version 2 removes chunk-a, keeps entry and chunk-b
       const v2Assets = ['_nuxt/entry.ABC123.js', '_nuxt/chunk-b.GHI789.js']
@@ -192,7 +192,7 @@ describe('version Manager', () => {
         await writeFile(join(outputDir, 'public', asset), 'content')
       }
       await manager.updateVersionsManifest('v2', v2Assets)
-      await manager.storeAssetsInStorage('v2', outputDir, v2Assets)
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), v2Assets)
 
       // Re-read manifest to get updated deletedChunks
       const manifestPath = join(storageDir, 'version-manifest.json')
@@ -219,7 +219,7 @@ describe('version Manager', () => {
       }
 
       await manager.updateVersionsManifest('v1', assets)
-      await manager.storeAssetsInStorage('v1', outputDir, assets)
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), assets)
 
       const manifestPath = join(storageDir, 'version-manifest.json')
       const manifestData = await readFile(manifestPath, 'utf-8')
@@ -245,7 +245,7 @@ describe('version Manager', () => {
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest(buildId, assets)
-      await manager.storeAssetsInStorage(buildId, outputDir, assets)
+      await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
 
       // Verify asset is stored
       const storedAsset = await readFile(
@@ -268,11 +268,11 @@ describe('version Manager', () => {
       const sharedAsset = '_nuxt/vendors.ABC12345.js'
       await writeFile(join(outputDir, 'public', sharedAsset), 'shared content')
       await manager.updateVersionsManifest('v1', [sharedAsset])
-      await manager.storeAssetsInStorage('v1', outputDir, [sharedAsset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [sharedAsset])
 
       // Version 2 with same vendor chunk (same filename = same content due to content hashing)
       await manager.updateVersionsManifest('v2', [sharedAsset])
-      await manager.storeAssetsInStorage('v2', outputDir, [sharedAsset])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [sharedAsset])
 
       // Read manifest to check deduplication
       const manifestPath = join(storageDir, 'version-manifest.json')
@@ -302,20 +302,20 @@ describe('version Manager', () => {
       await writeFile(join(outputDir, 'public', v1Entry), 'v1 entry')
       await writeFile(join(outputDir, 'public', v1Chunk), 'v1 lazy chunk')
       await manager.updateVersionsManifest('v1', [v1Entry, v1Chunk])
-      await manager.storeAssetsInStorage('v1', outputDir, [v1Entry, v1Chunk])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [v1Entry, v1Chunk])
 
       // Version 2: new entry (different hash), keeps same lazy chunk filename
       const v2Entry = '_nuxt/entry.CCC33333.js'
       await writeFile(join(outputDir, 'public', v2Entry), 'v2 entry')
       await writeFile(join(outputDir, 'public', v1Chunk), 'v1 lazy chunk') // same chunk
       await manager.updateVersionsManifest('v2', [v2Entry, v1Chunk])
-      await manager.storeAssetsInStorage('v2', outputDir, [v2Entry, v1Chunk])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [v2Entry, v1Chunk])
 
       // Simulate fresh build output - only v2 assets exist
       await rm(join(outputDir, 'public', v1Entry), { force: true })
 
       // Restore old assets
-      await manager.restoreOldAssetsToPublic('v2', outputDir, [v2Entry, v1Chunk])
+      await manager.restoreOldAssetsToPublic('v2', join(outputDir, 'public'), [v2Entry, v1Chunk])
 
       // v1 entry should be restored at the CORRECT path
       const restoredV1Entry = await readFile(join(outputDir, 'public', v1Entry), 'utf-8')
@@ -339,13 +339,13 @@ describe('version Manager', () => {
       const v1Asset = '_nuxt/entry.ABC123.js'
       await writeFile(join(outputDir, 'public', v1Asset), 'v1 content')
       await manager.updateVersionsManifest('v1', [v1Asset])
-      await manager.storeAssetsInStorage('v1', outputDir, [v1Asset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [v1Asset])
 
       // Version 2 with different hash for entry
       const v2Asset = '_nuxt/entry.XYZ789.js'
       await writeFile(join(outputDir, 'public', v2Asset), 'v2 content')
       await manager.updateVersionsManifest('v2', [v2Asset])
-      await manager.storeAssetsInStorage('v2', outputDir, [v2Asset])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [v2Asset])
 
       // Both should be stored since they have different file IDs
       const manifestPath = join(storageDir, 'version-manifest.json')
@@ -372,7 +372,7 @@ describe('version Manager', () => {
         await writeFile(join(outputDir, 'public', asset), 'content')
       }
       await manager.updateVersionsManifest('b1', build1Assets)
-      await manager.storeAssetsInStorage('b1', outputDir, build1Assets)
+      await manager.storeAssetsInStorage('b1', join(outputDir, 'public'), build1Assets)
 
       // Build 2: assets A (same), B (same), D (new) - simulates partial non-determinism
       const build2Assets = ['_nuxt/entry.AAA111.js', '_nuxt/vendor.BBB222.js', '_nuxt/chunk.DDD444.js']
@@ -380,7 +380,7 @@ describe('version Manager', () => {
         await writeFile(join(outputDir, 'public', asset), 'content')
       }
       await manager.updateVersionsManifest('b2', build2Assets)
-      await manager.storeAssetsInStorage('b2', outputDir, build2Assets)
+      await manager.storeAssetsInStorage('b2', join(outputDir, 'public'), build2Assets)
 
       // Build 3: assets A (same), B (same), E (new) - more non-determinism
       const build3Assets = ['_nuxt/entry.AAA111.js', '_nuxt/vendor.BBB222.js', '_nuxt/chunk.EEE555.js']
@@ -388,7 +388,7 @@ describe('version Manager', () => {
         await writeFile(join(outputDir, 'public', asset), 'content')
       }
       await manager.updateVersionsManifest('b3', build3Assets)
-      await manager.storeAssetsInStorage('b3', outputDir, build3Assets)
+      await manager.storeAssetsInStorage('b3', join(outputDir, 'public'), build3Assets)
 
       // Verify manifest after all builds
       const manifestPath = join(storageDir, 'version-manifest.json')
@@ -438,19 +438,19 @@ describe('version Manager', () => {
       const v1Asset = '_nuxt/old-chunk.ABC123.js'
       await writeFile(join(outputDir, 'public', v1Asset), 'old content')
       await manager.updateVersionsManifest('v1', [v1Asset])
-      await manager.storeAssetsInStorage('v1', outputDir, [v1Asset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [v1Asset])
 
       // Version 2 (different asset)
       const v2Asset = '_nuxt/new-chunk.XYZ789.js'
       await writeFile(join(outputDir, 'public', v2Asset), 'new content')
       await manager.updateVersionsManifest('v2', [v2Asset])
-      await manager.storeAssetsInStorage('v2', outputDir, [v2Asset])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [v2Asset])
 
       // Remove old asset from public (simulating new build)
       await rm(join(outputDir, 'public', v1Asset), { force: true })
 
       // Restore old assets
-      await manager.restoreOldAssetsToPublic('v2', outputDir, [v2Asset])
+      await manager.restoreOldAssetsToPublic('v2', join(outputDir, 'public'), [v2Asset])
 
       // Old asset should be restored
       const restoredContent = await readFile(join(outputDir, 'public', v1Asset), 'utf-8')
@@ -470,16 +470,16 @@ describe('version Manager', () => {
       const v1Asset = '_nuxt/vendors.ABC123.js'
       await writeFile(join(outputDir, 'public', v1Asset), 'v1 vendors')
       await manager.updateVersionsManifest('v1', [v1Asset])
-      await manager.storeAssetsInStorage('v1', outputDir, [v1Asset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [v1Asset])
 
       // Version 2 with same file ID (vendors.ABC123) but in different path format
       // Since both extract to fileId "vendors.ABC123", v2 should replace v1 in storage
       const v2Asset = '_nuxt/vendors.ABC123.mjs' // Different extension = different file ID
       await writeFile(join(outputDir, 'public', v2Asset), 'v2 vendors')
       await manager.updateVersionsManifest('v2', [v2Asset])
-      await manager.storeAssetsInStorage('v2', outputDir, [v2Asset])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [v2Asset])
 
-      await manager.restoreOldAssetsToPublic('v2', outputDir, [v2Asset])
+      await manager.restoreOldAssetsToPublic('v2', join(outputDir, 'public'), [v2Asset])
 
       // v1 asset should be restored because v2 has different extension (different file ID)
       const v1Exists = await readFile(join(outputDir, 'public', v1Asset), 'utf-8')
@@ -503,7 +503,7 @@ describe('version Manager', () => {
 
       // First build
       await manager.updateVersionsManifest('v1', [asset])
-      await manager.storeAssetsInStorage('v1', outputDir, [asset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [asset])
 
       // Rebuild same version
       const result2 = await manager.updateVersionsManifest('v1', [asset])
@@ -512,7 +512,7 @@ describe('version Manager', () => {
       expect(result2.isExistingVersion).toBe(true)
 
       // Restoration should be skipped
-      await manager.restoreOldAssetsToPublic('v1', outputDir, [asset], result2.isExistingVersion)
+      await manager.restoreOldAssetsToPublic('v1', join(outputDir, 'public'), [asset], result2.isExistingVersion)
       // No error should occur
     })
   })
@@ -536,7 +536,7 @@ describe('version Manager', () => {
       // Manually create old version
       const { manifest } = await manager.updateVersionsManifest('old-v1', [oldAsset])
       manifest.versions['old-v1'].timestamp = oldDate.toISOString()
-      await manager.storeAssetsInStorage('old-v1', outputDir, [oldAsset])
+      await manager.storeAssetsInStorage('old-v1', join(outputDir, 'public'), [oldAsset])
 
       // Save modified manifest
       const manifestPath = join(storageDir, 'version-manifest.json')
@@ -546,7 +546,7 @@ describe('version Manager', () => {
       const currentAsset = '_nuxt/current.XYZ789.js'
       await writeFile(join(outputDir, 'public', currentAsset), 'current')
       await manager.updateVersionsManifest('current-v1', [currentAsset])
-      await manager.storeAssetsInStorage('current-v1', outputDir, [currentAsset])
+      await manager.storeAssetsInStorage('current-v1', join(outputDir, 'public'), [currentAsset])
 
       // Cleanup
       await manager.cleanupExpiredVersions()
@@ -577,7 +577,7 @@ describe('version Manager', () => {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `v${i}`)
         await manager.updateVersionsManifest(`v${i}`, [asset])
-        await manager.storeAssetsInStorage(`v${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`v${i}`, join(outputDir, 'public'), [asset])
 
         // Small delay to ensure timestamp ordering
         await new Promise(resolve => setTimeout(resolve, 10))
@@ -612,7 +612,7 @@ describe('version Manager', () => {
       const asset = '_nuxt/current.ABC123.js'
       await writeFile(join(outputDir, 'public', asset), 'current')
       await manager.updateVersionsManifest('current-v1', [asset])
-      await manager.storeAssetsInStorage('current-v1', outputDir, [asset])
+      await manager.storeAssetsInStorage('current-v1', join(outputDir, 'public'), [asset])
 
       await manager.cleanupExpiredVersions()
 
@@ -641,7 +641,7 @@ describe('version Manager', () => {
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest('build-123', assets)
-      await manager.augmentBuildMetadata('build-123', outputDir)
+      await manager.augmentBuildMetadata('build-123', join(outputDir, 'public'))
 
       const augmentedData = await readFile(latestPath, 'utf-8')
       const augmented = JSON.parse(augmentedData)
@@ -666,8 +666,8 @@ describe('version Manager', () => {
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest(buildId, assets)
-      await manager.storeAssetsInStorage(buildId, outputDir, assets)
-      await manager.augmentBuildMetadata(buildId, outputDir)
+      await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
+      await manager.augmentBuildMetadata(buildId, join(outputDir, 'public'))
 
       const augmentedData = await readFile(metaPath, 'utf-8')
       const augmented = JSON.parse(augmentedData)

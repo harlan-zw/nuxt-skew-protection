@@ -157,9 +157,9 @@ export function createAssetManager(options: {
   const retentionDays = options.retentionDays || 7
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
 
-  async function getAssetsFromBuild(outputDir: string) {
+  async function getAssetsFromBuild(publicDir: string) {
     const startTime = Date.now()
-    const nuxtDir = join(outputDir, 'public', '_nuxt')
+    const nuxtDir = join(publicDir, '_nuxt')
 
     logger.debug(`Scanning build assets from ${nuxtDir}`)
 
@@ -296,11 +296,9 @@ export function createAssetManager(options: {
     }
   }
 
-  async function storeAssetsInStorage(buildId: string, outputDir: string, assets: string[]) {
+  async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[]) {
     const startTime = Date.now()
     logger.debug(`storeAssetsInStorage: starting for ${buildId} (${assets.length} assets)`)
-
-    const publicDir = join(outputDir, 'public')
 
     const manifestStart = Date.now()
     const manifest = await getVersionManifest(storage)
@@ -413,7 +411,7 @@ export function createAssetManager(options: {
     }))
   }
 
-  async function restoreOldAssetsToPublic(currentBuildId: string, outputDir: string, currentAssets: string[] = [], isExistingVersion = false) {
+  async function restoreOldAssetsToPublic(currentBuildId: string, publicDir: string, currentAssets: string[] = [], isExistingVersion = false) {
     const startTime = Date.now()
     logger.debug(`restoreOldAssetsToPublic: starting for ${currentBuildId}`)
 
@@ -435,8 +433,6 @@ export function createAssetManager(options: {
 
     const versionCount = Object.keys(manifest.versions).length - 1 // exclude current
     logger.debug(`restoreOldAssetsToPublic: checking ${versionCount} previous versions`)
-
-    const publicDir = join(outputDir, 'public')
     const restoredAssets: Array<{ asset: string, size: number, versionId: string, age: string }> = []
     const currentAssetsSet = new Set(currentAssets)
 
@@ -602,11 +598,11 @@ export function createAssetManager(options: {
     logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
   }
 
-  async function augmentBuildMetadata(buildId: string, outputDir: string) {
+  async function augmentBuildMetadata(buildId: string, publicDir: string) {
     const manifest = await getVersionManifest(storage)
 
     // Augment builds/latest.json
-    const latestPath = join(outputDir, 'public', '_nuxt', 'builds', 'latest.json')
+    const latestPath = join(publicDir, '_nuxt', 'builds', 'latest.json')
     try {
       const latestData = await fs.readFile(latestPath, 'utf-8')
       const latestJson = JSON.parse(latestData)
@@ -633,7 +629,7 @@ export function createAssetManager(options: {
     }
 
     // Augment builds/meta/{buildId}.json
-    const metaPath = join(outputDir, 'public', '_nuxt', 'builds', 'meta', `${buildId}.json`)
+    const metaPath = join(publicDir, '_nuxt', 'builds', 'meta', `${buildId}.json`)
     try {
       const metaData = await fs.readFile(metaPath, 'utf-8')
       const metaJson = JSON.parse(metaData)

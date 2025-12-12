@@ -41,11 +41,11 @@ describe('module Hooks', () => {
 
       // Simulate rollup:before hook
       executionOrder.push('rollup:before-start')
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-1', assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, assets)
-      await manager.restoreOldAssetsToPublic('build-1', outputDir, assets)
-      await manager.augmentBuildMetadata('build-1', outputDir)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), assets)
+      await manager.restoreOldAssetsToPublic('build-1', join(outputDir, 'public'), assets)
+      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
       executionOrder.push('rollup:before-end')
 
       // Simulate close hook
@@ -76,7 +76,7 @@ describe('module Hooks', () => {
         await mkdir(nuxtDir, { recursive: true })
         await writeFile(join(nuxtDir, 'test.ABC123.js'), 'test')
 
-        const assets = await manager.getAssetsFromBuild(outputDir)
+        const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
         await manager.updateVersionsManifest('build-1', assets)
       }
 
@@ -119,7 +119,7 @@ describe('module Hooks', () => {
             debug: false,
           })
           capturedManager = assetManager
-          const assets = await assetManager.getAssetsFromBuild(outputDir)
+          const assets = await assetManager.getAssetsFromBuild(join(outputDir, 'public'))
           await assetManager.updateVersionsManifest('build-1', assets)
         }
 
@@ -159,9 +159,9 @@ describe('module Hooks', () => {
       await writeFile(join(buildsDir, 'meta', 'build-1.json'), JSON.stringify({ id: 'build-1' }), 'utf-8')
       await writeFile(join(nuxtDir, 'entry.ABC123.js'), 'v1 entry')
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-1', assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, assets)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), assets)
 
       // Verify files cached in storage
       const versions = await manager.listExistingVersions()
@@ -183,10 +183,10 @@ describe('module Hooks', () => {
       await writeFile(join(buildsDir, 'meta', 'build-1.json'), JSON.stringify({ id: 'build-1' }), 'utf-8')
       await writeFile(join(nuxtDir, 'entry.ABC123.js'), 'v1 entry')
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-1', assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, assets)
-      await manager.augmentBuildMetadata('build-1', outputDir)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), assets)
+      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
 
       // Verify latest.json was augmented
       const latestPath = join(buildsDir, 'latest.json')
@@ -213,9 +213,9 @@ describe('module Hooks', () => {
       await writeFile(join(buildsDir, 'meta', 'build-1.json'), JSON.stringify({ id: 'build-1' }), 'utf-8')
       await writeFile(join(nuxtDir, 'entry.OLD123.js'), 'old entry')
 
-      const build1Assets = await manager.getAssetsFromBuild(outputDir)
+      const build1Assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-1', build1Assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, build1Assets)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), build1Assets)
 
       // Build 2
       await rm(join(nuxtDir, 'entry.OLD123.js'))
@@ -223,10 +223,10 @@ describe('module Hooks', () => {
       await writeFile(join(buildsDir, 'latest.json'), JSON.stringify({ id: 'build-2' }), 'utf-8')
       await writeFile(join(buildsDir, 'meta', 'build-2.json'), JSON.stringify({ id: 'build-2' }), 'utf-8')
 
-      const build2Assets = await manager.getAssetsFromBuild(outputDir)
+      const build2Assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-2', build2Assets)
-      await manager.storeAssetsInStorage('build-2', outputDir, build2Assets)
-      await manager.restoreOldAssetsToPublic('build-2', outputDir, build2Assets)
+      await manager.storeAssetsInStorage('build-2', join(outputDir, 'public'), build2Assets)
+      await manager.restoreOldAssetsToPublic('build-2', join(outputDir, 'public'), build2Assets)
 
       // Verify old entry was restored
       const { readFile } = await import('node:fs/promises')
@@ -252,7 +252,7 @@ describe('module Hooks', () => {
         const asset = `_nuxt/build-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `build ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -307,16 +307,16 @@ describe('module Hooks', () => {
 
       // Simulate rollup:before operations
       operations.push('get-assets')
-      await manager.getAssetsFromBuild(outputDir)
+      await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       operations.push('update-manifest')
       await manager.updateVersionsManifest('build-1', ['_nuxt/entry.ABC123.js'])
 
       operations.push('store-assets')
-      await manager.storeAssetsInStorage('build-1', outputDir, ['_nuxt/entry.ABC123.js'])
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), ['_nuxt/entry.ABC123.js'])
 
       operations.push('augment-metadata')
-      await manager.augmentBuildMetadata('build-1', outputDir)
+      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
 
       // Verify operation order
       expect(operations).toEqual([

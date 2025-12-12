@@ -40,10 +40,10 @@ describe('version Management Integration', () => {
       await writeFile(join(build1Dir, 'entry.ABC123.js'), 'v1 entry')
       await writeFile(join(build1Dir, 'chunk-vendors.DEF456.js'), 'v1 vendors')
 
-      const build1Assets = await manager.getAssetsFromBuild(outputDir)
+      const build1Assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       await manager.updateVersionsManifest('build-1', build1Assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, build1Assets)
-      await manager.augmentBuildMetadata('build-1', outputDir)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), build1Assets)
+      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
 
       // Build 2: Update with new entry, keep vendors
       await rm(join(build1Dir, 'entry.ABC123.js'))
@@ -51,11 +51,11 @@ describe('version Management Integration', () => {
       await writeFile(join(build1BuildsDir, 'latest.json'), JSON.stringify({ id: 'build-2' }), 'utf-8')
       await writeFile(join(build1BuildsDir, 'meta', 'build-2.json'), JSON.stringify({ id: 'build-2' }), 'utf-8')
 
-      const build2Assets = await manager.getAssetsFromBuild(outputDir)
+      const build2Assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
       const { manifest: manifest2 } = await manager.updateVersionsManifest('build-2', build2Assets)
-      await manager.storeAssetsInStorage('build-2', outputDir, build2Assets)
-      await manager.restoreOldAssetsToPublic('build-2', outputDir, build2Assets)
-      await manager.augmentBuildMetadata('build-2', outputDir)
+      await manager.storeAssetsInStorage('build-2', join(outputDir, 'public'), build2Assets)
+      await manager.restoreOldAssetsToPublic('build-2', join(outputDir, 'public'), build2Assets)
+      await manager.augmentBuildMetadata('build-2', join(outputDir, 'public'))
 
       // Verify old entry was restored
       const oldEntryExists = await readFile(join(outputDir, 'public', '_nuxt', 'entry.ABC123.js'), 'utf-8')
@@ -96,7 +96,7 @@ describe('version Management Integration', () => {
         const asset = `_nuxt/build-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `build ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -130,21 +130,21 @@ describe('version Management Integration', () => {
       await writeFile(join(outputDir, 'public', '_nuxt', 'entry.V1.js'), 'entry v1')
       const build1Assets = [sharedVendor, '_nuxt/entry.V1.js']
       await manager.updateVersionsManifest('build-1', build1Assets)
-      await manager.storeAssetsInStorage('build-1', outputDir, build1Assets)
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), build1Assets)
 
       // Build 2 with same shared vendor
       await rm(join(outputDir, 'public', '_nuxt', 'entry.V1.js'))
       await writeFile(join(outputDir, 'public', '_nuxt', 'entry.V2.js'), 'entry v2')
       const build2Assets = [sharedVendor, '_nuxt/entry.V2.js']
       await manager.updateVersionsManifest('build-2', build2Assets)
-      await manager.storeAssetsInStorage('build-2', outputDir, build2Assets)
+      await manager.storeAssetsInStorage('build-2', join(outputDir, 'public'), build2Assets)
 
       // Build 3 with same shared vendor
       await rm(join(outputDir, 'public', '_nuxt', 'entry.V2.js'))
       await writeFile(join(outputDir, 'public', '_nuxt', 'entry.V3.js'), 'entry v3')
       const build3Assets = [sharedVendor, '_nuxt/entry.V3.js']
       await manager.updateVersionsManifest('build-3', build3Assets)
-      await manager.storeAssetsInStorage('build-3', outputDir, build3Assets)
+      await manager.storeAssetsInStorage('build-3', join(outputDir, 'public'), build3Assets)
 
       const manifestPath = join(storageDir, 'version-manifest.json')
       const manifestData = await readFile(manifestPath, 'utf-8')
@@ -176,7 +176,7 @@ describe('version Management Integration', () => {
       await writeFile(join(outputDir, 'public', asset), assetContent)
 
       await manager.updateVersionsManifest('build-1', [asset])
-      await manager.storeAssetsInStorage('build-1', outputDir, [asset])
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), [asset])
 
       // Verify stored in filesystem
       const storedContent = await readFile(
@@ -199,7 +199,7 @@ describe('version Management Integration', () => {
       await writeFile(join(outputDir, 'public', asset), 'test content')
 
       await manager.updateVersionsManifest('build-1', [asset])
-      await manager.storeAssetsInStorage('build-1', outputDir, [asset])
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), [asset])
 
       // Verify can list versions (stored in memory)
       const versions = await manager.listExistingVersions()
@@ -233,7 +233,7 @@ describe('version Management Integration', () => {
       await mkdir(nuxtDir, { recursive: true })
       await writeFile(join(nuxtDir, 'test.js'), 'test')
 
-      const assets = await manager.getAssetsFromBuild(outputDir)
+      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       // Should create new manifest even if storage doesn't exist yet
       const result = await manager.updateVersionsManifest('build-1', assets)
@@ -259,7 +259,7 @@ describe('version Management Integration', () => {
       await manager.updateVersionsManifest('build-1', ['_nuxt/test.js'])
 
       // Try to augment without builds directory
-      await manager.augmentBuildMetadata('build-1', outputDir)
+      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
 
       // Should not throw error
     })
