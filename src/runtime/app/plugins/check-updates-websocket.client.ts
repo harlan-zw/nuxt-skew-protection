@@ -4,20 +4,6 @@ import { watch } from 'vue'
 import { logger } from '../../shared/logger'
 import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
 
-/**
- * WebSocket Version Updates Plugin
- *
- * Similar to the SSE plugin, but uses WebSocket for real-time version notifications.
- * Works with any WebSocket-capable backend (Cloudflare Durable Objects, custom WebSocket servers, etc.)
- *
- * Fires the same 'app:manifest:update' hook that Nuxt's chunk-reload plugin listens to.
- * This allows our WebSocket updates to integrate seamlessly with Nuxt's existing reload logic.
- *
- * Can be used on:
- * - Cloudflare Workers with Durable Objects
- * - Custom WebSocket servers
- * - Any platform that supports WebSocket connections
- */
 export default defineNuxtPlugin({
   name: 'skew-protection:websocket-updates',
   setup(nuxtApp) {
@@ -48,60 +34,49 @@ export default defineNuxtPlugin({
           type: 'ping',
           timestamp: Date.now(),
         }),
-        interval: 30000, // Every 30 seconds
+        interval: 30000,
         pongTimeout: 10000,
       },
-      immediate: false, // Don't connect immediately, wait for app:mounted
+      immediate: false,
     })
 
-    // Watch connection status
     watch(status, (newStatus) => {
       logger.debug(`[WS] Connection status changed: ${newStatus}`)
     })
 
-    // Watch for messages
     watch(data, (message: string | null) => {
       if (!message)
         return
 
-      try {
-        const parsed = JSON.parse(message)
-        logger.debug('[WS] Message received:', parsed)
+      const parsed = JSON.parse(message)
+      logger.debug('[WS] Message received:', parsed)
 
-        if (parsed.type === 'ping') {
-          logger.debug('[WS] Heartbeat ping')
-          return
+      if (parsed.type === 'ping')
+        return
+
+      nuxtApp.hooks.callHook('skew:message', parsed)
+
+      if (parsed.version) {
+        const newVersion = parsed.version
+        logger.debug(`[WS] Server version: ${newVersion}, Client version: ${clientVersion}`)
+
+        if (newVersion !== clientVersion) {
+          logger.debug('[WS] Version mismatch detected, triggering update check')
+          nuxtApp.runWithContext(checkForUpdates)
         }
-
-        if (parsed.version) {
-          const newVersion = parsed.version
-          logger.debug(`[WS] Server version: ${newVersion}, Client version: ${clientVersion}`)
-
-          if (newVersion !== clientVersion) {
-            logger.debug('[WS] Version mismatch detected, triggering update check')
-            // Fire Nuxt's standard hook - chunk-reload plugin will handle it
-            nuxtApp.runWithContext(checkForUpdates)
-          }
-        }
-      }
-      catch (error) {
-        logger.error('[WS] Failed to parse WebSocket message:', error)
       }
     })
 
-    // Connect when app is ready
     nuxtApp.hook('app:mounted', () => {
       logger.debug('[WS] App mounted, opening connection')
       open()
     })
 
-    // Cleanup on app teardown
     nuxtApp.hook('app:error', () => {
       logger.debug('[WS] App error, closing connection')
       close()
     })
 
-    // Cleanup on page unload
     if (import.meta.client) {
       window.addEventListener('beforeunload', () => {
         logger.debug('[WS] Page unload, closing connection')

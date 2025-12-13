@@ -7,6 +7,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
     name?: string
   }
   debug: boolean
+  connectionTracking?: boolean
 }
 
 export interface SkewProtectionRuntimeConfig {
@@ -15,6 +16,7 @@ export interface SkewProtectionRuntimeConfig {
   }
   buildId: string
   debug: boolean
+  connectionTracking?: boolean
 }
 
 export interface ChunksOutdatedPayload {
