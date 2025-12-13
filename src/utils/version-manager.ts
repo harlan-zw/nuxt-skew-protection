@@ -5,6 +5,41 @@ import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
 import { logger } from '../logger'
 
+function formatStorageError(error: unknown, operation: string): Error {
+  const cause = error instanceof Error ? (error.cause as Error | undefined) : undefined
+  const message = error instanceof Error ? error.message : String(error)
+  const causeMessage = cause?.message || ''
+
+  // DNS resolution failure
+  if (causeMessage.includes('ENOTFOUND') || causeMessage.includes('getaddrinfo')) {
+    const hostMatch = causeMessage.match(/ENOTFOUND\s+(\S+)/) || causeMessage.match(/getaddrinfo\s+\S+\s+(\S+)/)
+    const host = hostMatch?.[1] || 'unknown host'
+    return new Error(`Storage ${operation} failed: Could not resolve host '${host}'. Check your storage URL/credentials are correct.`)
+  }
+
+  // Connection refused
+  if (causeMessage.includes('ECONNREFUSED') || message.includes('ECONNREFUSED')) {
+    return new Error(`Storage ${operation} failed: Connection refused. Is the storage server running and accessible?`)
+  }
+
+  // Auth/permission errors
+  if (message.includes('401') || message.includes('Unauthorized') || message.includes('WRONGPASS')) {
+    return new Error(`Storage ${operation} failed: Authentication failed. Check your storage credentials.`)
+  }
+
+  // Timeout
+  if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
+    return new Error(`Storage ${operation} failed: Connection timed out. Check network connectivity to storage.`)
+  }
+
+  // Generic fetch failure
+  if (message === 'fetch failed') {
+    return new Error(`Storage ${operation} failed: Network error. ${causeMessage || 'Check your storage configuration.'}`)
+  }
+
+  return new Error(`Storage ${operation} failed: ${message}`)
+}
+
 /**
  * Process array items in batches to limit memory usage
  */
@@ -99,31 +134,29 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 
 // Get the unified manifest
 async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
-  try {
-    const manifest = await storage.getItem('version-manifest.json')
+  const emptyManifest: VersionManifest = { current: '', versions: {} }
 
-    // Ensure we have a valid manifest structure
-    if (manifest && typeof manifest === 'object' && 'versions' in manifest) {
-      return manifest as VersionManifest
-    }
-
-    // Return default manifest if invalid or missing
-    return {
-      current: '',
-      versions: {},
-    }
-  }
-  catch {
-    return {
-      current: '',
-      versions: {},
-    }
-  }
+  return storage.getItem('version-manifest.json')
+    .then((manifest) => {
+      if (manifest && typeof manifest === 'object' && 'versions' in manifest)
+        return manifest as VersionManifest
+      return emptyManifest
+    })
+    .catch((e: unknown) => {
+      const message = e instanceof Error ? e.message : String(e)
+      const cause = e instanceof Error ? (e.cause as Error | undefined)?.message || '' : ''
+      // Connection errors should throw, not return empty manifest
+      if (cause.includes('ENOTFOUND') || cause.includes('ECONNREFUSED') || message.includes('401') || message === 'fetch failed')
+        throw formatStorageError(e, 'read')
+      // Other errors (not found, etc.) return empty manifest
+      return emptyManifest
+    })
 }
 
 // Update the manifest
 async function setVersionManifest(manifest: VersionManifest, storage: Storage): Promise<void> {
   await storage.setItem('version-manifest.json', manifest)
+    .catch((e) => { throw formatStorageError(e, 'write') })
 }
 
 // ============================================================================
