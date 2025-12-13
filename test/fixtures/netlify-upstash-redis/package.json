@@ -1,0 +1,13 @@
+{
+  "name": "test-fixture-netlify-upstash-redis",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.35.0"
+  }
+}
