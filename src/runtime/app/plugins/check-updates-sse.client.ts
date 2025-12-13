@@ -39,7 +39,6 @@ export default defineNuxtPlugin({
       if (!message)
         return
 
-      // @ts-expect-error custom hook
       nuxtApp.hooks.callHook('skew:message', message)
 
       if (message.type === 'connected' && message.version) {

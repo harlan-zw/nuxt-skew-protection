@@ -54,7 +54,6 @@ export default defineNuxtPlugin({
       if (parsed.type === 'ping')
         return
 
-      // @ts-expect-error custom hook
       nuxtApp.hooks.callHook('skew:message', parsed)
 
       if (parsed.version) {

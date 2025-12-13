@@ -17,7 +17,6 @@ export function useActiveConnections() {
 
   if (!hooked) {
     hooked = true
-    // @ts-expect-error custom hook
     useNuxtApp().hooks.hook('skew:message', (message: { type: string, total?: number, versions?: Record<string, number> }) => {
       if (message.type === 'stats')
         stats.value = { total: message.total!, versions: message.versions! }
