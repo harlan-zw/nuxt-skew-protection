@@ -144,7 +144,7 @@ describe('adapters', () => {
       const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
       await ablyBroadcast(config, 'test-version-123')
 
-      expect(mockPublish).toHaveBeenCalledWith('VersionUpdated', { version: 'test-version-123' })
+      expect(mockPublish).toHaveBeenCalledWith('version', { version: 'test-version-123' })
     })
 
     it('broadcast should throw on SDK error', async () => {

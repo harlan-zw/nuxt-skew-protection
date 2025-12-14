@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  modules: ['../../../src/module'],
+  modules: ['@nuxtjs/robots', '../../../src/module'],
   compatibilityDate: '2024-11-01',
 
   skewProtection: {

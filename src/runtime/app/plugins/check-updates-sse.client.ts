@@ -1,54 +1,40 @@
+import type { SkewSSEConfig } from '../types'
 import { useEventSource } from '@vueuse/core'
-import { defineNuxtPlugin } from 'nuxt/app'
+import { defineNuxtPlugin, useNuxtApp } from 'nuxt/app'
 import { watch } from 'vue'
-import { logger } from '../../shared/logger'
-import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
+import { createSkewConnection } from '../utils/create-skew-connection'
+
+export type { SkewSSEConfig }
 
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
-  setup(nuxtApp) {
-    const { clientVersion } = useSkewProtection()
+  async setup() {
+    const nuxtApp = useNuxtApp()
 
-    logger.debug('[SSE] Initializing SSE connection for version updates')
-
-    const { data, status, error } = useEventSource(`/_skew/sse`, [], {
-      autoReconnect: {
-        retries: 10,
-        delay: 5000,
-        onFailed() {
-          logger.error('[SSE] Max reconnection attempts reached')
-        },
+    const config: SkewSSEConfig = {
+      url: '/_skew/sse',
+      options: {
+        autoReconnect: { retries: 10, delay: 5000 },
       },
-      serializer: {
-        // @ts-expect-error untyped
-        read: rawData => JSON.parse(rawData),
+    }
+
+    await nuxtApp.callHook('skew:sse:config', config)
+
+    const skewConnection = createSkewConnection({
+      name: 'SSE',
+      setup(onMessage) {
+        const sse = useEventSource(config.url, [], config.options)
+
+        watch(sse.data, (raw) => {
+          if (!raw)
+            return
+          onMessage(JSON.parse(raw))
+        })
+
+        return sse.close
       },
     })
 
-    watch(status, (newStatus) => {
-      logger.debug(`[SSE] Connection status changed: ${newStatus}`)
-    })
-
-    watch(error, (err) => {
-      if (err)
-        logger.debug('[SSE] Connection error:', err)
-    })
-
-    watch(data, (message) => {
-      logger.debug('[SSE] Message received:', message)
-      if (!message)
-        return
-
-      nuxtApp.hooks.callHook('skew:message', message)
-
-      if (message.type === 'connected' && message.version) {
-        const newVersion = message.version
-        logger.debug(`[SSE] Server version: ${newVersion}, Client version: ${clientVersion}`)
-        if (newVersion !== clientVersion) {
-          logger.debug('[SSE] Version mismatch detected, triggering update check')
-          nuxtApp.runWithContext(checkForUpdates)
-        }
-      }
-    })
+    return { provide: { skewConnection } }
   },
 })

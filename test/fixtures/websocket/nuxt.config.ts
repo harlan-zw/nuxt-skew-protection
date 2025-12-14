@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  modules: ['../../../src/module'],
+  modules: ['@nuxtjs/robots', '../../../src/module'],
   compatibilityDate: '2024-11-01',
 
   nitro: {
@@ -16,6 +16,7 @@ export default defineNuxtConfig({
   skewProtection: {
     debug: true,
     updateStrategy: 'ws',
+    connectionTracking: true,
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),

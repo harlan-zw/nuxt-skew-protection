@@ -1,87 +1,52 @@
+import type { SkewWebSocketConfig } from '../types'
 import { useWebSocket } from '@vueuse/core'
-import { defineNuxtPlugin } from 'nuxt/app'
+import { defineNuxtPlugin, useNuxtApp } from 'nuxt/app'
 import { watch } from 'vue'
-import { logger } from '../../shared/logger'
-import { checkForUpdates, useSkewProtection } from '../composables/useSkewProtection'
+import { SKEW_MESSAGE_TYPE } from '../../const'
+import { createSkewConnection } from '../utils/create-skew-connection'
+
+export type { SkewWebSocketConfig }
 
 export default defineNuxtPlugin({
-  name: 'skew-protection:websocket-updates',
-  setup(nuxtApp) {
-    const { clientVersion } = useSkewProtection()
+  name: 'skew-protection:ws-updates',
+  async setup() {
+    const nuxtApp = useNuxtApp()
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = typeof window !== 'undefined'
-      ? `${protocol}//${window.location.host}/_skew/ws`
-      : ''
-
-    logger.debug(`[WS] Initializing WebSocket connection: ${url}`)
-
-    const {
-      data,
-      status,
-      open,
-      close,
-    } = useWebSocket(url, {
-      autoReconnect: {
-        retries: 10,
-        delay: 5000,
-        onFailed() {
-          logger.error('[WS] Max reconnection attempts reached')
+    const config: SkewWebSocketConfig = {
+      url: `${protocol}//${window.location.host}/_skew/ws`,
+      options: {
+        autoReconnect: { retries: 10, delay: 5000 },
+        heartbeat: {
+          message: JSON.stringify({ type: SKEW_MESSAGE_TYPE.PING, timestamp: Date.now() }),
+          interval: 30000,
+          pongTimeout: 10000,
         },
+        immediate: false,
       },
-      heartbeat: {
-        message: JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now(),
-        }),
-        interval: 30000,
-        pongTimeout: 10000,
-      },
-      immediate: false,
-    })
-
-    watch(status, (newStatus) => {
-      logger.debug(`[WS] Connection status changed: ${newStatus}`)
-    })
-
-    watch(data, (message: string | null) => {
-      if (!message)
-        return
-
-      const parsed = JSON.parse(message)
-      logger.debug('[WS] Message received:', parsed)
-
-      if (parsed.type === 'ping')
-        return
-
-      nuxtApp.hooks.callHook('skew:message', parsed)
-
-      if (parsed.version) {
-        const newVersion = parsed.version
-        logger.debug(`[WS] Server version: ${newVersion}, Client version: ${clientVersion}`)
-
-        if (newVersion !== clientVersion) {
-          logger.debug('[WS] Version mismatch detected, triggering update check')
-          nuxtApp.runWithContext(checkForUpdates)
-        }
-      }
-    })
-
-    nuxtApp.hook('app:mounted', () => {
-      logger.debug('[WS] App mounted, opening connection')
-      open()
-    })
-
-    nuxtApp.hook('app:error', () => {
-      logger.debug('[WS] App error, closing connection')
-      close()
-    })
-
-    if (import.meta.client) {
-      window.addEventListener('beforeunload', () => {
-        logger.debug('[WS] Page unload, closing connection')
-        close()
-      })
     }
+
+    await nuxtApp.callHook('skew:ws:config', config)
+
+    const skewConnection = createSkewConnection({
+      name: 'WS',
+      setup(onMessage) {
+        const ws = useWebSocket(config.url, config.options)
+
+        watch(ws.data, (raw: string | null) => {
+          if (!raw)
+            return
+          const msg = JSON.parse(raw)
+          if (msg.type === SKEW_MESSAGE_TYPE.PING)
+            return
+          onMessage(msg)
+        })
+
+        ws.open()
+        return ws.close
+      },
+    })
+
+    return { provide: { skewConnection } }
   },
 })
