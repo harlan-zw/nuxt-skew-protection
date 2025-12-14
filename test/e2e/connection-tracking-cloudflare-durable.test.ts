@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { isCI } from 'std-env'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 
@@ -125,7 +126,8 @@ function createWs(version?: string): Promise<WsConn> {
   })
 }
 
-describe.sequential('connection-tracking-cloudflare-durable', () => {
+// Skip in CI - requires CLOUDFLARE_API_TOKEN
+describe.skipIf(isCI).sequential('connection-tracking-cloudflare-durable', () => {
   let wranglerProc: ChildProcess | null = null
   let activeConns: WsConn[] = []
 
