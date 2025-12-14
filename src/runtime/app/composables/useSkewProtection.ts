@@ -3,9 +3,6 @@ import type { ChunksOutdatedPayload } from '../../types'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
 import { useOnline } from '@vueuse/core'
-import { useNuxtApp } from 'nuxt/app'
-import { computed, onUnmounted, ref } from 'vue'
-import { useRuntimeConfigSkewProtection } from './useRuntimeConfigSkewProtection'
 import { useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { SKEW_MESSAGE_TYPE } from '../../const'
@@ -19,6 +16,7 @@ export interface UseSkewProtectionOptions {
    * When true, users must call connect() manually
    * @default false
    */
+  lazy?: boolean
 }
 
 const isConnected = ref(false)
