@@ -9,18 +9,12 @@ import { setSkewProtectionCookie } from '../imports/cookie'
 export default defineEventHandler(async (event) => {
   // Only handle document requests
   const secFetchDest = getHeader(event, 'sec-fetch-dest')
-  if (secFetchDest !== 'document') {
+  if (secFetchDest !== 'document')
     return
-  }
 
-  // Get current build ID
-  const config = useRuntimeConfig(event)
-  const currentBuildId = config.app.buildId
-
-  if (!currentBuildId) {
+  const buildId = useRuntimeConfig(event).app.buildId
+  if (!buildId)
     return
-  }
 
-  // Set cookie for this document request
-  setSkewProtectionCookie(event, currentBuildId)
+  setSkewProtectionCookie(event, buildId)
 })

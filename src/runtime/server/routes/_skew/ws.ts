@@ -1,22 +1,22 @@
 import { parse as parseCookie } from 'cookie-es'
 import { defineWebSocketHandler } from 'h3'
 import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
+import { SKEW_MESSAGE_TYPE } from '../../../const'
+import { getSkewProtectionCookieName } from '../../imports/cookie'
 
 export default defineWebSocketHandler({
   open(peer) {
-    const runtimeConfig = useRuntimeConfig()
-    const serverVersion = runtimeConfig.app?.buildId
-    const skewConfig = runtimeConfig.public.skewProtection as Record<string, any>
+    const serverVersion = useRuntimeConfig().app.buildId
+    const cookieName = getSkewProtectionCookieName()
 
     peer.send(JSON.stringify({
-      type: 'connected',
+      type: SKEW_MESSAGE_TYPE.CONNECTED,
       version: serverVersion,
       timestamp: Date.now(),
     }))
 
     const cookieHeader = peer.request?.headers?.get('cookie') || ''
     const cookies = parseCookie(cookieHeader)
-    const cookieName = skewConfig?.cookie?.name || '__nkpv'
     const clientVersion = cookies[cookieName] || serverVersion
 
     // @ts-expect-error custom hook
@@ -24,6 +24,7 @@ export default defineWebSocketHandler({
       id: peer.id,
       version: clientVersion,
       send: (data: any) => peer.send(JSON.stringify(data)),
+      peer,
     })
   },
 
@@ -35,6 +36,6 @@ export default defineWebSocketHandler({
 
   close(peer) {
     // @ts-expect-error custom hook
-    useNitroApp().hooks.callHook('skew:connection:close', { id: peer.id })
+    useNitroApp().hooks.callHook('skew:connection:close', { id: peer.id, peer })
   },
 })

@@ -1,20 +1,20 @@
 import { createEventStream, defineEventHandler } from 'h3'
 import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
+import { SKEW_MESSAGE_TYPE } from '../../../const'
 import { getSkewProtectionCookie } from '../../imports/cookie'
 
 export default defineEventHandler(async (event) => {
   const nitroApp = useNitroApp()
   const stream = createEventStream(event)
 
-  const config = useRuntimeConfig()
-  const serverVersion = config.app.buildId
+  const serverVersion = useRuntimeConfig(event).app.buildId
 
   const send = (data: any) => {
     stream.push(JSON.stringify(data))
   }
 
   send({
-    type: 'connected',
+    type: SKEW_MESSAGE_TYPE.CONNECTED,
     version: serverVersion,
     timestamp: Date.now(),
   })

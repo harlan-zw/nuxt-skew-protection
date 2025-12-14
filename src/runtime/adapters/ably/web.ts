@@ -1,6 +1,7 @@
 import type { AblyAdapterConfig } from './types'
 import { onNuxtReady } from 'nuxt/app'
 import { defineWebSubscribe } from '../../../utils'
+import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
 
 export const subscribe = defineWebSubscribe<AblyAdapterConfig>((config, onMessage) => {
   let cleanup: (() => void) | undefined
@@ -8,8 +9,8 @@ export const subscribe = defineWebSubscribe<AblyAdapterConfig>((config, onMessag
   onNuxtReady(async () => {
     const { Realtime } = await import('ably')
     const ably = new Realtime({ key: config.key })
-    const channelName = config.channel || 'skew-protection'
-    const eventName = config.event || 'VersionUpdated'
+    const channelName = config.channel || SKEW_DEFAULT_CHANNEL
+    const eventName = config.event || SKEW_MESSAGE_TYPE.VERSION
 
     const channel = ably.channels.get(channelName)
     await channel.subscribe(eventName, (message) => {

@@ -14,7 +14,6 @@ export interface SkewProtectionRuntimeConfig {
   cookie: Omit<CookieSerializeOptions, 'encode'> & {
     name: string
   }
-  buildId: string
   debug: boolean
   connectionTracking?: boolean
 }
