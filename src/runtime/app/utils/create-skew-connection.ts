@@ -33,15 +33,16 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   // Skip connection for bots using @nuxtjs/robots detection
   const { isBot } = useBotDetection()
-  if (isBot.value) {
-    logger.debug(`[${name}] Skipping connection for bot`)
-    return { connect: () => {}, disconnect: () => {}, buildId, cookie: useCookie('') }
-  }
 
-  // Initialize cookie
+  // Initialize cookie first (always needed for return value)
   const cookieConfig = runtimeConfig.public.skewProtection.cookie
   const { name: cookieName, ...cookieOpts } = cookieConfig
   const cookie = useCookie(cookieName, { ...(cookieOpts as CookieOptions), readonly: false })
+
+  if (isBot.value) {
+    logger.debug(`[${name}] Skipping connection for bot`)
+    return { connect: () => {}, disconnect: () => {}, buildId, cookie }
+  }
 
   // Set cookie client-side if not already set
   if (import.meta.client && !cookie.value) {

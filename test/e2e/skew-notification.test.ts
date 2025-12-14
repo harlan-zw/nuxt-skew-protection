@@ -27,7 +27,10 @@ describe('skew-notification', () => {
 
   it('shows notification when app:manifest:update hook fires', async () => {
     const browser = await chromium.launch({ headless: true })
-    const page = await browser.newPage()
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
 
     await page.goto(`http://localhost:${port}`)
     await page.waitForSelector('[data-testid="version"]')
@@ -58,7 +61,10 @@ describe('skew-notification', () => {
 
   it('notification is hidden when no skew detected', async () => {
     const browser = await chromium.launch({ headless: true })
-    const page = await browser.newPage()
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
 
     await page.goto(`http://localhost:${port}`)
     await page.waitForSelector('[data-testid="version"]')
@@ -73,7 +79,10 @@ describe('skew-notification', () => {
 
   it('dismiss button hides notification', async () => {
     const browser = await chromium.launch({ headless: true })
-    const page = await browser.newPage()
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
 
     await page.goto(`http://localhost:${port}`)
     await page.waitForSelector('[data-testid="version"]')

@@ -7,7 +7,7 @@ import WebSocket from 'ws'
 import { build, cleanFixture, sleep, startServer, stopServer } from './utils'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const fixtureDir = resolve(__dirname, '../fixtures/websocket')
+const fixtureDir = resolve(__dirname, '../fixtures/bot-detection')
 const port = 3338 // unique port
 
 function getConnectionCount(): Promise<number> {

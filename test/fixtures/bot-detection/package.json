@@ -1,0 +1,10 @@
+{
+  "name": "test-fixture-websocket",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview"
+  }
+}
