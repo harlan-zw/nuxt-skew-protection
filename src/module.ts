@@ -95,6 +95,11 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt: '>=4.0.0',
     },
     configKey: 'skewProtection',
+    moduleDependencies: {
+      '@nuxtjs/robots': {
+        version: '>=5.6.7',
+      },
+    },
   },
   defaults: {
     retentionDays: 30,

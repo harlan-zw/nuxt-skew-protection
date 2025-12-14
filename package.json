@@ -60,6 +60,7 @@
     "test:attw": "attw --pack"
   },
   "peerDependencies": {
+    "@nuxtjs/robots": ">=5.6.7",
     "ably": ">=2",
     "pusher-js": ">=8"
   },
@@ -78,7 +79,7 @@
     "consola": "^3.4.2",
     "cookie-es": "^2.0.0",
     "defu": "^6.1.4",
-    "nuxt-site-config": "^3.2.13",
+    "nuxt-site-config": "^3.2.14",
     "ofetch": "^1.5.1",
     "pathe": "^2.0.3",
     "pkg-types": "^2.3.0",
@@ -99,6 +100,7 @@
     "@nuxtjs/color-mode": "^4.0.0",
     "@nuxtjs/eslint-config-typescript": "^12.1.0",
     "@nuxtjs/i18n": "^10.2.1",
+    "@nuxtjs/robots": "^5.6.7",
     "@types/ioredis": "^5.0.0",
     "@types/ws": "^8.18.1",
     "@unocss/nuxt": "66.5.10",
@@ -141,6 +143,7 @@
     ]
   },
   "resolutions": {
-    "nuxt-skew-protection": "workspace:*"
+    "nuxt-skew-protection": "workspace:*",
+    "reka-ui": "2.6.1"
   }
 }
