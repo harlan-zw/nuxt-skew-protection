@@ -1,10 +1,11 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import Module from '../../../src/module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  modules: ['../../../src/module'],
+  modules: [Module],
   compatibilityDate: '2025-10-10',
 
   nitro: {
@@ -17,6 +18,7 @@ export default defineNuxtConfig({
   skewProtection: {
     debug: true,
     updateStrategy: 'ws',
+    connectionTracking: true,
     storage: {
       driver: 'cloudflare-kv-binding',
       binding: 'SKEW_STORAGE',

@@ -9,6 +9,7 @@ interface ConnectionOpenPayload {
   id: string
   version: string
   send: Connection['send']
+  peer?: unknown // crossws peer object (used by Cloudflare Durable)
 }
 
 interface ConnectionClosePayload {
