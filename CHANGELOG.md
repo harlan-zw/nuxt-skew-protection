@@ -1,6 +1,34 @@
 # Changelog
 
 
+## v0.6.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.6.0...main)
+
+### 🚀 Enhancements
+
+- ⚠️  Authorized stats and live connection routes ([#8](https://github.com/harlan-zw/nuxt-skew-protection/pull/8))
+
+### 🩹 Fixes
+
+- `subscribeStats` uses WebSocket message when available (fixes cloudflare-durable stats)
+- Disable websocket heartbeat ([73d372f](https://github.com/harlan-zw/nuxt-skew-protection/commit/73d372f))
+- Possible memory leak on SSE ([6938c2e](https://github.com/harlan-zw/nuxt-skew-protection/commit/6938c2e))
+
+### 🏡 Chore
+
+- Clean up playground ([38b6038](https://github.com/harlan-zw/nuxt-skew-protection/commit/38b6038))
+- Clean up playground ([beb33bb](https://github.com/harlan-zw/nuxt-skew-protection/commit/beb33bb))
+- Bump deps ([b2b00c7](https://github.com/harlan-zw/nuxt-skew-protection/commit/b2b00c7))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Authorized stats and live connection routes ([#8](https://github.com/harlan-zw/nuxt-skew-protection/pull/8))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.5.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.5.0...main)

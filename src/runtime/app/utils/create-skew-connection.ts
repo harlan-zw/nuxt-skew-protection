@@ -119,12 +119,18 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   const subscribeStats = () => {
     if (!isConnected || !connectionId)
       return
-    fetch('/_skew/subscribe-stats', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ connectionId }),
-    }).catch(() => {})
+    // Use WebSocket message if available (required for cloudflare-durable), fallback to POST for SSE
+    if (sendFn) {
+      sendFn({ type: SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS })
+    }
+    else {
+      fetch('/_skew/subscribe-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ connectionId }),
+      }).catch(() => {})
+    }
   }
 
   nuxtApp.hook('app:error', disconnect)
