@@ -7,17 +7,23 @@ import { init, logger } from '../../shared/logger'
 export interface SkewMessage {
   type: string
   version?: string
+  connectionId?: string
   [key: string]: unknown
 }
 
 export interface CreateSkewConnectionConfig {
   name: string
-  setup: (onMessage: (msg: SkewMessage) => void) => (() => void) | void
+  setup: (onMessage: (msg: SkewMessage) => void) => {
+    cleanup?: () => void
+    send?: (data: unknown) => void
+  } | (() => void) | void
 }
 
 export interface SkewConnection {
   connect: () => void
   disconnect: () => void
+  send: (data: unknown) => void
+  sendRoute: (route: string) => void
   buildId: string
   cookie: Ref<string | null | undefined>
 }
@@ -41,7 +47,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   if (isBot.value) {
     logger.debug(`[${name}] Skipping connection for bot`)
-    return { connect: () => {}, disconnect: () => {}, buildId, cookie }
+    return { connect: () => {}, disconnect: () => {}, send: () => {}, sendRoute: () => {}, buildId, cookie }
   }
 
   // Set cookie client-side if not already set
@@ -50,10 +56,16 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   }
 
   let cleanup: (() => void) | void
+  let sendFn: ((data: unknown) => void) | undefined
   let isConnected = false
+  let connectionId: string | undefined
 
   const handleMessage = (msg: SkewMessage) => {
     logger.debug(`[${name}] Received message:`, msg.type)
+    // Store connection ID from SSE for route updates
+    if (msg.connectionId) {
+      connectionId = msg.connectionId
+    }
     nuxtApp.hooks.callHook('skew:message', msg)
   }
 
@@ -62,7 +74,14 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
       return
     isConnected = true
     logger.debug(`[${name}] Connecting`)
-    cleanup = setup(handleMessage)
+    const result = setup(handleMessage)
+    if (result && typeof result === 'object') {
+      cleanup = result.cleanup
+      sendFn = result.send
+    }
+    else {
+      cleanup = result
+    }
   }
 
   const disconnect = () => {
@@ -73,11 +92,34 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     cleanup?.()
   }
 
+  const send = (data: unknown) => {
+    if (!isConnected || !sendFn)
+      return
+    sendFn(data)
+  }
+
+  const sendRoute = (route: string) => {
+    if (!isConnected)
+      return
+    // If we have a send function (WebSocket), use it directly
+    if (sendFn) {
+      sendFn({ type: 'route-update', route })
+    }
+    // Otherwise, POST to the route endpoint (SSE fallback)
+    else if (connectionId) {
+      fetch('/_skew/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId, route }),
+      }).catch(() => {})
+    }
+  }
+
   nuxtApp.hook('app:error', disconnect)
 
   if (import.meta.client) {
     window.addEventListener('beforeunload', disconnect)
   }
 
-  return { connect, disconnect, buildId, cookie }
+  return { connect, disconnect, send, sendRoute, buildId, cookie }
 }

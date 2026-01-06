@@ -13,19 +13,25 @@ export default defineEventHandler(async (event) => {
     stream.push(JSON.stringify(data))
   }
 
+  const connectionId = crypto.randomUUID()
+
+  // Send connection ID so client can use it for route updates
   send({
     type: SKEW_MESSAGE_TYPE.CONNECTED,
     version: serverVersion,
+    connectionId,
     timestamp: Date.now(),
   })
 
-  const connectionId = crypto.randomUUID()
   const clientVersion = getSkewProtectionCookie(event) || serverVersion
+  const query = getQuery(event)
+  const initialRoute = (query.route as string) || '/'
 
   // @ts-expect-error custom hook
   await nitroApp.hooks.callHook('skew:connection:open', {
     id: connectionId,
     version: clientVersion,
+    route: initialRoute,
     send,
   })
 

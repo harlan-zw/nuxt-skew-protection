@@ -8,6 +8,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
   }
   debug: boolean
   connectionTracking?: boolean
+  routeTracking?: boolean
 }
 
 export interface SkewProtectionRuntimeConfig {
@@ -16,6 +17,7 @@ export interface SkewProtectionRuntimeConfig {
   }
   debug: boolean
   connectionTracking?: boolean
+  routeTracking?: boolean
 }
 
 export interface ChunksOutdatedPayload {

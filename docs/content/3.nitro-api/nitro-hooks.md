@@ -46,6 +46,64 @@ export default defineNitroPlugin((nitroApp) => {
 })
 ```
 
+## `'skew:connection:route-update'`{lang="ts"}
+
+**Type:** `(payload: { id: string, route: string }) => void`{lang="ts"}
+
+Triggered when a client navigates to a different route. Requires `routeTracking: true`.
+
+```ts [server/plugins/connections.ts]
+import { defineNitroPlugin } from 'nitropack/runtime'
+
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('skew:connection:route-update', ({ id, route }) => {
+    console.log(`Client ${id} navigated to ${route}`)
+  })
+})
+```
+
+## `'skew:authorize-stats'`{lang="ts"}
+
+**Type:** `(payload: { id: string, request?: Request, authorize: () => void }) => void`{lang="ts"}
+
+Called when a client requests stats subscription. Call `authorize()` to allow the connection to receive stats updates.
+
+```ts [server/plugins/skew-auth.ts]
+import { defineNitroPlugin } from 'nitropack/runtime'
+
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('skew:authorize-stats', ({ request, authorize }) => {
+    const cookie = request?.headers.get('cookie') || ''
+    if (cookie.includes('admin_session=')) {
+      authorize()
+    }
+  })
+})
+```
+
+## `'skew:subscribe-stats'`{lang="ts"}
+
+**Type:** `(payload: { id: string, request?: Request }) => void`{lang="ts"}
+
+Triggered when a client sends a `subscribe-stats` message. The built-in handler calls `skew:authorize-stats` and manages subscriptions. You typically don't need to hook into this directly.
+
+## `'skew:stats'`{lang="ts"}
+
+**Type:** `(callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => void`{lang="ts"}
+
+Retrieve current connection stats on-demand. Useful for API endpoints.
+
+```ts [server/api/admin/stats.get.ts]
+export default defineEventHandler(async (event) => {
+  return new Promise((resolve) => {
+    const nitroApp = useNitroApp()
+    nitroApp.hooks.callHook('skew:stats', (stats) => {
+      resolve(stats)
+    })
+  })
+})
+```
+
 ## Recipes
 
 ### Custom Connection Tracking

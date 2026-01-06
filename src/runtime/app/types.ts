@@ -25,6 +25,8 @@ export interface ChunksOutdatedPayload {
 export interface SkewConnection {
   connect: () => void
   disconnect: () => void
+  send: (data: unknown) => void
+  sendRoute: (route: string) => void
   buildId: string
   cookie: Ref<string | null | undefined>
 }

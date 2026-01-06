@@ -82,6 +82,12 @@ export interface ModuleOptions {
    * @default false
    */
   connectionTracking?: boolean
+  /**
+   * Track which routes users are currently viewing
+   * Requires connectionTracking to be enabled
+   * @default false
+   */
+  routeTracking?: boolean
 }
 
 export interface ModulePublicRuntimeConfig {
@@ -130,11 +136,16 @@ export default defineNuxtModule<ModuleOptions>({
     hookNuxtSeoProLicense()
     // Add runtime config for client access to module options
     nuxt.options.runtimeConfig.public = nuxt.options.runtimeConfig.public || {}
+    if (options.routeTracking && !options.connectionTracking) {
+      logger.warn('`routeTracking` requires `connectionTracking: true`. Route tracking will be disabled.')
+    }
+
     // @ts-expect-error untyped
     nuxt.options.runtimeConfig.public.skewProtection = {
       cookie: options.cookie as Required<NuxtSkewProtectionRuntimeConfig['cookie']>,
       debug: options.debug,
       connectionTracking: options.connectionTracking,
+      routeTracking: options.connectionTracking && options.routeTracking,
       version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
@@ -214,9 +225,14 @@ declare module 'nitropack/types' {
     'skew:connection:open': (payload: {
       id: string
       version: string
-      send: (data: { type: string, total: number, versions: Record<string, number> }) => void
+      route?: string
+      send: (data: unknown) => void
     }) => void
+    'skew:connection:route-update': (payload: { id: string, route: string }) => void
     'skew:connection:close': (payload: { id: string }) => void
+    'skew:subscribe-stats': (payload: { id: string, request?: Request }) => void
+    'skew:authorize-stats': (payload: { id: string, request?: Request, authorize: () => void }) => void
+    'skew:stats': (callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => void
   }
 }
 
@@ -518,6 +534,14 @@ export { subscribe }`,
             route: '/_skew/sse',
             handler: resolver.resolve('./runtime/server/routes/_skew/sse'),
           })
+          // Route update endpoint for SSE (since SSE is unidirectional)
+          if (options.connectionTracking && options.routeTracking) {
+            addServerHandler({
+              route: '/_skew/route',
+              method: 'post',
+              handler: resolver.resolve('./runtime/server/routes/_skew/route.post'),
+            })
+          }
           addPlugin({
             src: resolver.resolve('./runtime/app/plugins/check-updates-sse.client'),
             mode: 'client',

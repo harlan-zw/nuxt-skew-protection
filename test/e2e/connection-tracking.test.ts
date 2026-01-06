@@ -56,7 +56,11 @@ function createWs(version?: string): Promise<WsConn> {
       })
     }
 
-    ws.on('open', () => resolve({ ws, messages, waitForStats }))
+    ws.on('open', () => {
+      // Subscribe to stats after connection
+      ws.send(JSON.stringify({ type: 'subscribe-stats' }))
+      resolve({ ws, messages, waitForStats })
+    })
     ws.on('error', reject)
 
     setTimeout(() => reject(new Error('WS connection timeout')), 5000)

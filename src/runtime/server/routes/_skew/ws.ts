@@ -19,18 +19,49 @@ export default defineWebSocketHandler({
     const cookies = parseCookie(cookieHeader)
     const clientVersion = cookies[cookieName] || serverVersion
 
+    // Extract initial route from URL query param
+    const url = new URL(peer.request?.url || '', 'http://localhost')
+    const initialRoute = url.searchParams.get('route') || '/'
+
     // @ts-expect-error custom hook
     useNitroApp().hooks.callHook('skew:connection:open', {
       id: peer.id,
       version: clientVersion,
+      route: initialRoute,
       send: (data: any) => peer.send(JSON.stringify(data)),
       peer,
     })
   },
 
   message(peer, message) {
-    if (message.text().includes('ping')) {
+    const text = message.text()
+    if (text.includes('ping')) {
       peer.send(JSON.stringify({ type: 'pong' }))
+      return
+    }
+
+    let data: { type?: string, route?: string }
+    try {
+      data = JSON.parse(text)
+    }
+    catch {
+      return
+    }
+
+    if (data.type === SKEW_MESSAGE_TYPE.ROUTE_UPDATE && data.route) {
+      // @ts-expect-error custom hook
+      useNitroApp().hooks.callHook('skew:connection:route-update', {
+        id: peer.id,
+        route: data.route,
+        peer,
+      })
+    }
+    else if (data.type === SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS) {
+      // @ts-expect-error custom hook
+      useNitroApp().hooks.callHook('skew:subscribe-stats', {
+        id: peer.id,
+        request: peer.request,
+      })
     }
   },
 
