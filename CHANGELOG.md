@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.7.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.0...main)
+
+### 🩹 Fixes
+
+- **cloudflare-durable:** Stats not working ([e5ff050](https://github.com/harlan-zw/nuxt-skew-protection/commit/e5ff050))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.6.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.6.0...main)
