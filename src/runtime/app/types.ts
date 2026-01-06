@@ -27,6 +27,7 @@ export interface SkewConnection {
   disconnect: () => void
   send: (data: unknown) => void
   sendRoute: (route: string) => void
+  subscribeStats: () => void
   buildId: string
   cookie: Ref<string | null | undefined>
 }

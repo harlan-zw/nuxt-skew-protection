@@ -1,4 +1,4 @@
-imports.autoImport=false
+imports.autoImport=true
 typescript.includeWorkspace=true
 modules[]=nuxt-skew-protection
 modules[]=@nuxtjs/robots

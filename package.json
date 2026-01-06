@@ -118,6 +118,7 @@
     "happy-dom": "^20.0.11",
     "ioredis": "^5.9.0",
     "nuxt": "^4.2.2",
+    "nuxt-auth-utils": "^0.5.26",
     "playwright-core": "^1.57.0",
     "pusher-js": "^8.4.0",
     "tsx": "^4.21.0",
