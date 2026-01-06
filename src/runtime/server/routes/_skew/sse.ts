@@ -1,4 +1,4 @@
-import { createEventStream, defineEventHandler } from 'h3'
+import { createEventStream, defineEventHandler, getQuery } from 'h3'
 import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
 import { SKEW_MESSAGE_TYPE } from '../../../const'
 import { getSkewProtectionCookie } from '../../imports/cookie'
@@ -29,23 +29,28 @@ export default defineEventHandler(async (event) => {
     send,
   })
 
-  const keepaliveInterval = setInterval(() => {
-    send({ type: 'keepalive', timestamp: Date.now() })
-  }, 30000)
+  let keepaliveTimeout: ReturnType<typeof setTimeout> | undefined
+  const scheduleKeepalive = () => {
+    keepaliveTimeout = setTimeout(() => {
+      send({ type: 'keepalive', timestamp: Date.now() })
+      scheduleKeepalive()
+    }, 30000)
+  }
+  scheduleKeepalive()
 
   let cleanupDone = false
   const close = async () => {
     if (cleanupDone)
       return
     cleanupDone = true
-    clearInterval(keepaliveInterval)
+    clearTimeout(keepaliveTimeout)
+    process.off('SIGTERM', close)
     // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:connection:close', { id: connectionId })
     await stream.close()
   }
 
   stream.onClosed(close)
-  nitroApp.hooks.hook('close', close)
   process.on('SIGTERM', close)
   return stream.send()
 })
