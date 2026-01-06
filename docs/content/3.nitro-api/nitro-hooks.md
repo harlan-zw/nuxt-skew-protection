@@ -68,6 +68,10 @@ export default defineNitroPlugin((nitroApp) => {
 
 Called when a client requests stats subscription. Call `authorize()` to allow the connection to receive stats updates.
 
+::callout{type="info"}
+`event` is `{ headers }` not a full H3Event - WebSocket handlers don't expose H3Event. It's compatible with `getUserSession()` from nuxt-auth-utils.
+::
+
 ```ts [server/plugins/skew-auth.ts]
 import { defineNitroPlugin } from 'nitropack/runtime'
 

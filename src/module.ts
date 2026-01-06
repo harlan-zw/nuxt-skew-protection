@@ -231,6 +231,7 @@ declare module 'nitropack/types' {
     'skew:connection:route-update': (payload: { id: string, route: string }) => void
     'skew:connection:close': (payload: { id: string }) => void
     'skew:subscribe-stats': (payload: { id: string, event?: { headers?: Headers } }) => void
+    // event is { headers } not H3Event - WebSocket handlers don't expose H3Event
     'skew:authorize-stats': (payload: { event?: { headers?: Headers }, authorize: () => void }) => void
     'skew:stats': (callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => void
   }
