@@ -64,7 +64,7 @@ export default defineNitroPlugin((nitroApp) => {
 
 ## `'skew:authorize-stats'`{lang="ts"}
 
-**Type:** `(payload: { id: string, request?: Request, authorize: () => void }) => void`{lang="ts"}
+**Type:** `(payload: { event?: { headers?: Headers }, authorize: () => void }) => void`{lang="ts"}
 
 Called when a client requests stats subscription. Call `authorize()` to allow the connection to receive stats updates.
 
@@ -72,9 +72,10 @@ Called when a client requests stats subscription. Call `authorize()` to allow th
 import { defineNitroPlugin } from 'nitropack/runtime'
 
 export default defineNitroPlugin((nitroApp) => {
-  nitroApp.hooks.hook('skew:authorize-stats', ({ request, authorize }) => {
-    const cookie = request?.headers.get('cookie') || ''
-    if (cookie.includes('admin_session=')) {
+  nitroApp.hooks.hook('skew:authorize-stats', async ({ event, authorize }) => {
+    // With nuxt-auth-utils
+    const session = await getUserSession(event)
+    if (session.user?.role === 'admin') {
       authorize()
     }
   })
@@ -83,7 +84,7 @@ export default defineNitroPlugin((nitroApp) => {
 
 ## `'skew:subscribe-stats'`{lang="ts"}
 
-**Type:** `(payload: { id: string, request?: Request }) => void`{lang="ts"}
+**Type:** `(payload: { id: string, event?: { headers?: Headers } }) => void`{lang="ts"}
 
 Triggered when a client sends a `subscribe-stats` message. The built-in handler calls `skew:authorize-stats` and manages subscriptions. You typically don't need to hook into this directly.
 

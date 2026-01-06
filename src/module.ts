@@ -230,8 +230,8 @@ declare module 'nitropack/types' {
     }) => void
     'skew:connection:route-update': (payload: { id: string, route: string }) => void
     'skew:connection:close': (payload: { id: string }) => void
-    'skew:subscribe-stats': (payload: { id: string, request?: Request }) => void
-    'skew:authorize-stats': (payload: { id: string, request?: Request, authorize: () => void }) => void
+    'skew:subscribe-stats': (payload: { id: string, event?: { headers?: Headers } }) => void
+    'skew:authorize-stats': (payload: { event?: { headers?: Headers }, authorize: () => void }) => void
     'skew:stats': (callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => void
   }
 }

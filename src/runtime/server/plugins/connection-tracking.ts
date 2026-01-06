@@ -25,7 +25,7 @@ interface RouteUpdatePayload {
 
 interface SubscribeStatsPayload {
   id: string
-  request?: Request
+  event?: { headers?: Headers }
 }
 
 export default defineNitroPlugin((nitroApp) => {
@@ -82,13 +82,13 @@ export default defineNitroPlugin((nitroApp) => {
 
   // Subscribe to stats updates - requires auth via skew:authorize-stats hook
   // @ts-expect-error custom hook
-  nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, request }: SubscribeStatsPayload) => {
+  nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event }: SubscribeStatsPayload) => {
     // Call auth hook - user must implement to authorize
     let authorized = false
     // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:authorize-stats', {
       id,
-      request,
+      event,
       authorize: () => { authorized = true },
     })
 

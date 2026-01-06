@@ -60,7 +60,9 @@ export default defineWebSocketHandler({
       // @ts-expect-error custom hook
       useNitroApp().hooks.callHook('skew:subscribe-stats', {
         id: peer.id,
-        request: peer.request,
+        // Pass minimal event-like object for getUserSession compatibility
+        event: { headers: peer.request?.headers },
+        peer,
       })
     }
   },

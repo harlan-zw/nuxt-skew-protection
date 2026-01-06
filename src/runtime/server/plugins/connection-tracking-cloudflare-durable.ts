@@ -35,7 +35,7 @@ interface RouteUpdatePayload {
 
 interface SubscribeStatsPayload {
   id: string
-  request?: Request
+  event?: { headers?: Headers }
   peer?: Peer
 }
 
@@ -104,7 +104,7 @@ export default defineNitroPlugin((nitroApp) => {
   })
 
   // @ts-expect-error custom hook
-  nitroApp.hooks.hook('skew:subscribe-stats', async ({ request, peer }: SubscribeStatsPayload) => {
+  nitroApp.hooks.hook('skew:subscribe-stats', async ({ event, peer }: SubscribeStatsPayload) => {
     const ws = peer?._internal?.ws
     const ctx = getCtx(peer)
     if (!ws || !ctx)
@@ -114,7 +114,7 @@ export default defineNitroPlugin((nitroApp) => {
     let authorized = false
     // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:authorize-stats', {
-      request,
+      event,
       authorize: () => { authorized = true },
     })
 
