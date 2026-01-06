@@ -1,5 +1,5 @@
 export default defineNuxtConfig({
-  modules: ['@nuxt/ui', '../src/module'],
+  modules: ['@nuxt/ui', 'nuxt-auth-utils', '../src/module'],
   css: ['~/assets/css/main.css'],
   experimental: {
     appManifest: true,
@@ -8,6 +8,9 @@ export default defineNuxtConfig({
   skewProtection: {
     updateStrategy: 'ws',
     retentionDays: 1, // Short retention for testing
+    connectionTracking: true,
+    routeTracking: true,
+    ipTracking: true,
     debug: true,
   },
   nitro: {

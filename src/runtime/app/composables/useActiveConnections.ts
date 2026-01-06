@@ -1,16 +1,20 @@
-import { useNuxtApp, useRuntimeConfig } from 'nuxt/app'
-import { computed, ref } from 'vue'
-import { SKEW_MESSAGE_TYPE } from '../../const'
+import { useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
+import { computed } from 'vue'
+
+export interface ConnectionInfo {
+  id: string
+  version: string
+  route: string
+  ip?: string
+}
 
 export interface ConnectionStats {
   total: number
   versions: Record<string, number>
   routes: Record<string, number>
+  connections: ConnectionInfo[]
+  yourId?: string
 }
-
-const stats = ref<ConnectionStats>({ total: 0, versions: {}, routes: {} })
-const authorized = ref<boolean | null>(null) // null = pending, true = authorized, false = denied
-let subscribed = false
 
 /**
  * Subscribe to real-time connection statistics.
@@ -23,9 +27,9 @@ let subscribed = false
  * ```ts
  * // server/plugins/stats-auth.ts
  * export default defineNitroPlugin((nitroApp) => {
- *   nitroApp.hooks.hook('skew:authorize-stats', ({ request, authorize }) => {
- *     const url = new URL(request.url)
- *     if (url.searchParams.get('admin') === 'secret') {
+ *   nitroApp.hooks.hook('skew:authorize-stats', async ({ event, authorize }) => {
+ *     const session = await getUserSession(event)
+ *     if (session.user?.role === 'admin') {
  *       authorize()
  *     }
  *   })
@@ -40,17 +44,28 @@ export function useActiveConnections() {
     throw new Error('[nuxt-skew-protection] useActiveConnections() requires `connectionTracking: true` in your module config.')
   }
 
-  if (!subscribed) {
-    subscribed = true
+  // Use useState for proper SSR hydration and client-side reactivity
+  const stats = useState<ConnectionStats>('skew-stats', () => ({ total: 0, versions: {}, routes: {}, connections: [] }))
+  const authorized = useState<boolean | null>('skew-authorized', () => null)
 
-    // Listen for stats messages
-    nuxtApp.hooks.hook('skew:message', (message: { type: string, total?: number, versions?: Record<string, number>, routes?: Record<string, number> }) => {
-      if (message.type === 'stats') {
+  // Track subscription at app level to avoid duplicate hooks
+  const subscribed = nuxtApp._skewStatsSubscribed as boolean | undefined
+
+  if (!subscribed) {
+    nuxtApp._skewStatsSubscribed = true
+
+    nuxtApp.hooks.hook('skew:message', (message: { type: string, total?: number, versions?: Record<string, number>, routes?: Record<string, number>, connections?: ConnectionInfo[], yourId?: string }) => {
+      if (message.type === 'connected') {
+        nuxtApp.$skewConnection?.subscribeStats()
+      }
+      else if (message.type === 'stats') {
         authorized.value = true
         stats.value = {
           total: message.total!,
           versions: message.versions!,
           routes: message.routes || {},
+          connections: message.connections || [],
+          yourId: message.yourId,
         }
       }
       else if (message.type === 'stats-unauthorized') {
@@ -58,13 +73,23 @@ export function useActiveConnections() {
       }
     })
 
-    // Send subscription request after connection is established
-    nuxtApp.hook('app:suspense:resolve', () => {
-      const connection = nuxtApp.$skewConnection
-      if (connection) {
-        connection.send({ type: SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS })
-      }
-    })
+    // Ensure connection is started
+    const startConnection = () => {
+      nuxtApp.$skewConnection?.connect()
+      // Also try subscribing immediately in case already connected (client-side nav)
+      nuxtApp.$skewConnection?.subscribeStats()
+    }
+
+    if (nuxtApp.$skewConnection) {
+      startConnection()
+    }
+    else {
+      nuxtApp.hook('app:suspense:resolve', startConnection)
+    }
+  }
+  else {
+    // Already subscribed, but try again if not yet authorized
+    nuxtApp.$skewConnection?.subscribeStats()
   }
 
   return {
@@ -76,5 +101,9 @@ export function useActiveConnections() {
     versions: computed(() => stats.value.versions),
     /** Users per route (requires routeTracking: true) */
     routes: computed(() => stats.value.routes),
+    /** Individual connections with id, version, route */
+    connections: computed(() => stats.value.connections),
+    /** Your connection ID (to identify yourself in the list) */
+    yourId: computed(() => stats.value.yourId),
   }
 }

@@ -7,7 +7,7 @@ Nitro hooks allow you to build custom functionality on top of the SSE/WebSocket 
 
 ## `'skew:connection:open'`{lang="ts"}
 
-**Type:** `(payload: { id: string, version: string, send: (data) => void }) => void`{lang="ts"}
+**Type:** `(payload: { id: string, version: string, route?: string, ip?: string, send: (data) => void }) => void`{lang="ts"}
 
 Triggered when a client establishes an SSE or WebSocket connection.
 
@@ -15,14 +15,16 @@ Triggered when a client establishes an SSE or WebSocket connection.
 |----------|-------------|
 | `id` | Unique connection identifier |
 | `version` | Client's build version (from cookie) |
+| `route` | Initial route (requires `routeTracking: true`) |
+| `ip` | Client IP address (requires `ipTracking: true`) |
 | `send` | Function to send data to this specific client |
 
 ```ts [server/plugins/connections.ts]
 import { defineNitroPlugin } from 'nitropack/runtime'
 
 export default defineNitroPlugin((nitroApp) => {
-  nitroApp.hooks.hook('skew:connection:open', ({ id, version, send }) => {
-    console.log(`Client ${id} connected on version ${version}`)
+  nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, send }) => {
+    console.log(`Client ${id} connected on version ${version} from ${ip}`)
 
     // Send a custom message to this client
     send({ type: 'welcome', message: 'Hello!' })
@@ -64,12 +66,12 @@ export default defineNitroPlugin((nitroApp) => {
 
 ## `'skew:authorize-stats'`{lang="ts"}
 
-**Type:** `(payload: { event?: { headers?: Headers }, authorize: () => void }) => void`{lang="ts"}
+**Type:** `(payload: { event?: H3Event | { headers?: Headers }, authorize: () => void }) => void`{lang="ts"}
 
 Called when a client requests stats subscription. Call `authorize()` to allow the connection to receive stats updates.
 
 ::callout{type="info"}
-`event` is `{ headers }` not a full H3Event - WebSocket handlers don't expose H3Event. It's compatible with `getUserSession()` from nuxt-auth-utils.
+For SSE, `event` is a full `H3Event` with cookies and session access. For WebSocket, `event` is `{ headers }` since WebSocket handlers don't expose H3Event. Both work with `getUserSession()` from nuxt-auth-utils.
 ::
 
 ```ts [server/plugins/skew-auth.ts]
@@ -88,9 +90,9 @@ export default defineNitroPlugin((nitroApp) => {
 
 ## `'skew:subscribe-stats'`{lang="ts"}
 
-**Type:** `(payload: { id: string, event?: { headers?: Headers } }) => void`{lang="ts"}
+**Type:** `(payload: { id: string, event?: H3Event | { headers?: Headers } }) => void`{lang="ts"}
 
-Triggered when a client sends a `subscribe-stats` message. The built-in handler calls `skew:authorize-stats` and manages subscriptions. You typically don't need to hook into this directly.
+Triggered when a client requests stats subscription. The built-in handler calls `skew:authorize-stats` and manages subscriptions. You typically don't need to hook into this directly.
 
 ## `'skew:stats'`{lang="ts"}
 
@@ -118,11 +120,11 @@ Build your own connection tracking without using the built-in `connectionTrackin
 ```ts [server/plugins/custom-tracking.ts]
 import { defineNitroPlugin } from 'nitropack/runtime'
 
-const connections = new Map<string, { version: string, connectedAt: Date }>()
+const connections = new Map<string, { version: string, ip?: string, connectedAt: Date }>()
 
 export default defineNitroPlugin((nitroApp) => {
-  nitroApp.hooks.hook('skew:connection:open', ({ id, version }) => {
-    connections.set(id, { version, connectedAt: new Date() })
+  nitroApp.hooks.hook('skew:connection:open', ({ id, version, ip }) => {
+    connections.set(id, { version, ip, connectedAt: new Date() })
   })
 
   nitroApp.hooks.hook('skew:connection:close', ({ id }) => {

@@ -2,6 +2,7 @@ import type { CookieOptions } from 'nuxt/app'
 import type { Ref } from 'vue'
 import { useBotDetection } from '#imports'
 import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { SKEW_MESSAGE_TYPE } from '../../const'
 import { init, logger } from '../../shared/logger'
 
 export interface SkewMessage {
@@ -24,6 +25,7 @@ export interface SkewConnection {
   disconnect: () => void
   send: (data: unknown) => void
   sendRoute: (route: string) => void
+  subscribeStats: () => void
   buildId: string
   cookie: Ref<string | null | undefined>
 }
@@ -47,7 +49,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   if (isBot.value) {
     logger.debug(`[${name}] Skipping connection for bot`)
-    return { connect: () => {}, disconnect: () => {}, send: () => {}, sendRoute: () => {}, buildId, cookie }
+    return { connect: () => {}, disconnect: () => {}, send: () => {}, sendRoute: () => {}, subscribeStats: () => {}, buildId, cookie }
   }
 
   // Set cookie client-side if not already set
@@ -62,7 +64,6 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   const handleMessage = (msg: SkewMessage) => {
     logger.debug(`[${name}] Received message:`, msg.type)
-    // Store connection ID from SSE for route updates
     if (msg.connectionId) {
       connectionId = msg.connectionId
     }
@@ -115,11 +116,22 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     }
   }
 
+  const subscribeStats = () => {
+    if (!isConnected || !connectionId)
+      return
+    fetch('/_skew/subscribe-stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ connectionId }),
+    }).catch(() => {})
+  }
+
   nuxtApp.hook('app:error', disconnect)
 
   if (import.meta.client) {
     window.addEventListener('beforeunload', disconnect)
   }
 
-  return { connect, disconnect, send, sendRoute, buildId, cookie }
+  return { connect, disconnect, send, sendRoute, subscribeStats, buildId, cookie }
 }

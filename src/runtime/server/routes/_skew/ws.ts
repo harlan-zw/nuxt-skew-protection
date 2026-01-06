@@ -12,6 +12,7 @@ export default defineWebSocketHandler({
     peer.send(JSON.stringify({
       type: SKEW_MESSAGE_TYPE.CONNECTED,
       version: serverVersion,
+      connectionId: peer.id,
       timestamp: Date.now(),
     }))
 
@@ -23,11 +24,19 @@ export default defineWebSocketHandler({
     const url = new URL(peer.request?.url || '', 'http://localhost')
     const initialRoute = url.searchParams.get('route') || '/'
 
+    // Extract IP from headers (cf-connecting-ip for Cloudflare, x-forwarded-for for proxies, x-real-ip for nginx)
+    const forwarded = peer.request?.headers?.get('x-forwarded-for')
+    const ip = peer.request?.headers?.get('cf-connecting-ip')
+      || forwarded?.split(',')[0]?.trim()
+      || peer.request?.headers?.get('x-real-ip')
+      || undefined
+
     // @ts-expect-error custom hook
     useNitroApp().hooks.callHook('skew:connection:open', {
       id: peer.id,
       version: clientVersion,
       route: initialRoute,
+      ip,
       send: (data: any) => peer.send(JSON.stringify(data)),
       peer,
     })
@@ -60,7 +69,6 @@ export default defineWebSocketHandler({
       // @ts-expect-error custom hook
       useNitroApp().hooks.callHook('skew:subscribe-stats', {
         id: peer.id,
-        // Pass minimal event-like object for getUserSession compatibility
         event: { headers: peer.request?.headers },
         peer,
       })
