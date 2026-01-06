@@ -1,7 +1,7 @@
 {
   "name": "nuxt-skew-protection",
   "type": "module",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "packageManager": "pnpm@10.27.0",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
