@@ -17,12 +17,9 @@ export default defineNuxtPlugin({
       url: `${protocol}//${window.location.host}/_skew/ws`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
-        heartbeat: {
-          message: JSON.stringify({ type: SKEW_MESSAGE_TYPE.PING, timestamp: Date.now() }),
-          interval: 30000,
-          pongTimeout: 10000,
-        },
         immediate: false,
+        // heartbeat disabled by default - saves server load and allows CF Durable Objects to hibernate
+        // enable via skew:ws:config hook if your infrastructure has aggressive idle timeouts
       },
     }
 
