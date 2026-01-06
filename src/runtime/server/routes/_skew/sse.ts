@@ -1,4 +1,4 @@
-import { createEventStream, defineEventHandler, getQuery } from 'h3'
+import { createEventStream, defineEventHandler, getQuery, getRequestIP } from 'h3'
 import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
 import { SKEW_MESSAGE_TYPE } from '../../../const'
 import { getSkewProtectionCookie } from '../../imports/cookie'
@@ -13,19 +13,27 @@ export default defineEventHandler(async (event) => {
     stream.push(JSON.stringify(data))
   }
 
+  const connectionId = crypto.randomUUID()
+
+  // Send connection ID so client can use it for route updates
   send({
     type: SKEW_MESSAGE_TYPE.CONNECTED,
     version: serverVersion,
+    connectionId,
     timestamp: Date.now(),
   })
 
-  const connectionId = crypto.randomUUID()
   const clientVersion = getSkewProtectionCookie(event) || serverVersion
+  const query = getQuery(event)
+  const initialRoute = (query.route as string) || '/'
+  const ip = getRequestIP(event, { xForwardedFor: true }) || undefined
 
   // @ts-expect-error custom hook
   await nitroApp.hooks.callHook('skew:connection:open', {
     id: connectionId,
     version: clientVersion,
+    route: initialRoute,
+    ip,
     send,
   })
 

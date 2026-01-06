@@ -13,6 +13,10 @@ const port = 3338 // unique port
 function getConnectionCount(): Promise<number> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://localhost:${port}/_skew/ws`)
+    ws.on('open', () => {
+      // Subscribe to stats after connection
+      ws.send(JSON.stringify({ type: 'subscribe-stats' }))
+    })
     ws.on('message', (data) => {
       const msg = JSON.parse(data.toString())
       if (msg.type === 'stats') {

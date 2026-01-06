@@ -1,6 +1,6 @@
 import type { SkewSSEConfig } from '../types'
 import { useEventSource } from '@vueuse/core'
-import { defineNuxtPlugin, useNuxtApp } from 'nuxt/app'
+import { defineNuxtPlugin, useNuxtApp, useRouter, useRuntimeConfig } from 'nuxt/app'
 import { watch } from 'vue'
 import { createSkewConnection } from '../utils/create-skew-connection'
 
@@ -10,9 +10,15 @@ export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
   async setup() {
     const nuxtApp = useNuxtApp()
+    const router = useRouter()
+    const runtimeConfig = useRuntimeConfig()
+    const routeTracking = (runtimeConfig.public.skewProtection as { routeTracking?: boolean })?.routeTracking
+
+    // Include initial route in connection URL if route tracking enabled
+    const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
 
     const config: SkewSSEConfig = {
-      url: '/_skew/sse',
+      url: `/_skew/sse${initialRoute}`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
       },
@@ -31,9 +37,16 @@ export default defineNuxtPlugin({
           onMessage(JSON.parse(raw))
         })
 
-        return sse.close
+        return { cleanup: sse.close }
       },
     })
+
+    // Track route changes if enabled
+    if (routeTracking) {
+      router.afterEach((to) => {
+        skewConnection.sendRoute(to.path)
+      })
+    }
 
     return { provide: { skewConnection } }
   },
