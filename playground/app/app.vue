@@ -151,8 +151,6 @@ watch(selectedVariant, (newVariant, oldVariant) => {
             </h3>
           </template>
           <div class="space-y-3">
-
-
             <div class="flex justify-between items-center">
               <span class="font-medium text-gray-700 dark:text-gray-300">Current Build ID:</span>
               <code class="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ buildId }}</code>

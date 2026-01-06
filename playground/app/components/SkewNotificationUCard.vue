@@ -14,7 +14,9 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between gap-2">
-                <h3 class="font-semibold text-gray-900 dark:text-white">Update available</h3>
+                <h3 class="font-semibold text-gray-900 dark:text-white">
+                  Update available
+                </h3>
                 <UButton
                   color="neutral"
                   variant="ghost"
