@@ -1,8 +1,10 @@
 import { defineNitroPlugin } from 'nitropack/runtime'
 
 interface DurableAttachment {
+  id?: string // connection id
   v?: string
   r?: string // route
+  ip?: string // ip address
   s?: boolean // stats subscriber
 }
 
@@ -24,6 +26,7 @@ interface ConnectionPayload {
   id: string
   version?: string
   route?: string
+  ip?: string
   peer?: Peer
 }
 
@@ -43,18 +46,21 @@ function getCtx(peer?: Peer): DurableContext | null {
   return peer?._internal?.durable?.ctx || null
 }
 
-function getStats(ctx: DurableContext) {
+function getStats(ctx: DurableContext, forId?: string) {
   const websockets = ctx.getWebSockets()
   const versions: Record<string, number> = {}
   const routes: Record<string, number> = {}
+  const connections: { id: string, version: string, route: string, ip?: string }[] = []
   for (const ws of websockets) {
     const attachment = (ws as any).deserializeAttachment?.() || {}
+    const id = attachment.id || 'unknown'
     const v = attachment.v || 'unknown'
     const r = attachment.r || '/'
     versions[v] = (versions[v] || 0) + 1
     routes[r] = (routes[r] || 0) + 1
+    connections.push({ id, version: v, route: r, ip: attachment.ip })
   }
-  return { total: websockets.length, versions, routes }
+  return { total: websockets.length, versions, routes, connections, yourId: forId }
 }
 
 function broadcastToSubscribers(ctx: DurableContext) {
@@ -66,17 +72,19 @@ function broadcastToSubscribers(ctx: DurableContext) {
   if (subscribers.length === 0)
     return
 
-  const stats = getStats(ctx)
-  const msg = JSON.stringify({ type: 'stats', ...stats })
-  for (const ws of subscribers) ws.send(msg)
+  for (const ws of subscribers) {
+    const attachment = (ws as any).deserializeAttachment?.() || {}
+    const stats = getStats(ctx, attachment.id)
+    ws.send(JSON.stringify({ type: 'stats', ...stats }))
+  }
 }
 
 export default defineNitroPlugin((nitroApp) => {
   // @ts-expect-error custom hook
-  nitroApp.hooks.hook('skew:connection:open', ({ version, route, peer }: ConnectionPayload) => {
+  nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, peer }: ConnectionPayload) => {
     const ws = peer?._internal?.ws
     if (ws?.serializeAttachment) {
-      ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), v: version, r: route || '/' })
+      ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), id, v: version, r: route || '/', ip })
     }
 
     const ctx = getCtx(peer)
@@ -104,7 +112,7 @@ export default defineNitroPlugin((nitroApp) => {
   })
 
   // @ts-expect-error custom hook
-  nitroApp.hooks.hook('skew:subscribe-stats', async ({ event, peer }: SubscribeStatsPayload) => {
+  nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event, peer }: SubscribeStatsPayload) => {
     const ws = peer?._internal?.ws
     const ctx = getCtx(peer)
     if (!ws || !ctx)
@@ -120,7 +128,7 @@ export default defineNitroPlugin((nitroApp) => {
 
     if (authorized) {
       ws.serializeAttachment?.({ ...(ws.deserializeAttachment?.() || {}), s: true })
-      ws.send(JSON.stringify({ type: 'stats', ...getStats(ctx) }))
+      ws.send(JSON.stringify({ type: 'stats', ...getStats(ctx, id) }))
     }
     else {
       ws.send(JSON.stringify({ type: 'stats-unauthorized' }))
