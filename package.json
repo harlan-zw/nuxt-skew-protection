@@ -85,7 +85,7 @@
     "pkg-types": "^2.3.0",
     "std-env": "^3.10.0",
     "tinyexec": "^1.0.2",
-    "ufo": "^1.6.1",
+    "ufo": "^1.6.2",
     "unstorage": "^1.17.3",
     "zod": "^4.3.5"
   },
@@ -95,7 +95,7 @@
     "@nuxt/content": "^3.10.0",
     "@nuxt/devtools-ui-kit": "^3.1.1",
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/test-utils": "^3.22.0",
+    "@nuxt/test-utils": "^3.23.0",
     "@nuxt/ui": "^4.3.0",
     "@nuxtjs/color-mode": "^4.0.0",
     "@nuxtjs/eslint-config-typescript": "^12.1.0",
