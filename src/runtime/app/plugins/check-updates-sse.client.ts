@@ -9,6 +9,9 @@ export type { SkewSSEConfig }
 export default defineNuxtPlugin({
   name: 'skew-protection:sse-updates',
   async setup() {
+    if (import.meta.prerender)
+      return
+
     const nuxtApp = useNuxtApp()
     const router = useRouter()
     const runtimeConfig = useRuntimeConfig()

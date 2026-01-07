@@ -10,6 +10,9 @@ export type { SkewWebSocketConfig }
 export default defineNuxtPlugin({
   name: 'skew-protection:ws-updates',
   async setup() {
+    if (import.meta.prerender)
+      return
+
     const nuxtApp = useNuxtApp()
     const router = useRouter()
     const runtimeConfig = useRuntimeConfig()

@@ -19,6 +19,9 @@ function normalizePath(pathOrUrl: string): string {
 export default defineNuxtPlugin({
   name: 'skew-protection:service-worker',
   setup(nuxtApp) {
+    if (import.meta.prerender)
+      return
+
     if (!('serviceWorker' in navigator)) {
       logger.debug('[SW] Service Worker not supported in this browser')
       return
