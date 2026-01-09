@@ -1,6 +1,23 @@
 # Changelog
 
 
+## v0.7.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.1...main)
+
+### 🩹 Fixes
+
+- Avoid running in prerender context ([a2ab4b4](https://github.com/harlan-zw/nuxt-skew-protection/commit/a2ab4b4))
+
+### 🏡 Chore
+
+- Bump ([d79152b](https://github.com/harlan-zw/nuxt-skew-protection/commit/d79152b))
+- Lint ([f296e83](https://github.com/harlan-zw/nuxt-skew-protection/commit/f296e83))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.7.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.0...main)
