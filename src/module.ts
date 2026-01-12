@@ -459,7 +459,9 @@ export {}
             await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
 
             // Augment Nuxt build metadata files with skew protection data
-            await assetManager.augmentBuildMetadata(buildId, publicDir)
+            // Pass serverDir so we can patch Nitro's static asset manifest
+            const serverDir = nitro.options.output.serverDir
+            await assetManager.augmentBuildMetadata(buildId, publicDir, serverDir)
           })
 
           // Clean up expired versions on close

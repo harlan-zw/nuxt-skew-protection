@@ -1,4 +1,5 @@
 import type { Driver, Storage } from 'unstorage'
+import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
@@ -631,11 +632,12 @@ export function createAssetManager(options: {
     logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
   }
 
-  async function augmentBuildMetadata(buildId: string, publicDir: string) {
+  async function augmentBuildMetadata(buildId: string, publicDir: string, serverDir?: string) {
     const manifest = await getVersionManifest(storage)
 
     // Augment builds/latest.json
     const latestPath = join(publicDir, '_nuxt', 'builds', 'latest.json')
+    let newLatestContent: string | undefined
     try {
       const latestData = await fs.readFile(latestPath, 'utf-8')
       const latestJson = JSON.parse(latestData)
@@ -653,7 +655,8 @@ export function createAssetManager(options: {
         versions: clientVersions,
       }
 
-      await fs.writeFile(latestPath, JSON.stringify(latestJson, null, 2), 'utf-8')
+      newLatestContent = JSON.stringify(latestJson, null, 2)
+      await fs.writeFile(latestPath, newLatestContent, 'utf-8')
     }
     catch (error) {
       if (options.debug) {
@@ -682,6 +685,41 @@ export function createAssetManager(options: {
         logger.warn(`Failed to augment builds/meta/${buildId}.json:`, error)
       }
     }
+
+    // Patch Nitro's static asset manifest to fix Content-Length
+    // Nitro pre-calculates file sizes during rollup, but we modify files after
+    if (serverDir && newLatestContent) {
+      await patchNitroManifest(serverDir, '/_nuxt/builds/latest.json', newLatestContent)
+    }
+  }
+
+  /**
+   * Patch Nitro's static asset manifest to fix Content-Length after we augment files.
+   */
+  async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
+    const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
+    const nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => null)
+    if (!nitro)
+      return
+
+    const assetIdx = nitro.indexOf(`"${assetPath}":`)
+    if (assetIdx === -1)
+      return
+
+    const start = nitro.indexOf('{', assetIdx)
+    const end = nitro.indexOf('}', start)
+    if (start === -1 || end === -1)
+      return
+
+    const entry = JSON.parse(nitro.substring(start, end + 1))
+    const size = Buffer.byteLength(newContent, 'utf-8')
+    const hash = createHash('sha1').update(newContent).digest('base64').substring(0, 27)
+
+    entry.size = size
+    entry.etag = `"${size.toString(16)}-${hash}"`
+
+    const patched = nitro.substring(0, start) + JSON.stringify(entry) + nitro.substring(end + 1)
+    await fs.writeFile(nitroPath, patched, 'utf-8')
   }
 
   return {

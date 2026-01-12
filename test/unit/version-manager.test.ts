@@ -651,6 +651,120 @@ describe('version Manager', () => {
       expect(augmented.skewProtection.versions['build-123']).toBeDefined()
     })
 
+    it('should patch Nitro manifest with correct Content-Length and ETag', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+      })
+
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
+      const serverDir = join(outputDir, 'server')
+      const nitroChunksDir = join(serverDir, 'chunks', 'nitro')
+      await mkdir(buildsDir, { recursive: true })
+      await mkdir(nitroChunksDir, { recursive: true })
+
+      // Create initial latest.json (small file)
+      const initialContent = JSON.stringify({ id: 'build-123' })
+      const initialSize = Buffer.byteLength(initialContent, 'utf-8')
+      const latestPath = join(buildsDir, 'latest.json')
+      await writeFile(latestPath, initialContent, 'utf-8')
+
+      // Create mock nitro.mjs with asset manifest containing original size
+      const nitroChunkPath = join(nitroChunksDir, 'nitro.mjs')
+      const mockNitroContent = `
+const assets = {
+  "/_nuxt/builds/latest.json": {
+      "type": "application/json",
+      "etag": "\\"${initialSize.toString(16)}-abcdefg\\"",
+      "mtime": "2024-01-01T00:00:00.000Z",
+      "size": ${initialSize},
+      "path": "../public/_nuxt/builds/latest.json"
+  }
+};
+export default assets;
+`
+      await writeFile(nitroChunkPath, mockNitroContent, 'utf-8')
+
+      // Run augmentation
+      const assets = ['_nuxt/entry.ABC123.js']
+      await manager.updateVersionsManifest('build-123', assets)
+      await manager.augmentBuildMetadata('build-123', join(outputDir, 'public'), serverDir)
+
+      // Read augmented latest.json to get new size
+      const augmentedData = await readFile(latestPath, 'utf-8')
+      const newSize = Buffer.byteLength(augmentedData, 'utf-8')
+
+      // Verify Nitro manifest was patched
+      const patchedNitro = await readFile(nitroChunkPath, 'utf-8')
+
+      // Size should be updated to match new content (JSON.stringify has no space after colon)
+      expect(patchedNitro).toContain(`"size":${newSize}`)
+      // Use regex to match exact old size (avoiding substring matches like 18 in 180)
+      const oldSizePattern = new RegExp(`"size":${initialSize}[,}]`)
+      expect(patchedNitro).not.toMatch(oldSizePattern)
+    })
+
+    it('should handle missing nitro.mjs gracefully', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+      })
+
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
+      const serverDir = join(outputDir, 'server')
+      await mkdir(buildsDir, { recursive: true })
+      // Note: NOT creating nitro chunks dir
+
+      const latestPath = join(buildsDir, 'latest.json')
+      await writeFile(latestPath, JSON.stringify({ id: 'build-123' }), 'utf-8')
+
+      const assets = ['_nuxt/entry.ABC123.js']
+      await manager.updateVersionsManifest('build-123', assets)
+
+      // Should not throw when nitro.mjs doesn't exist
+      await expect(
+        manager.augmentBuildMetadata('build-123', join(outputDir, 'public'), serverDir),
+      ).resolves.not.toThrow()
+    })
+
+    it('should handle nitro.mjs without matching asset entry', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+      })
+
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
+      const serverDir = join(outputDir, 'server')
+      const nitroChunksDir = join(serverDir, 'chunks', 'nitro')
+      await mkdir(buildsDir, { recursive: true })
+      await mkdir(nitroChunksDir, { recursive: true })
+
+      const latestPath = join(buildsDir, 'latest.json')
+      await writeFile(latestPath, JSON.stringify({ id: 'build-123' }), 'utf-8')
+
+      // Create nitro.mjs without the latest.json entry
+      const nitroChunkPath = join(nitroChunksDir, 'nitro.mjs')
+      const mockNitroContent = `
+const assets = {
+  "/_nuxt/other-file.json": { "size": 100 }
+};
+export default assets;
+`
+      await writeFile(nitroChunkPath, mockNitroContent, 'utf-8')
+
+      const assets = ['_nuxt/entry.ABC123.js']
+      await manager.updateVersionsManifest('build-123', assets)
+
+      // Should not throw when entry is not found
+      await expect(
+        manager.augmentBuildMetadata('build-123', join(outputDir, 'public'), serverDir),
+      ).resolves.not.toThrow()
+
+      // Original content should be unchanged
+      const unchangedNitro = await readFile(nitroChunkPath, 'utf-8')
+      expect(unchangedNitro).toBe(mockNitroContent)
+    })
+
     it('should augment builds/meta/{buildId}.json', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
