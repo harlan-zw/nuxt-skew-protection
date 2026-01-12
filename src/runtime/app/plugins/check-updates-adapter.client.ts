@@ -11,7 +11,7 @@ export default defineNuxtPlugin({
   name: 'skew-protection:adapter-updates',
   async setup() {
     if (import.meta.prerender)
-      return
+      return {}
 
     const nuxtApp = useNuxtApp()
     // @ts-expect-error untyped

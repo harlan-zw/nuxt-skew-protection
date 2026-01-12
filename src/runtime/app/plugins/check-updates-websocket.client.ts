@@ -11,7 +11,7 @@ export default defineNuxtPlugin({
   name: 'skew-protection:ws-updates',
   async setup() {
     if (import.meta.prerender)
-      return
+      return {}
 
     const nuxtApp = useNuxtApp()
     const router = useRouter()
