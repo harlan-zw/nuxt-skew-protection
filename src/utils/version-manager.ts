@@ -695,7 +695,7 @@ export function createAssetManager(options: {
 
   /**
    * Patch Nitro's static asset manifest to fix Content-Length after we augment files.
-   * Nitro uses JS object syntax (unquoted keys), not JSON, so we use regex replacement.
+   * Works with both JSON syntax (Node) and JS object syntax (Cloudflare).
    */
   async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
     const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
@@ -716,21 +716,21 @@ export function createAssetManager(options: {
     if (start === -1)
       return
 
-    // Find matching closing brace, accounting for strings
+    // Find matching closing brace, accounting for strings (both " and ')
     let depth = 0
-    let inString = false
+    let stringChar: string | null = null
     let end = -1
     for (let i = start; i < nitro.length; i++) {
       const char = nitro[i]
-      if (inString) {
+      if (stringChar) {
         if (char === '\\')
           i++ // skip escaped char
-        else if (char === '"')
-          inString = false
+        else if (char === stringChar)
+          stringChar = null
       }
       else {
-        if (char === '"') {
-          inString = true
+        if (char === '"' || char === '\'') {
+          stringChar = char
         }
         else if (char === '{') {
           depth++
@@ -747,17 +747,27 @@ export function createAssetManager(options: {
     if (end === -1)
       return
 
-    // Extract and patch the entry using regex
-    // Handles both JS object syntax (unquoted keys) and JSON (quoted keys)
-    const entryStr = nitro.substring(start, end + 1)
-    const patchedEntry = entryStr
-      .replace(/"size":\s*\d+/, `"size":${size}`)
-      .replace(/size:\d+/, `size:${size}`)
-      .replace(/etag:'[^']*'/, `etag:'${newEtag}'`)
-      .replace(/"etag":\s*"[^"]*"/, `"etag":"${newEtag}"`)
-      .replace(/etag:"[^"]*"/, `etag:"${newEtag}"`)
+    // Replace property values in place (handles both JSON and JS syntax)
+    let entryStr = nitro.substring(start, end + 1)
 
-    nitro = nitro.substring(0, start) + patchedEntry + nitro.substring(end + 1)
+    // Replace size value (number after "size": or size:)
+    entryStr = entryStr.replace(/(['"]?)size\1\s*:\s*\d+/, (match) => {
+      const prefix = match.match(/^(['"]?)size\1\s*:\s*/)?.[0] || 'size:'
+      return `${prefix}${size}`
+    })
+
+    // Replace etag value (string after "etag": or etag:)
+    // Handles both "\"hash\"" (JSON) and '"hash"' (JS with single quotes)
+    entryStr = entryStr.replace(/(['"]?)etag\1\s*:\s*(['"])(?:[^\\]|\\.)*?\2/, (match) => {
+      const keyMatch = match.match(/^(['"]?)etag\1\s*:\s*/)
+      const prefix = keyMatch?.[0] || 'etag:'
+      const quoteChar = match.match(/:\s*(['"])/)?.[1] || '"'
+      // For single quotes, don't escape inner quotes; for double quotes, escape them
+      const escapedEtag = quoteChar === '\'' ? newEtag : newEtag.replace(/"/g, '\\"')
+      return `${prefix}${quoteChar}${escapedEtag}${quoteChar}`
+    })
+
+    nitro = nitro.substring(0, start) + entryStr + nitro.substring(end + 1)
     await fs.writeFile(nitroPath, nitro, 'utf-8')
   }
 

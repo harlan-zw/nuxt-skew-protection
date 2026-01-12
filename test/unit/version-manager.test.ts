@@ -697,10 +697,10 @@ export default assets;
       // Verify Nitro manifest was patched
       const patchedNitro = await readFile(nitroChunkPath, 'utf-8')
 
-      // Size should be updated to match new content (JSON.stringify has no space after colon)
-      expect(patchedNitro).toContain(`"size":${newSize}`)
+      // Size should be updated to match new content (magicast may add spaces)
+      expect(patchedNitro).toMatch(new RegExp(`"size":\\s*${newSize}[,}\\s]`))
       // Use regex to match exact old size (avoiding substring matches like 18 in 180)
-      const oldSizePattern = new RegExp(`"size":${initialSize}[,}]`)
+      const oldSizePattern = new RegExp(`"size":\\s*${initialSize}[,}]`)
       expect(patchedNitro).not.toMatch(oldSizePattern)
     })
 

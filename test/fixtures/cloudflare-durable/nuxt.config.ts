@@ -19,10 +19,10 @@ export default defineNuxtConfig({
     debug: true,
     updateStrategy: 'ws',
     connectionTracking: true,
+    // Use fs storage for build-time asset bundling (cloudflare-kv-binding only works at runtime)
     storage: {
-      driver: 'cloudflare-kv-binding',
-      binding: 'SKEW_STORAGE',
-      namespaceId: '3de5b8fa99f545c7a78f40ea3fc71646',
+      driver: 'fs',
+      base: `${__dirname}/.skew-storage`,
     },
     retentionDays: 1,
     maxNumberOfVersions: 3,
