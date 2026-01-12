@@ -695,10 +695,11 @@ export function createAssetManager(options: {
 
   /**
    * Patch Nitro's static asset manifest to fix Content-Length after we augment files.
+   * Nitro uses JS object syntax (unquoted keys), not JSON, so we use regex replacement.
    */
   async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
     const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
-    const nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => null)
+    let nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => null)
     if (!nitro)
       return
 
@@ -706,20 +707,58 @@ export function createAssetManager(options: {
     if (assetIdx === -1)
       return
 
-    const start = nitro.indexOf('{', assetIdx)
-    const end = nitro.indexOf('}', start)
-    if (start === -1 || end === -1)
-      return
-
-    const entry = JSON.parse(nitro.substring(start, end + 1))
     const size = Buffer.byteLength(newContent, 'utf-8')
     const hash = createHash('sha1').update(newContent).digest('base64').substring(0, 27)
+    const newEtag = `"${size.toString(16)}-${hash}"`
 
-    entry.size = size
-    entry.etag = `"${size.toString(16)}-${hash}"`
+    // Find the object bounds for this asset entry
+    const start = nitro.indexOf('{', assetIdx)
+    if (start === -1)
+      return
 
-    const patched = nitro.substring(0, start) + JSON.stringify(entry) + nitro.substring(end + 1)
-    await fs.writeFile(nitroPath, patched, 'utf-8')
+    // Find matching closing brace, accounting for strings
+    let depth = 0
+    let inString = false
+    let end = -1
+    for (let i = start; i < nitro.length; i++) {
+      const char = nitro[i]
+      if (inString) {
+        if (char === '\\')
+          i++ // skip escaped char
+        else if (char === '"')
+          inString = false
+      }
+      else {
+        if (char === '"') {
+          inString = true
+        }
+        else if (char === '{') {
+          depth++
+        }
+        else if (char === '}') {
+          depth--
+          if (depth === 0) {
+            end = i
+            break
+          }
+        }
+      }
+    }
+    if (end === -1)
+      return
+
+    // Extract and patch the entry using regex
+    // Handles both JS object syntax (unquoted keys) and JSON (quoted keys)
+    const entryStr = nitro.substring(start, end + 1)
+    const patchedEntry = entryStr
+      .replace(/"size":\s*\d+/, `"size":${size}`)
+      .replace(/size:\d+/, `size:${size}`)
+      .replace(/etag:'[^']*'/, `etag:'${newEtag}'`)
+      .replace(/"etag":\s*"[^"]*"/, `"etag":"${newEtag}"`)
+      .replace(/etag:"[^"]*"/, `etag:"${newEtag}"`)
+
+    nitro = nitro.substring(0, start) + patchedEntry + nitro.substring(end + 1)
+    await fs.writeFile(nitroPath, nitro, 'utf-8')
   }
 
   return {
