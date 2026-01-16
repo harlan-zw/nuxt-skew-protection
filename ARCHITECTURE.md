@@ -154,7 +154,105 @@ The module supports three strategies for detecting new deployments:
 - Requires `experimental.websockets` enabled
 - Requires `cloudflare-durable` preset
 
-### 4. Intelligent Module Invalidation
+### 4. Third-Party Adapters (Pusher/Ably)
+
+For platforms that don't support SSE or WebSocket (static hosting), the module provides adapter-based real-time updates:
+
+**Pusher Adapter:**
+```typescript
+import { pusherAdapter } from 'nuxt-skew-protection/adapters/pusher'
+
+export default defineNuxtConfig({
+  skewProtection: {
+    updateStrategy: pusherAdapter({
+      key: 'your-public-key',
+      cluster: 'us2',
+      appId: 'your-app-id',
+      secret: 'your-secret',
+      channel: 'skew-updates', // optional
+      event: 'version' // optional
+    })
+  }
+})
+```
+
+**Ably Adapter:**
+```typescript
+import { ablyAdapter } from 'nuxt-skew-protection/adapters/ably'
+
+export default defineNuxtConfig({
+  skewProtection: {
+    updateStrategy: ablyAdapter({
+      key: 'your-api-key',
+      channel: 'skew-updates', // optional
+      event: 'version' // optional
+    })
+  }
+})
+```
+
+**Adapter Architecture:**
+- `defineAdapter()` factory creates SkewAdapter objects
+- Each adapter has `web.ts` (client subscribe) and `node.ts` (server broadcast)
+- Client plugin `check-updates-adapter.client.ts` handles subscription
+- Adapters lazy-load their SDK (`pusher-js`, `ably`) at runtime
+
+### 5. Live Connection Monitoring
+
+Track active users, version distribution, and routes in real-time.
+
+**Enable Tracking:**
+```typescript
+export default defineNuxtConfig({
+  skewProtection: {
+    connectionTracking: true, // Enable connection tracking
+    routeTracking: true, // Track which routes users view
+    ipTracking: true // Track IP addresses
+  }
+})
+```
+
+**Server Plugins:**
+- `connection-tracking.ts` - In-memory connection map for Node.js/SSE
+- `connection-tracking-cloudflare-durable.ts` - Durable Objects variant for Cloudflare
+
+**Admin Stats Endpoint:**
+```
+GET /_skew/admin/stats
+Authorization: Bearer <seoProKey>
+
+Response: {
+  total: number,
+  versions: Record<string, number>,
+  routes: Record<string, number>,
+  connections: Array<{ id, version, route, ip }>
+}
+```
+
+**Client Composable:**
+```typescript
+const {
+  authorized, // boolean - stats subscription authorized
+  total, // number - total active connections
+  versions, // Record<string, number> - version distribution
+  routes, // Record<string, number> - route distribution
+  connections, // Array - individual connections
+  yourId // string - current connection ID
+} = useActiveConnections()
+```
+
+**Authorization Hook:**
+Apps can customize stats authorization via Nitro hook:
+```typescript
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('skew:authorize-stats', (event) => {
+    // Return true to authorize, false to deny
+    return event.context.user?.isAdmin
+  })
+})
+```
+
+### 6. Intelligent Module Invalidation
 
 **Service Worker (sw/sw.js):**
 - Intercepts all JavaScript fetch requests
@@ -175,6 +273,42 @@ The module supports three strategies for detecting new deployments:
 - Only notifies users when their *current session* is affected
 - Avoids unnecessary "update available" popups
 - Provides urgency signal: "Your loaded code was deleted, please refresh"
+
+### 7. SkewConnection Abstraction
+
+All connection strategies (SSE, WebSocket, Adapters) use a unified `SkewConnection` interface:
+
+**File:** `src/runtime/app/utils/create-skew-connection.ts`
+
+```typescript
+interface SkewConnection {
+  connect: () => void
+  disconnect: () => void
+  send: (message: SkewMessage) => void
+  sendRoute: (route: string) => void // Route tracking
+  subscribeStats: () => void // Stats subscription
+}
+```
+
+**Features:**
+- Bot detection via `@nuxtjs/robots` (skips connection for bots)
+- Client-side cookie fallback (sets buildId if missing)
+- Exponential backoff retry via `backoff-queue.ts`
+- Route tracking: sends via WebSocket or POST to `/_skew/route`
+- Stats subscription: WebSocket direct or POST to `/_skew/subscribe-stats`
+- Hook interface: `skew:message` for all message types
+- Automatic cleanup on error/beforeunload
+
+**Message Types:**
+```typescript
+SKEW_MESSAGE_TYPE = {
+  VERSION: 'version',
+  CONNECTED: 'connected',
+  PING: 'ping',
+  ROUTE_UPDATE: 'route-update',
+  SUBSCRIBE_STATS: 'subscribe-stats'
+}
+```
 
 ## Public APIs
 
@@ -202,6 +336,19 @@ const config = useRuntimeConfigSkewProtection()
 // Returns typed runtime config with cookie config and debug flag
 // config.cookie, config.debug
 ```
+
+**useActiveConnections()** (src/runtime/app/composables/useActiveConnections.ts)
+```typescript
+const {
+  authorized, // Ref<boolean> - stats subscription authorized
+  total, // Ref<number> - total active connections
+  versions, // Ref<Record<string, number>> - version distribution
+  routes, // Ref<Record<string, number>> - route distribution
+  connections, // Ref<Array<{ id, version, route, ip }>>
+  yourId // Ref<string> - current connection ID
+} = useActiveConnections()
+```
+Requires `connectionTracking: true` in module config.
 
 ### Component
 
@@ -257,6 +404,24 @@ nuxtApp.hooks.hook('skew-protection:chunks-outdated', (payload) => {
   //   invalidatedModules: string[],
   //   passedReleases: string[]
   // }
+})
+```
+
+**skew:message** (Custom - Connection messages)
+```typescript
+nuxtApp.hooks.hook('skew:message', (message) => {
+  // Called for all connection messages
+  // message.type: 'version' | 'connected' | 'ping' | 'route-update' | 'subscribe-stats'
+})
+```
+
+**skew:authorize-stats** (Nitro hook - Server)
+```typescript
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('skew:authorize-stats', (event) => {
+    // Return true to authorize stats subscription
+    return event.context.user?.isAdmin
+  })
 })
 ```
 
@@ -339,19 +504,25 @@ Instead of platform-specific implementations, the module uses a **single univers
 
 **Result:** Users only notified when their session is truly broken
 
-### 4. Three Update Strategies
+### 4. Four Update Strategies
 
-**Why three strategies?**
+**Why four strategies?**
 - Different platforms have different capabilities
 - Polling: Universal, works everywhere
 - SSE: Real-time updates for Node.js-compatible platforms
 - WebSocket: Real-time updates for Cloudflare Durable Objects
+- Adapters: Real-time updates via third-party services (Pusher, Ably)
 
 **Auto-detection:**
 - Static sites → Polling
 - Cloudflare (cloudflare-durable preset) → WebSocket
 - Node.js/Bun/Deno → SSE (default)
-- Manual override via `checkForUpdateStrategy` option
+- Manual override via `updateStrategy` option or SkewAdapter
+
+**Adapter Benefits:**
+- Works on static hosting (no server needed for subscriptions)
+- Leverages existing realtime infrastructure
+- Lazy-loads SDK only when needed
 
 ### 5. Integration with Nuxt's Native Mechanisms
 
@@ -378,6 +549,22 @@ Instead of platform-specific implementations, the module uses a **single univers
 **Vercel Integration:**
 - Also sets `__vdpl` cookie for Vercel's native skew protection
 - Works alongside Vercel's infrastructure
+
+### 7. Connection Monitoring (Optional)
+
+**Problem:** Admins want visibility into rollout progress and user distribution
+
+**Solution:** Opt-in connection tracking
+- Server plugins maintain in-memory connection maps
+- Tracks version, route, and optionally IP per connection
+- Stats endpoint (`/_skew/admin/stats`) for dashboards
+- Real-time stats subscription via WebSocket/SSE
+- Nitro hook (`skew:authorize-stats`) for custom authorization
+
+**Privacy-first:**
+- Disabled by default
+- Route and IP tracking are separate opt-ins
+- No persistent storage of connection data
 
 ## Complete Flow Diagram
 
@@ -536,11 +723,17 @@ export default defineNuxtConfig({
     maxNumberOfVersions: 10, // Maximum versions to retain
 
     // Update detection strategy
-    updateStrategy: 'sse', // 'polling' | 'sse' | 'ws'
+    updateStrategy: 'sse', // 'polling' | 'sse' | 'ws' | SkewAdapter
     // Auto-detected based on platform if not specified:
     // - Static sites → 'polling'
     // - Cloudflare Durable → 'ws'
     // - Node.js/Bun/Deno → 'sse'
+    // Can also be a SkewAdapter (pusherAdapter, ablyAdapter)
+
+    // Connection monitoring (optional)
+    connectionTracking: false, // Enable connection tracking
+    routeTracking: false, // Track which routes users view
+    ipTracking: false, // Track IP addresses
 
     // Cookie configuration
     cookie: {
@@ -617,6 +810,7 @@ src/
 ├── module.ts                          # Main module entry, platform detection
 ├── kit.ts                             # Platform detection utilities
 ├── logger.ts                          # Build-time logger
+├── utils.ts                           # Adapter utilities (defineAdapter, etc.)
 ├── utils/
 │   └── version-manager.ts             # Asset versioning & storage logic
 ├── unstorage/
@@ -624,32 +818,56 @@ src/
 │   └── cloudflare-kv-wrangler-driver.ts  # Cloudflare KV CLI driver
 ├── runtime/
 │   ├── types.ts                       # TypeScript types
+│   ├── const.ts                       # Message type constants
 │   ├── shared/
 │   │   └── logger.ts                  # Client-side logger
+│   ├── adapters/
+│   │   ├── pusher/
+│   │   │   ├── index.ts               # Pusher adapter factory
+│   │   │   ├── types.ts               # Pusher config types
+│   │   │   ├── web.ts                 # Client subscribe (pusher-js)
+│   │   │   └── node.ts                # Server broadcast (REST API)
+│   │   └── ably/
+│   │       ├── index.ts               # Ably adapter factory
+│   │       ├── types.ts               # Ably config types
+│   │       ├── web.ts                 # Client subscribe (ably SDK)
+│   │       └── node.ts                # Server broadcast (REST client)
 │   ├── app/
 │   │   ├── components/
 │   │   │   └── SkewNotification.vue   # Headless notification component
 │   │   ├── composables/
 │   │   │   ├── useSkewProtection.ts   # Main composable
+│   │   │   ├── useActiveConnections.ts # Connection stats composable
 │   │   │   └── useRuntimeConfigSkewProtection.ts  # Runtime config helper
+│   │   ├── utils/
+│   │   │   ├── create-skew-connection.ts  # Unified connection interface
+│   │   │   └── backoff-queue.ts       # Exponential backoff utility
 │   │   └── plugins/
 │   │       ├── 0.skew-protection.ts   # Root plugin
 │   │       ├── sw-track-user-modules.client.ts  # Service worker integration
 │   │       ├── check-updates-sse.client.ts      # SSE update detection
-│   │       └── check-updates-websocket.client.ts # WebSocket update detection
+│   │       ├── check-updates-websocket.client.ts # WebSocket update detection
+│   │       └── check-updates-adapter.client.ts  # Adapter update detection
 │   └── server/
 │       ├── index.ts                   # Server exports
 │       ├── imports/
 │       │   ├── cookie.ts              # Server cookie utilities
 │       │   ├── utils.ts               # Server utilities
 │       │   └── getRuntimeConfigSkewProtection.ts  # Server runtime config helper
+│       ├── plugins/
+│       │   ├── connection-tracking.ts # In-memory connection tracking
+│       │   └── connection-tracking-cloudflare-durable.ts  # Durable Objects variant
 │       ├── middleware/
 │       │   ├── set-skew-protection-cookie.ts  # Cookie middleware
 │       │   └── vercel-skew.ts         # Vercel-specific middleware
 │       └── routes/
 │           └── _skew/
 │               ├── sse.ts             # SSE endpoint
-│               └── ws.ts              # WebSocket endpoint
+│               ├── ws.ts              # WebSocket endpoint
+│               ├── route.post.ts      # Route tracking endpoint
+│               ├── subscribe-stats.post.ts  # Stats subscription endpoint
+│               └── admin/
+│                   └── stats.get.ts   # Admin stats endpoint
 sw/
 └── sw.js                              # Service worker for module tracking
 ```
@@ -660,7 +878,9 @@ sw/
 2. **Simple** - No platform-specific code paths for asset serving
 3. **Fast** - Assets served as static files, fully cacheable
 4. **Intelligent** - Only notifies users when their session is affected
-5. **Flexible** - Three update strategies for different use cases
+5. **Flexible** - Four update strategies for different use cases (polling, SSE, WebSocket, adapters)
 6. **Compatible** - Integrates with Nuxt's native mechanisms
 7. **Scalable** - Deduplication reduces storage costs
 8. **Maintainable** - Single code path, well-organized structure
+9. **Observable** - Optional connection monitoring for rollout visibility
+10. **Privacy-first** - Tracking features are opt-in with granular controls

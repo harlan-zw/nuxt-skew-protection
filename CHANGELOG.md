@@ -1,6 +1,41 @@
 # Changelog
 
 
+## v0.7.3...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.3...main)
+
+### 🩹 Fixes
+
+- Module telementry ([e92bb4d](https://github.com/harlan-zw/nuxt-skew-protection/commit/e92bb4d))
+
+### 🏡 Chore
+
+- Bump deps ([17251ca](https://github.com/harlan-zw/nuxt-skew-protection/commit/17251ca))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v0.7.2...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.2...main)
+
+### 🩹 Fixes
+
+- Broken latest.json manifest when previewing ([b3a99ee](https://github.com/harlan-zw/nuxt-skew-protection/commit/b3a99ee))
+
+### 🏡 Chore
+
+- Bump deps ([22da4c5](https://github.com/harlan-zw/nuxt-skew-protection/commit/22da4c5))
+- Broken maniest parsing ([eda4134](https://github.com/harlan-zw/nuxt-skew-protection/commit/eda4134))
+- Tests ([03b2d2d](https://github.com/harlan-zw/nuxt-skew-protection/commit/03b2d2d))
+- Tests ([782d53c](https://github.com/harlan-zw/nuxt-skew-protection/commit/782d53c))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.7.1...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.1...main)
