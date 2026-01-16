@@ -17,7 +17,7 @@ import {
 import { colors } from 'consola/utils'
 import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
+import { hookNuxtSeoProLicense, isStaticPreset, registerNuxtSeoProModule, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -353,6 +353,25 @@ export {}
         resolvedStrategy = 'polling'
       }
 
+      // Determine adapter name for analytics
+      const adapterName = isAdapter ? (options.updateStrategy as SkewAdapter).name : undefined
+
+      // Register module with nuxtseo.com for dashboard integration
+      registerNuxtSeoProModule({
+        name: 'nuxt-skew-protection',
+        version,
+        features: {
+          updateStrategy: adapterName || resolvedStrategy,
+          connectionTracking: !!options.connectionTracking,
+          routeTracking: !!(options.connectionTracking && options.routeTracking),
+          ipTracking: !!(options.connectionTracking && options.ipTracking),
+          bundlePreviousDeploymentChunks: options.bundlePreviousDeploymentChunks !== false,
+          storageDriver: options.storage?.driver || 'none',
+          preset: nitroPreset,
+          isStatic,
+        },
+      })
+
       if (isVercel) {
         addServerHandler({
           handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
@@ -364,6 +383,15 @@ export {}
         addServerHandler({
           handler: resolver.resolve('./runtime/server/middleware/set-skew-protection-cookie'),
           middleware: true,
+        })
+      }
+
+      // Admin stats endpoint for nuxtseo.com dashboard (requires connectionTracking)
+      if (options.connectionTracking && !isStatic) {
+        addServerHandler({
+          route: '/_skew/admin/stats',
+          method: 'get',
+          handler: resolver.resolve('./runtime/server/routes/_skew/admin/stats.get'),
         })
       }
 

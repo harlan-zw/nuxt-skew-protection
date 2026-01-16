@@ -7,6 +7,29 @@ import { $fetch } from 'ofetch'
 import { env, isCI, isTest, provider } from 'std-env'
 import { logger } from './logger'
 
+export interface ModuleRegistration {
+  name: string
+  version?: string
+  /** Secret for runtime dashboard queries (e.g. stats endpoints) */
+  secret?: string
+  features?: Record<string, boolean | string | number>
+}
+
+/**
+ * Register a Nuxt SEO Pro module for license verification.
+ * Uses nuxt instance storage so modules don't need to import from each other.
+ *
+ * Call this in your module setup - registrations are collected
+ * before the single license verification fetch.
+ */
+export function registerNuxtSeoProModule(registration: ModuleRegistration) {
+  const nuxt = useNuxt()
+  // @ts-expect-error untyped
+  nuxt._nuxtSeoProModules = nuxt._nuxtSeoProModules || []
+  // @ts-expect-error untyped
+  nuxt._nuxtSeoProModules.push(registration)
+}
+
 export function isStaticPreset(nuxt: Nuxt = useNuxt()) {
   return nuxt.options.nitro?.static || (nuxt.options as any)._generate /* TODO: remove in future */ || [
     'static',
@@ -52,7 +75,8 @@ export function hookNuxtSeoProLicense() {
   // @ts-expect-error untyped
   if (isBuild && !nuxt._isNuxtSeoProVerifying) {
     const license = nuxt.options.runtimeConfig.seoProKey || process.env.NUXT_SEO_PRO_KEY
-    if (isTest) {
+    // std-env isTest + explicit VITEST check for @nuxt/test-utils compatibility
+    if (isTest || process.env.VITEST) {
       return
     }
     if (!isCI && !license) {
@@ -74,9 +98,20 @@ export function hookNuxtSeoProLicense() {
       // only pass valid url/name
       const siteUrl = siteConfig.url?.startsWith('http') ? siteConfig.url : undefined
       const siteName = siteConfig.name || undefined
+      // Collect registered modules from nuxt instance
+      // @ts-expect-error untyped
+      const modules: ModuleRegistration[] | undefined = nuxt._nuxtSeoProModules?.length > 0
+        // @ts-expect-error untyped
+        ? nuxt._nuxtSeoProModules
+        : undefined
       const res = await $fetch<{ ok: boolean }>('https://nuxtseo.com/api/pro/verify', {
         method: 'POST',
-        body: { apiKey: license, siteUrl, siteName },
+        body: {
+          apiKey: license,
+          siteUrl,
+          siteName,
+          modules,
+        },
       }).catch((err) => {
         // 401 = invalid key, 403 = no active subscription
         if (err?.response?.status === 401) {
