@@ -10,7 +10,7 @@ This module provides version skew protection for Nuxt applications through:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │              ARCHITECTURE OVERVIEW                   │
 ├─────────────────────────────────────────────────────┤
@@ -217,7 +217,7 @@ export default defineNuxtConfig({
 - `connection-tracking-cloudflare-durable.ts` - Durable Objects variant for Cloudflare
 
 **Admin Stats Endpoint:**
-```
+```text
 GET /_skew/admin/stats
 Authorization: Bearer <seoProKey>
 
@@ -568,7 +568,7 @@ Instead of platform-specific implementations, the module uses a **single univers
 
 ## Complete Flow Diagram
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │                         BUILD TIME                                │
 └──────────────────────────────────────────────────────────────────┘
@@ -805,7 +805,7 @@ export default defineNuxtConfig({
 
 ## File Structure
 
-```
+```text
 src/
 ├── module.ts                          # Main module entry, platform detection
 ├── kit.ts                             # Platform detection utilities
