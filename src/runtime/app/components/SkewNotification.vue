@@ -67,6 +67,9 @@ const isAppOutdated = computed(() => {
   return appOutdated.value
 })
 
+// Combined convenience: true when either chunks or app is outdated
+const isOpen = computed(() => isCurrentChunksOutdated.value || isAppOutdated.value)
+
 // Get latest release date from manifest
 /* eslint-disable harlanzw/nuxt-no-unsafe-date -- client-only notification, no SSR hydration concern */
 const releaseTimestamp = computed(() => {
@@ -102,12 +105,13 @@ async function handleReload() {
     <slot
       :version="version"
       :is-current-chunks-outdated="isCurrentChunksOutdated"
+      :is-app-outdated="isAppOutdated"
+      :is-open="isOpen"
       :dismiss="handleDismiss"
       :reload="handleReload"
       :time-ago="timeAgo"
       :release-date="releaseDate"
       :payload="outdatedPayload"
-      :is-app-outdated="isAppOutdated"
     />
   </ClientOnly>
 </template>

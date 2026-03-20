@@ -146,7 +146,7 @@ async function stopWrangler(process: ChildProcess): Promise<void> {
 
 async function checkVersionViaWebSocket(serverUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const wsUrl = `${serverUrl.replace('http://', 'ws://').replace('https://', 'wss://')}/_skew/ws`
+    const wsUrl = `${serverUrl.replace('http://', 'ws://').replace('https://', 'wss://')}/__skew/ws`
     const ws = new WebSocket(wsUrl)
 
     const timeout = setTimeout(() => {

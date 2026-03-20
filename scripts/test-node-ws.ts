@@ -60,7 +60,7 @@ async function deploy(deploymentId: string, port: number, cleanStorage = false):
   })
 
   const serverUrl = `http://localhost:${port}`
-  const wsUrl = `ws://localhost:${port}/_skew/ws`
+  const wsUrl = `ws://localhost:${port}/__skew/ws`
 
   // Wait for server to be ready
   log('  ⏳ Waiting for server to be ready...', 'yellow')

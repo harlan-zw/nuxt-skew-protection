@@ -9,7 +9,7 @@ vi.mock('nuxt/app', () => ({
     app: { buildId: 'test-build-id' },
     public: {
       skewProtection: {
-        cookie: { name: '__nkpv', path: '/', sameSite: 'strict', maxAge: 5184000 },
+        cookie: { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 },
       },
     },
   })),

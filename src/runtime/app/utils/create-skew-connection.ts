@@ -108,7 +108,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     }
     // Otherwise, POST to the route endpoint (SSE fallback)
     else if (connectionId) {
-      fetch('/_skew/route', {
+      fetch('/__skew/route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId, route }),
@@ -124,7 +124,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
       sendFn({ type: SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS })
     }
     else {
-      fetch('/_skew/subscribe-stats', {
+      fetch('/__skew/subscribe-stats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',

@@ -23,7 +23,7 @@ export default defineNuxtPlugin({
     const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
 
     const config: SkewWebSocketConfig = {
-      url: `${protocol}//${window.location.host}/_skew/ws${initialRoute}`,
+      url: `${protocol}//${window.location.host}/__skew/ws${initialRoute}`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
         immediate: false,

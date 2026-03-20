@@ -14,7 +14,7 @@ export default defineNuxtConfig({
   skewProtection: {
     debug: true,
     // Disable chunk preservation so old chunks are deleted on rebuild
-    bundlePreviousDeploymentChunks: false,
+    bundleAssets: false,
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),

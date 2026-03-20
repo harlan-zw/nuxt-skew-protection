@@ -1,13 +1,20 @@
 import { defineEventHandler, getHeader } from 'h3'
 import { useRuntimeConfig } from 'nitropack/runtime'
-import { setSkewProtectionCookie } from '../imports/cookie'
+import { getSkewProtectionCookie, setSkewProtectionCookie } from '../imports/cookie'
 
 /**
- * Middleware for document requests (HTML pages)
- * Sets the skew-version cookie based on current build ID
+ * Middleware that:
+ * 1. Sets event.context.skewVersion on all requests (from cookie)
+ * 2. Sets the skew-version cookie on document requests (HTML pages)
  */
 export default defineEventHandler(async (event) => {
-  // Only handle document requests
+  // Always expose client version in event context for API handlers
+  const clientVersion = getSkewProtectionCookie(event)
+  if (clientVersion) {
+    event.context.skewVersion = clientVersion
+  }
+
+  // Only set cookie on document requests
   const secFetchDest = getHeader(event, 'sec-fetch-dest')
   if (secFetchDest !== 'document')
     return

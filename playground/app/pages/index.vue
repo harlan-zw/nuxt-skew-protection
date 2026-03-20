@@ -61,7 +61,7 @@ onMounted(() => {
     modules.value = m || []
   })
 
-  app.hooks.hook('skew-protection:chunks-outdated', (payload) => {
+  app.hooks.hook('skew:chunks-outdated', (payload) => {
     console.log('Chunks outdated detected:', payload)
     chunksOutdatedPayload.value = payload
   })
@@ -161,8 +161,8 @@ watch(selectedVariant, (newVariant, oldVariant) => {
         </div>
         <div class="flex justify-between items-center">
           <span class="font-medium text-gray-700 dark:text-gray-300">Chunks Outdated:</span>
-          <UBadge :color="skew.isOutdated ? 'error' : 'neutral'">
-            {{ skew.isOutdated ? 'Yes' : 'No' }}
+          <UBadge :color="skew.isAppOutdated ? 'error' : 'neutral'">
+            {{ skew.isAppOutdated ? 'Yes' : 'No' }}
           </UBadge>
         </div>
       </div>

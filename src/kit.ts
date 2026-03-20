@@ -31,7 +31,7 @@ export function registerNuxtSeoProModule(registration: ModuleRegistration) {
 }
 
 export function isStaticPreset(nuxt: Nuxt = useNuxt()) {
-  return nuxt.options.nitro?.static || (nuxt.options as any)._generate /* TODO: remove in future */ || [
+  return nuxt.options.nitro?.static || [
     'static',
     'github-pages',
   ].includes(resolveNitroPreset())

@@ -311,7 +311,7 @@ async function main() {
       if (!deployment1 || !deployment2)
         throw new Error('Both deployments required')
 
-      const sseUrl = `${deployment2.serverUrl}/_skew/sse`
+      const sseUrl = `${deployment2.serverUrl}/__skew/sse`
 
       // Connect and get the 'connected' message
       const connectedMsg = await waitForSSEMessage(sseUrl, 'connected', 5000)
@@ -364,12 +364,12 @@ async function main() {
       // Step 5: Determine outcome
       if (invalidated.length > 0) {
         log(`     5. ✅ DETECTION SUCCESS: ${invalidated.length} chunks invalidated`, 'green')
-        log(`        → skew-protection:chunks-outdated hook would fire`, 'green')
+        log(`        → skew:chunks-outdated hook would fire`, 'green')
         log(`        → SkewNotification would show (isCurrentChunksOutdated = true)`, 'green')
       }
       else {
         log(`     5. ⚠️  NO INVALIDATION: Chunks may have same names (content hash unchanged)`, 'yellow')
-        log(`        → skew-protection:chunks-outdated hook would NOT fire`, 'yellow')
+        log(`        → skew:chunks-outdated hook would NOT fire`, 'yellow')
         log(`        → SkewNotification would NOT show for isCurrentChunksOutdated`, 'yellow')
         log(`        → But isAppOutdated WOULD be true (manifest changed)`, 'green')
       }

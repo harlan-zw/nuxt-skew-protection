@@ -131,7 +131,7 @@ export default defineNuxtPlugin({
           invalidatedModules,
           passedReleases,
         })
-        await nuxtApp.hooks.callHook('skew-protection:chunks-outdated', {
+        await nuxtApp.hooks.callHook('skew:chunks-outdated', {
           deletedChunks,
           invalidatedModules,
           passedReleases,

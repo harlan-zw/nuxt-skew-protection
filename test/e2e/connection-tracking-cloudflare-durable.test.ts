@@ -84,7 +84,7 @@ function createWs(version?: string): Promise<WsConn> {
     if (version)
       headers.cookie = `__nkpv=${version}`
 
-    const ws = new WebSocket(`ws://localhost:${port}/_skew/ws`, { headers })
+    const ws = new WebSocket(`ws://localhost:${port}/__skew/ws`, { headers })
     const messages: any[] = []
     const statsWaiters: Array<{ predicate?: (msg: any) => boolean, resolve: (msg: any) => void }> = []
 

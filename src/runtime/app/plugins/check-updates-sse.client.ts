@@ -21,7 +21,7 @@ export default defineNuxtPlugin({
     const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
 
     const config: SkewSSEConfig = {
-      url: `/_skew/sse${initialRoute}`,
+      url: `/__skew/sse${initialRoute}`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
       },

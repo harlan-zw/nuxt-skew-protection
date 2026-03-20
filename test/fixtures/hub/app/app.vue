@@ -35,7 +35,7 @@ async function testManifest() {
     testResult.value = JSON.stringify({
       currentVersion: skew.clientVersion,
       manifest: skew.manifest.value,
-      isOutdated: skew.isOutdated.value,
+      isAppOutdated: skew.isAppOutdated.value,
     }, null, 2)
   }
   catch (error) {
