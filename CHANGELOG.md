@@ -1,6 +1,35 @@
 # Changelog
 
 
+## v0.7.5...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.5...main)
+
+### 📖 Documentation
+
+- Add skilld agent skill snippet ([#11](https://github.com/harlan-zw/nuxt-skew-protection/pull/11))
+
+### 🏡 Chore
+
+- Sync ([f05061b](https://github.com/harlan-zw/nuxt-skew-protection/commit/f05061b))
+- Sync ([366747c](https://github.com/harlan-zw/nuxt-skew-protection/commit/366747c))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v0.7.4...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.4...main)
+
+### 🏡 Chore
+
+- Sync ([c380fe7](https://github.com/harlan-zw/nuxt-skew-protection/commit/c380fe7))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.7.3...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.3...main)

@@ -15,6 +15,14 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execCommand, extractAssetsFromHtml, fetchWithRetry, log, logSection, modifyAppContent, parseConfigFile, printSummary, runTest, runTestSuite, sleep, updateConfigFile, verifyAssetsAccessible } from './utils.ts'
 
+const RE_WRANGLER_NAME = /name\s*=\s*"([^"]+)"/
+const RE_WRANGLER_ACCOUNT = /account_id\s*=\s*"([^"]+)"/
+const RE_WRANGLER_PREVIEW = /CF_PREVIEW_DOMAIN\s*=\s*"([^"]+)"/
+const RE_DEPLOYMENT_ID = /NUXT_DEPLOYMENT_ID\s*=\s*"[^"]*"/
+const RE_DEPLOYMENT_MAPPING = /CF_DEPLOYMENT_MAPPING\s*=\s*'[^']*'/
+const RE_DEPLOYMENT_REPLACE = /v\d+$/
+const RE_WORKERS_URL = /https:\/\/\S+/g
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../test/fixtures/cloudflare')
 const appDir = join(fixtureDir, 'app')
@@ -30,9 +38,9 @@ const results: TestResult[] = []
 
 function getWorkerConfig(): { workerName: string, previewDomain: string, accountId: string } {
   const config = parseConfigFile(join(appDir, 'wrangler.toml'), {
-    workerName: /name\s*=\s*"([^"]+)"/,
-    accountId: /account_id\s*=\s*"([^"]+)"/,
-    previewDomain: /CF_PREVIEW_DOMAIN\s*=\s*"([^"]+)"/,
+    workerName: RE_WRANGLER_NAME,
+    accountId: RE_WRANGLER_ACCOUNT,
+    previewDomain: RE_WRANGLER_PREVIEW,
   })
 
   if (!config.workerName || !config.accountId || !config.previewDomain) {
@@ -51,11 +59,11 @@ function updateWranglerConfig(deploymentId: string, deploymentMapping: Record<st
 
   updateConfigFile(wranglerPath, [
     {
-      pattern: /NUXT_DEPLOYMENT_ID\s*=\s*"[^"]*"/,
+      pattern: RE_DEPLOYMENT_ID,
       replacement: `NUXT_DEPLOYMENT_ID = "${deploymentId}"`,
     },
     {
-      pattern: /CF_DEPLOYMENT_MAPPING\s*=\s*'[^']*'/,
+      pattern: RE_DEPLOYMENT_MAPPING,
       replacement: `CF_DEPLOYMENT_MAPPING = '${JSON.stringify(deploymentMapping)}'`,
     },
   ])
@@ -72,7 +80,7 @@ async function deploy(deploymentId: string, previousVersionId?: string): Promise
   }
 
   if (previousVersionId) {
-    const previousDeploymentId = deploymentId.replace(/v\d+$/, 'v1')
+    const previousDeploymentId = deploymentId.replace(RE_DEPLOYMENT_REPLACE, 'v1')
     deploymentMapping[previousDeploymentId] = previousVersionId
   }
 
@@ -88,7 +96,7 @@ async function deploy(deploymentId: string, previousVersionId?: string): Promise
 
   // Extract worker URL from deployment output
   // Look for the actual worker URL (*.workers.dev)
-  const urlMatches = deployOutput.matchAll(/https:\/\/\S+/g)
+  const urlMatches = deployOutput.matchAll(RE_WORKERS_URL)
   let workerUrl = null
   for (const match of urlMatches) {
     if (match[0].includes('.workers.dev')) {

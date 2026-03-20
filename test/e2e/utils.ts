@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const execAsync = promisify(exec)
+const RE_VERSION_REF = /const version = ref\('[^']+'\)/
 
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -18,7 +19,7 @@ export function modifyVersion(fixtureDir: string, version: string, pages = ['ind
   for (const page of pages) {
     const path = join(fixtureDir, `pages/${page}.vue`)
     let content = readFileSync(path, 'utf-8')
-    content = content.replace(/const version = ref\('[^']+'\)/, `const version = ref('${version}')`)
+    content = content.replace(RE_VERSION_REF, `const version = ref('${version}')`)
     writeFileSync(path, content)
   }
 }

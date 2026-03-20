@@ -5,6 +5,9 @@ import { join } from 'node:path'
 import { useNuxt } from '@nuxt/kit'
 import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
 
+const RE_KV_SKEW_PROTECTION = /\[\[kv_namespaces\]\][^[]*?binding\s*=\s*"SKEW_PROTECTION"[^[]*?id\s*=\s*"([^"]+)"/
+const RE_KV_NAMESPACE = /\[\[kv_namespaces\]\][^[]*?id\s*=\s*"([^"]+)"/
+
 /**
  * Detect Cloudflare KV namespace from nitro config or wrangler.toml
  */
@@ -43,13 +46,13 @@ async function detectCloudflareKVNamespace(): Promise<string | null> {
       const content = readFileSync(wranglerPath, 'utf-8')
 
       // Look for SKEW_PROTECTION binding first
-      const skewMatch = content.match(/\[\[kv_namespaces\]\][^[]*?binding\s*=\s*"SKEW_PROTECTION"[^[]*?id\s*=\s*"([^"]+)"/)
+      const skewMatch = content.match(RE_KV_SKEW_PROTECTION)
       if (skewMatch?.[1]) {
         return skewMatch[1]
       }
 
       // Otherwise use first kv_namespace
-      const kvNamespaceMatch = content.match(/\[\[kv_namespaces\]\][^[]*?id\s*=\s*"([^"]+)"/)
+      const kvNamespaceMatch = content.match(RE_KV_NAMESPACE)
       if (kvNamespaceMatch?.[1]) {
         return kvNamespaceMatch[1]
       }

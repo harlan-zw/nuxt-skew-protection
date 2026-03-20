@@ -21,6 +21,7 @@ export interface UseSkewProtectionOptions {
 
 const isConnected = ref(false)
 
+// eslint-disable-next-line harlanzw/vue-require-composable-prefix -- public API action, not a composable
 export async function checkForUpdates() {
   // Don't check for updates when offline
   if (import.meta.client && !useOnline().value)

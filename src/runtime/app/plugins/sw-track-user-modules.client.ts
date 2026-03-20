@@ -6,13 +6,15 @@ import { useSkewProtection } from '../composables/useSkewProtection'
  * Normalize path to match format: _nuxt/chunk.js
  * Handles both full URLs and relative paths
  */
+const RE_LEADING_SLASH = /^\//
+
 function normalizePath(pathOrUrl: string): string {
   try {
     const url = new URL(pathOrUrl)
-    return url.pathname.replace(/^\//, '')
+    return url.pathname.replace(RE_LEADING_SLASH, '')
   }
   catch {
-    return pathOrUrl.replace(/^\//, '')
+    return pathOrUrl.replace(RE_LEADING_SLASH, '')
   }
 }
 

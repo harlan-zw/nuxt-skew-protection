@@ -56,8 +56,10 @@ const app = useNuxtApp()
 const modules = ref([])
 const chunksOutdatedPayload = ref(null)
 
-onMounted(async () => {
-  modules.value = await app.$skewServiceWorker?.getLoadedModules() || []
+onMounted(() => {
+  app.$skewServiceWorker?.getLoadedModules().then((m) => {
+    modules.value = m || []
+  })
 
   app.hooks.hook('skew-protection:chunks-outdated', (payload) => {
     console.log('Chunks outdated detected:', payload)

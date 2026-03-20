@@ -19,6 +19,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execCommand, extractAssetsFromHtml, fetchWithRetry, log, logSection, modifyAppContent, printSummary, runTest, runTestSuite, sleep, startServer, stopServer, verifyAssetContent, verifyHtmlContent, verifyStorageFiles } from './utils.ts'
 
+const RE_ENTRY_IMPORTMAP = /"#entry":"(\/_nuxt\/[^"]+)"/
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../test/fixtures/static')
 
@@ -81,7 +83,7 @@ async function generate(deploymentId: string, preserveStorage = false): Promise<
 
   // Find the main entry point (the script that contains our app code)
   // Look for the #entry import in the importmap
-  const entryMatch = html.match(/"#entry":"(\/_nuxt\/[^"]+)"/)
+  const entryMatch = html.match(RE_ENTRY_IMPORTMAP)
   const entryAsset = entryMatch ? entryMatch[1] : undefined
 
   log(`  📦 Found ${nuxtAssets.length} /_nuxt/* assets`, 'yellow')

@@ -68,11 +68,13 @@ const isAppOutdated = computed(() => {
 })
 
 // Get latest release date from manifest
+/* eslint-disable harlanzw/nuxt-no-unsafe-date -- client-only notification, no SSR hydration concern */
 const releaseTimestamp = computed(() => {
   if (props.forceOpen)
     return Date.now() - 5 * 60 * 1000 // Mock: 5 minutes ago
   return skewProtection.manifest.value?.timestamp ?? Date.now()
 })
+/* eslint-enable harlanzw/nuxt-no-unsafe-date */
 const releaseDate = computed(() => new Date(releaseTimestamp.value))
 
 // Reactive time ago using VueUse

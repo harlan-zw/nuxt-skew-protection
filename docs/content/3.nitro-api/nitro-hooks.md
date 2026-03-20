@@ -9,7 +9,7 @@ Nitro hooks allow you to build custom functionality on top of the SSE/WebSocket 
 
 **Type:** `(payload: { id: string, version: string, route?: string, ip?: string, send: (data) => void }) => void`{lang="ts"}
 
-Triggered when a client establishes an SSE or WebSocket connection.
+Triggered when a client establishes an SSE or [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) connection.
 
 | Property | Description |
 |----------|-------------|
@@ -68,10 +68,10 @@ export default defineNitroPlugin((nitroApp) => {
 
 **Type:** `(payload: { event?: H3Event | { headers?: Headers }, authorize: () => void }) => void`{lang="ts"}
 
-Called when a client requests stats subscription. Call `authorize()` to allow the connection to receive stats updates.
+Called when a client requests stats subscription. Call `authorize()`{lang="ts"} to allow the connection to receive stats updates.
 
 ::callout{type="info"}
-For SSE, `event` is a full `H3Event` with cookies and session access. For WebSocket, `event` is `{ headers }` since WebSocket handlers don't expose H3Event. Both work with `getUserSession()` from nuxt-auth-utils.
+For SSE, `event` is a full `H3Event` with cookies and session access. For WebSocket, `event` is `{ headers }` since WebSocket handlers don't expose H3Event. Both work with `getUserSession()`{lang="ts"} from nuxt-auth-utils.
 ::
 
 ```ts [server/plugins/skew-auth.ts]

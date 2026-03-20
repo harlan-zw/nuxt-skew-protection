@@ -6,6 +6,15 @@ import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
 import { logger } from '../logger'
 
+const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
+const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
+const RE_SIZE_PROP = /(['"]?)size\1\s*:\s*\d+/
+const RE_SIZE_PREFIX = /^(['"]?)size\1\s*:\s*/
+const RE_ETAG_PROP = /(['"]?)etag\1\s*:\s*(['"])(?:[^\\]|\\.)*?\2/
+const RE_ETAG_KEY_PREFIX = /^(['"]?)etag\1\s*:\s*/
+const RE_ETAG_QUOTE = /:\s*(['"])/
+const RE_ESCAPE_DOUBLE_QUOTE = /"/g
+
 function formatStorageError(error: unknown, operation: string): Error {
   const cause = error instanceof Error ? (error.cause as Error | undefined) : undefined
   const message = error instanceof Error ? error.message : String(error)
@@ -13,7 +22,7 @@ function formatStorageError(error: unknown, operation: string): Error {
 
   // DNS resolution failure
   if (causeMessage.includes('ENOTFOUND') || causeMessage.includes('getaddrinfo')) {
-    const hostMatch = causeMessage.match(/ENOTFOUND\s+(\S+)/) || causeMessage.match(/getaddrinfo\s+\S+\s+(\S+)/)
+    const hostMatch = causeMessage.match(RE_ENOTFOUND) || causeMessage.match(RE_GETADDRINFO)
     const host = hostMatch?.[1] || 'unknown host'
     return new Error(`Storage ${operation} failed: Could not resolve host '${host}'. Check your storage URL/credentials are correct.`)
   }
@@ -751,19 +760,19 @@ export function createAssetManager(options: {
     let entryStr = nitro.substring(start, end + 1)
 
     // Replace size value (number after "size": or size:)
-    entryStr = entryStr.replace(/(['"]?)size\1\s*:\s*\d+/, (match) => {
-      const prefix = match.match(/^(['"]?)size\1\s*:\s*/)?.[0] || 'size:'
+    entryStr = entryStr.replace(RE_SIZE_PROP, (match) => {
+      const prefix = match.match(RE_SIZE_PREFIX)?.[0] || 'size:'
       return `${prefix}${size}`
     })
 
     // Replace etag value (string after "etag": or etag:)
     // Handles both "\"hash\"" (JSON) and '"hash"' (JS with single quotes)
-    entryStr = entryStr.replace(/(['"]?)etag\1\s*:\s*(['"])(?:[^\\]|\\.)*?\2/, (match) => {
-      const keyMatch = match.match(/^(['"]?)etag\1\s*:\s*/)
+    entryStr = entryStr.replace(RE_ETAG_PROP, (match) => {
+      const keyMatch = match.match(RE_ETAG_KEY_PREFIX)
       const prefix = keyMatch?.[0] || 'etag:'
-      const quoteChar = match.match(/:\s*(['"])/)?.[1] || '"'
+      const quoteChar = match.match(RE_ETAG_QUOTE)?.[1] || '"'
       // For single quotes, don't escape inner quotes; for double quotes, escape them
-      const escapedEtag = quoteChar === '\'' ? newEtag : newEtag.replace(/"/g, '\\"')
+      const escapedEtag = quoteChar === '\'' ? newEtag : newEtag.replace(RE_ESCAPE_DOUBLE_QUOTE, '\\"')
       return `${prefix}${quoteChar}${escapedEtag}${quoteChar}`
     })
 

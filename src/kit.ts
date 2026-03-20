@@ -124,6 +124,11 @@ export function hookNuxtSeoProLicense() {
           p.note('Your subscription has expired or is inactive.\n\nhttps://nuxtseo.com/pro/dashboard', 'License Issue')
           throw new Error('No active Nuxt SEO Pro subscription.')
         }
+        // Always log the full error details for debugging
+        const status = err?.response?.status || 'unknown'
+        const message = err?.data?.message || err?.message || 'Unknown error'
+        console.error(`[nuxt-seo-pro] License verification failed (${status}): ${message}`)
+        console.error('[nuxt-seo-pro] Request body:', JSON.stringify({ siteUrl, siteName, modules: modules?.map(m => m.name) }))
         logger.error(err)
         return null
       })

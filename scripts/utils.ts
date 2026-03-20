@@ -3,6 +3,9 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { createConsola } from 'consola'
 
+const RE_VERSION_REF = /const version = ref\('v\d+'\)/
+const RE_ESCAPE_REGEX_CHARS = /[.*+?^${}()|[\]\\]/g
+
 const logger = createConsola({
   defaults: { tag: 'nuxt-skew-protection' },
 })
@@ -85,7 +88,7 @@ export function modifyAppContent(appVuePath: string, version: number): void {
 
   // Update version in ref() declaration
   content = content.replace(
-    /const version = ref\('v\d+'\)/,
+    RE_VERSION_REF,
     `const version = ref('v${version}')`,
   )
 
@@ -487,7 +490,7 @@ export async function verifyEndpoint(
 
 export function extractAssetsFromHtml(html: string, buildAssetsDir = '/_nuxt'): string[] {
   // Escape special regex characters in buildAssetsDir
-  const escapedDir = buildAssetsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapedDir = buildAssetsDir.replace(RE_ESCAPE_REGEX_CHARS, '\\$&')
   const pattern = new RegExp(`${escapedDir}\\/([^"'\\s]+)`, 'g')
   const assetMatches = html.matchAll(pattern)
   return Array.from(new Set(Array.from(assetMatches, m => `${buildAssetsDir}/${m[1]}`)))

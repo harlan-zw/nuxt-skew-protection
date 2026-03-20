@@ -27,7 +27,7 @@ async function login() {
 // Redirect if already logged in
 watchEffect(() => {
   if (loggedIn.value) {
-    navigateTo('/admin')
+    return navigateTo('/admin')
   }
 })
 </script>

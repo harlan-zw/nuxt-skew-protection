@@ -19,6 +19,9 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execCommand, extractAssetsFromHtml, fetchWithRetry, log, logSection, modifyAppContent, printSummary, runTest, runTestSuite, sleep, verifyAssetsAccessible } from './utils.ts'
 
+const RE_TARBALL = /nuxt-skew-protection-[\d.]+\.tgz/
+const RE_PRODUCTION_URL = /(?:Production:\s+)?(https:\/\/\S+\.vercel\.app)/
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../test/fixtures/vercel')
 
@@ -43,7 +46,7 @@ async function deploy(deploymentId: string): Promise<DeploymentInfo> {
   // Pack the module
   log('  📦 Packing module...', 'yellow')
   const packOutput = await execCommand('pnpm pack --pack-destination test/fixtures/vercel', rootDir)
-  const tarballMatch = packOutput.match(/nuxt-skew-protection-[\d.]+\.tgz/)
+  const tarballMatch = packOutput.match(RE_TARBALL)
   if (!tarballMatch) {
     throw new Error('Could not find packed tarball')
   }
@@ -65,7 +68,7 @@ async function deploy(deploymentId: string): Promise<DeploymentInfo> {
 
   // Extract production URL from output
   // Production deployments may show "Production: URL" or just "URL"
-  const productionMatch = deployOutput.match(/(?:Production:\s+)?(https:\/\/\S+\.vercel\.app)/)
+  const productionMatch = deployOutput.match(RE_PRODUCTION_URL)
 
   if (!productionMatch) {
     console.error('Vercel output:', deployOutput.substring(0, 500))
@@ -275,8 +278,7 @@ async function main() {
         throw new Error('Deployment 2 not available')
 
       // Make 10 parallel requests
-      const promises = Array.from({ length: 10 }, () =>
-        fetchWithRetry(deployment2.deploymentUrl))
+      const promises = Array.from({ length: 10 }).fill(fetchWithRetry(deployment2.deploymentUrl))
 
       const responses = await Promise.all(promises)
 

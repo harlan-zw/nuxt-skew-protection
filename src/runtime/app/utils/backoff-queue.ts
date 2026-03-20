@@ -21,7 +21,7 @@ export function createBackoffQueue(options: BackoffQueueOptions): BackoffQueue {
   const start = () => {
     clear()
     delays.forEach((delay, i) => {
-      timers.push(setTimeout(() => onTick(i), delay))
+      timers.push(setTimeout(onTick, delay, i))
     })
   }
 

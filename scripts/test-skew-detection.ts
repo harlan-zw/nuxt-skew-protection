@@ -19,6 +19,9 @@ import { fileURLToPath } from 'node:url'
 import { EventSource } from 'eventsource'
 import { execCommand, extractAssetsFromHtml, fetchWithRetry, log, logSection, printSummary, runTest, runTestSuite, sleep, startServer, stopServer } from './utils.ts'
 
+const RE_VERSION_REF = /const version = ref\('v\d+'\)/
+const RE_LEADING_SLASH = /^\//
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../test/fixtures/node')
 const storageDir = join(fixtureDir, '.skew-storage')
@@ -51,7 +54,7 @@ function modifyAppContent(version: number): void {
 
   // Update version in ref() declaration
   content = content.replace(
-    /const version = ref\('v\d+'\)/,
+    RE_VERSION_REF,
     `const version = ref('v${version}')`,
   )
 
@@ -272,8 +275,8 @@ async function main() {
       }
 
       // Normalize paths for comparison
-      const normalizedDeleted = new Set(allDeletedChunks.map(c => c.replace(/^\//, '')))
-      const normalizedV1Chunks = deployment1.jsChunks.map(c => c.replace(/^\//, ''))
+      const normalizedDeleted = new Set(allDeletedChunks.map(c => c.replace(RE_LEADING_SLASH, '')))
+      const normalizedV1Chunks = deployment1.jsChunks.map(c => c.replace(RE_LEADING_SLASH, ''))
 
       // Find intersection
       const invalidatedChunks = normalizedV1Chunks.filter(c => normalizedDeleted.has(c))
@@ -338,7 +341,7 @@ async function main() {
       log(`  🔄 Simulating client-side detection flow:`, 'cyan')
 
       // Step 1: Client has loaded v1 chunks
-      const clientLoadedChunks = deployment1.jsChunks.map(c => c.replace(/^\//, ''))
+      const clientLoadedChunks = deployment1.jsChunks.map(c => c.replace(RE_LEADING_SLASH, ''))
       log(`     1. Client loaded ${clientLoadedChunks.length} chunks from v1`, 'yellow')
 
       // Step 2: Client connects to SSE and detects version mismatch
@@ -353,7 +356,7 @@ async function main() {
       for (const v of Object.values(manifest.skewProtection?.versions || {})) {
         allDeletedChunks.push(...(v.deletedChunks || []))
       }
-      const normalizedDeleted = new Set(allDeletedChunks.map(c => c.replace(/^\//, '')))
+      const normalizedDeleted = new Set(allDeletedChunks.map(c => c.replace(RE_LEADING_SLASH, '')))
 
       const invalidated = clientLoadedChunks.filter(c => normalizedDeleted.has(c))
       log(`     4. Client checks ${clientLoadedChunks.length} loaded vs ${normalizedDeleted.size} deleted`, 'yellow')

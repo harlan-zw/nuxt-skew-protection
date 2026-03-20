@@ -1,4 +1,5 @@
 import antfu from '@antfu/eslint-config'
+import harlanzw from 'eslint-plugin-harlanzw'
 
 export default antfu({
   ignores: [
@@ -33,5 +34,10 @@ export default antfu({
   rules: {
     'unused-imports/no-unused-vars': 'off',
     'ts/no-unused-vars': 'off',
+  },
+}, ...harlanzw({ link: true, nuxt: true, vue: true }), {
+  files: ['test/fixtures/**/*.vue'],
+  rules: {
+    'harlanzw/nuxt-no-unsafe-date': 'off',
   },
 })
