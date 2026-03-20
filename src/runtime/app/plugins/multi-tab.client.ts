@@ -66,7 +66,7 @@ export default defineNuxtPlugin({
     // When this tab detects an update, broadcast to other tabs
     nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
       logger.debug('[MultiTab] Broadcasting version update to other tabs')
-      channel.postMessage({ type: 'version-update', id: manifest.id, timestamp: manifest.timestamp })
+      channel.postMessage({ type: 'version-update', id: manifest?.id, timestamp: manifest?.timestamp })
     })
 
     // When another tab broadcasts an update, trigger hooks locally
