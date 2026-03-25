@@ -17,7 +17,7 @@ import {
 import { colors } from 'consola/utils'
 import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { hookNuxtSeoProLicense, isStaticPreset, registerNuxtSeoProModule, resolveNitroPreset } from './kit'
+import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -126,6 +126,9 @@ export default defineNuxtModule<ModuleOptions>({
     moduleDependencies: {
       '@nuxtjs/robots': {
         version: '>=5.6.7',
+      },
+      'nuxt-site-config': {
+        version: '>=3.2',
       },
     },
   },
@@ -389,22 +392,6 @@ export {}
 
       // Determine adapter name for analytics
       const adapterName = isAdapter ? (options.updateStrategy as SkewAdapter).name : undefined
-
-      // Register module with nuxtseo.com for dashboard integration
-      registerNuxtSeoProModule({
-        name: 'nuxt-skew-protection',
-        version,
-        features: {
-          updateStrategy: adapterName || resolvedStrategy,
-          connectionTracking: !!options.connectionTracking,
-          routeTracking: !!(options.connectionTracking && options.routeTracking),
-          ipTracking: !!(options.connectionTracking && options.ipTracking),
-          bundleAssets: options.bundleAssets !== false,
-          storageDriver: options.storage?.driver || 'none',
-          preset: nitroPreset,
-          isStatic,
-        },
-      })
 
       if (isVercel) {
         addServerHandler({

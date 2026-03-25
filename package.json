@@ -1,7 +1,7 @@
 {
   "name": "nuxt-skew-protection",
   "type": "module",
-  "version": "0.7.6",
+  "version": "1.0.0-beta.1",
   "packageManager": "pnpm@10.32.1",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
@@ -73,14 +73,13 @@
     }
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0",
     "@nuxt/kit": "^4.4.2",
     "@vueuse/core": "^14.2.1",
     "consola": "^3.4.2",
     "cookie-es": "^2.0.0",
     "defu": "^6.1.4",
-    "nuxt-site-config": "^3.2.21",
-    "ofetch": "^1.5.1",
+    "nuxt-site-config": "^4.0.0",
+    "nuxtseo-shared": "^0.1.9",
     "pathe": "^2.0.3",
     "pkg-types": "^2.3.0",
     "std-env": "^4.0.0",

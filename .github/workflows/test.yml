@@ -1,6 +1,4 @@
-name: Test
-
-permissions: {contents: read}
+name: CI
 
 on:
   push:
@@ -12,41 +10,15 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:latest
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4.2.0
-
-      - run: pnpm i
-
-      - name: Build
-        run: pnpm run build
-        env:
-          NODE_OPTIONS: --max-old-space-size=8192
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Playwright Install
-        run: pnpm exec playwright-core install
-
-      - name: Test
-        run: pnpm run test
+  ci:
+    uses: harlan-zw/nuxt-seo/.github/workflows/reusable-ci.yml@main
+    with:
+      redis: true
