@@ -16,7 +16,7 @@ const versions = computed(() => {
       expires: new Date(info.expires),
       assetCount: info.assets?.length || 0,
       deletedChunks: info.deletedChunks?.length || 0,
-      isExpired: new Date(info.expires) < new Date(),
+      isExpired: new Date(info.expires).getTime() < Date.now(),
     }))
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 })

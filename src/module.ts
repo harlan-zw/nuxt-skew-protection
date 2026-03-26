@@ -161,8 +161,8 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
-    nuxt.hooks.hook('nuxt-seo-pro:modules', (modules) => {
-      const mod = modules.find(m => m.name === 'nuxt-skew-protection')
+    nuxt.hooks.hook('nuxt-seo-pro:modules' as any, (modules: any[]) => {
+      const mod = modules.find((m: any) => m.name === 'nuxt-skew-protection')
       if (mod) {
         mod.features = {
           updateStrategy: options.updateStrategy || 'polling',
@@ -407,9 +407,6 @@ export {}
         logger.warn(`Strategy "${resolvedStrategy}" requires a server but static generation detected. Falling back to polling.`)
         resolvedStrategy = 'polling'
       }
-
-      // Determine adapter name for analytics
-      const adapterName = isAdapter ? (options.updateStrategy as SkewAdapter).name : undefined
 
       if (isVercel) {
         addServerHandler({

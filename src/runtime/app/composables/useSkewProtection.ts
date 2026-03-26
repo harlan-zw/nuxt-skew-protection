@@ -32,7 +32,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     if (import.meta.client && !useOnline().value)
       return
 
-    const meta = await $fetch<NuxtAppManifestMeta>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
+    const meta = await ($fetch(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`) as Promise<NuxtAppManifestMeta>).catch(() => {
       return null
     })
     if (meta && meta?.id !== clientVersion) {

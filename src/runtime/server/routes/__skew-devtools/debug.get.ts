@@ -7,7 +7,7 @@ import { useRuntimeConfig } from 'nitropack/runtime'
  */
 export default defineEventHandler((event) => {
   const config = useRuntimeConfig(event)
-  const siteConfig = useSiteConfig(event)
+  const siteConfig = useSiteConfig(event as any)
   const skewConfig = config.public?.skewProtection as Record<string, unknown> || {}
 
   return {

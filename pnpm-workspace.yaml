@@ -1,3 +1,11 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+packages:
+  - playground
+  - devtools
+
 onlyBuiltDependencies:
   - '@firebase/util'
   - '@parcel/watcher'
@@ -7,12 +15,5 @@ onlyBuiltDependencies:
   - unrs-resolver
   - vue-demi
   - workerd
-shellEmulator: true
-
-trustPolicy: no-downgrade
-
-packages:
-  - playground
-  - devtools
 
 trustPolicyIgnoreAfter: 262800
