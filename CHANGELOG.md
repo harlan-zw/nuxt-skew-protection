@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v1.0.2...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.2...main)
+
+### 🩹 Fixes
+
+- Broken site config import ([b9d0a29](https://github.com/harlan-zw/nuxt-skew-protection/commit/b9d0a29))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.0.1...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.1...main)
