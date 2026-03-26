@@ -1,6 +1,20 @@
 # Changelog
 
 
+## v1.0.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.1...main)
+
+### 🏡 Chore
+
+- Bump deps ([0da1935](https://github.com/harlan-zw/nuxt-skew-protection/commit/0da1935))
+- Bump deps ([e188a22](https://github.com/harlan-zw/nuxt-skew-protection/commit/e188a22))
+- Sync ([956549a](https://github.com/harlan-zw/nuxt-skew-protection/commit/956549a))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.0.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.0...main)

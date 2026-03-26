@@ -1,4 +1,4 @@
-import { useSiteConfig } from '#imports'
+import { getSiteConfig } from '#site-config/server/composables'
 import { defineEventHandler } from 'h3'
 import { useRuntimeConfig } from 'nitropack/runtime'
 
@@ -7,7 +7,7 @@ import { useRuntimeConfig } from 'nitropack/runtime'
  */
 export default defineEventHandler((event) => {
   const config = useRuntimeConfig(event)
-  const siteConfig = useSiteConfig(event as any)
+  const siteConfig = getSiteConfig(event as any)
   const skewConfig = config.public?.skewProtection as Record<string, unknown> || {}
 
   return {
