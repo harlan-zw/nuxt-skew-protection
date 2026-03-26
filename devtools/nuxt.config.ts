@@ -3,6 +3,9 @@ import { resolve } from 'pathe'
 export default defineNuxtConfig({
   extends: ['nuxtseo-layer-devtools'],
 
+  skewProtection: false,
+  robots: false,
+
   imports: {
     autoImport: true,
   },

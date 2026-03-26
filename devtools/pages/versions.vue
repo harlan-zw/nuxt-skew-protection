@@ -70,10 +70,14 @@ function formatRelative(date: Date): string {
       />
 
       <!-- Version timeline -->
-      <div v-for="v in versions" :key="v.id" class="version-card" :class="{ 'version-current': v.id === currentBuildId }">
-        <div class="version-header">
+      <DevtoolsPanel
+        v-for="v in versions"
+        :key="v.id"
+        :title="v.shortId"
+        icon="carbon:version"
+      >
+        <template #header>
           <div class="flex items-center gap-2">
-            <div class="version-dot" :class="v.id === currentBuildId ? 'version-dot-current' : v.isExpired ? 'version-dot-expired' : 'version-dot-active'" />
             <code class="text-sm font-mono font-semibold">{{ v.shortId }}</code>
             <DevtoolsMetric
               v-if="v.id === currentBuildId"
@@ -87,20 +91,18 @@ function formatRelative(date: Date): string {
             />
           </div>
           <span class="text-xs opacity-60">{{ formatRelative(v.timestamp) }}</span>
-        </div>
+        </template>
 
-        <div class="version-details">
-          <DevtoolsKeyValue
-            :items="[
-              { key: 'Built', value: formatDate(v.timestamp) },
-              { key: 'Expires', value: formatDate(v.expires) },
-              { key: 'Assets', value: v.assetCount },
-              { key: 'Deleted Chunks', value: v.deletedChunks },
-            ]"
-            striped
-          />
-        </div>
-      </div>
+        <DevtoolsKeyValue
+          :items="[
+            { key: 'Built', value: formatDate(v.timestamp) },
+            { key: 'Expires', value: formatDate(v.expires) },
+            { key: 'Assets', value: v.assetCount },
+            { key: 'Deleted Chunks', value: v.deletedChunks },
+          ]"
+          striped
+        />
+      </DevtoolsPanel>
     </template>
 
     <!-- Dev mode empty state -->
@@ -115,62 +117,3 @@ function formatRelative(date: Date): string {
     </template>
   </div>
 </template>
-
-<style scoped>
-.version-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-elevated);
-  overflow: hidden;
-  transition: border-color 200ms ease;
-}
-
-.version-card:hover {
-  border-color: var(--color-neutral-300);
-}
-
-.dark .version-card:hover {
-  border-color: var(--color-neutral-700);
-}
-
-.version-current {
-  border-color: oklch(65% 0.15 145 / 0.4);
-}
-
-.dark .version-current {
-  border-color: oklch(65% 0.15 145 / 0.3);
-}
-
-.version-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.875rem 1rem;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.version-details {
-  padding: 0;
-}
-
-.version-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.version-dot-current {
-  background: oklch(65% 0.2 145);
-  box-shadow: 0 0 6px oklch(65% 0.2 145 / 0.5);
-}
-
-.version-dot-active {
-  background: oklch(65% 0.1 230);
-}
-
-.version-dot-expired {
-  background: oklch(55% 0.1 25);
-  opacity: 0.5;
-}
-</style>

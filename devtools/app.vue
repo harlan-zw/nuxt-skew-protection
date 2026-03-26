@@ -1,19 +1,10 @@
 <script lang="ts" setup>
 import { computed, useRoute, watch } from '#imports'
-import { appFetch } from 'nuxtseo-layer-devtools/composables/rpc'
-import { isProductionMode, productionUrl, refreshTime } from 'nuxtseo-layer-devtools/composables/state'
-import { debugData, fetchDebugData, fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
+import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
+import { debugData, fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
+import './composables/rpc'
 
 const route = useRoute()
-
-// Fetch debug data when connected
-watch([appFetch, refreshTime], async () => {
-  await fetchDebugData()
-  // Sync production URL from site config
-  if (debugData.value?.siteConfigUrl) {
-    productionUrl.value = debugData.value.siteConfigUrl
-  }
-}, { immediate: true })
 
 // Fetch production data when production mode changes
 watch(isProductionMode, async (isProd) => {
@@ -22,16 +13,19 @@ watch(isProductionMode, async (isProd) => {
   }
 }, { immediate: true })
 
-const currentTab = computed(() => {
-  const p = route.path
+const activeTab = ref('overview')
+
+// Sync tab from route
+watch(() => route.path, (p) => {
   if (p === '/versions')
-    return 'versions'
-  if (p === '/connections')
-    return 'connections'
-  if (p === '/docs')
-    return 'docs'
-  return 'overview'
-})
+    activeTab.value = 'versions'
+  else if (p === '/connections')
+    activeTab.value = 'connections'
+  else if (p === '/docs')
+    activeTab.value = 'docs'
+  else
+    activeTab.value = 'overview'
+}, { immediate: true })
 
 const navItems = [
   { value: 'overview', to: '/', icon: 'carbon:dashboard', label: 'Overview' },
@@ -43,6 +37,7 @@ const navItems = [
 
 <template>
   <DevtoolsLayout
+    v-model:active-tab="activeTab"
     module-name="nuxt-skew-protection"
     title="Skew Protection"
     icon="carbon:version"
@@ -50,7 +45,6 @@ const navItems = [
     :nav-items="navItems"
     github-url="https://github.com/harlan-zw/nuxt-skew-protection"
     :loading="isLoading"
-    :active-tab="currentTab"
     @refresh="refreshAll"
   >
     <NuxtPage />

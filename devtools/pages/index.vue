@@ -126,12 +126,12 @@ const siteConfigSnippet = `export default defineNuxtConfig({
 
       <!-- Production URL hint -->
       <div v-if="!hasProductionUrl" class="hint-callout">
-        <div class="hint-callout-header">
+        <div class="flex items-center gap-2">
           <UIcon name="carbon:cloud" class="text-lg" aria-hidden="true" />
           <span class="font-semibold">Connect to Production</span>
         </div>
         <p class="text-sm opacity-80 mt-1 mb-3">
-          Add your production URL to preview live skew protection data, version history, and connection stats…
+          Add your production URL to preview live skew protection data, version history, and connection stats.
         </p>
         <DevtoolsSnippet
           label="nuxt.config.ts"
@@ -151,28 +151,3 @@ const siteConfigSnippet = `export default defineNuxtConfig({
     </DevtoolsSection>
   </div>
 </template>
-
-<style scoped>
-.hint-callout {
-  padding: 1.25rem;
-  border-radius: var(--radius-lg);
-  border: 1px dashed oklch(65% 0.15 230 / 0.4);
-  background: oklch(85% 0.05 230 / 0.08);
-}
-
-.dark .hint-callout {
-  background: oklch(25% 0.05 230 / 0.15);
-  border-color: oklch(55% 0.12 230 / 0.3);
-}
-
-.hint-callout-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: oklch(50% 0.12 230);
-}
-
-.dark .hint-callout-header {
-  color: oklch(75% 0.1 230);
-}
-</style>
