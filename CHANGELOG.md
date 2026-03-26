@@ -1,6 +1,27 @@
 # Changelog
 
 
+## v0.7.6...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.6...main)
+
+### 🚀 Enhancements
+
+- ⚠️  V1.0.0 major release ([#12](https://github.com/harlan-zw/nuxt-skew-protection/pull/12))
+
+### 🏡 Chore
+
+- Bump and lint ([ce83636](https://github.com/harlan-zw/nuxt-skew-protection/commit/ce83636))
+- V1 migration helper ([6c1ab6d](https://github.com/harlan-zw/nuxt-skew-protection/commit/6c1ab6d))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  V1.0.0 major release ([#12](https://github.com/harlan-zw/nuxt-skew-protection/pull/12))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.7.5...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.5...main)
