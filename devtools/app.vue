@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import { computed, useRoute, watch } from '#imports'
+import { useRoute, watch } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
-import { debugData, fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
+import { fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
 import './composables/rpc'
 
 const route = useRoute()
