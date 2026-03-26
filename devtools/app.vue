@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { useRoute, watch } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
+import { ref } from 'vue'
 import { fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
 import './composables/rpc'
 

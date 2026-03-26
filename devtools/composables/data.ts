@@ -1,5 +1,5 @@
 import type { DebugResponse, ProductionDebugResponse } from './types'
-import { computed, ref, useAsyncData, watch } from '#imports'
+import { computed, ref, refreshNuxtData, useAsyncData, watch } from '#imports'
 import { appFetch } from 'nuxtseo-layer-devtools/composables/rpc'
 import { isProductionMode, productionUrl, refreshTime } from 'nuxtseo-layer-devtools/composables/state'
 
