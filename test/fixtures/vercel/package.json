@@ -8,8 +8,8 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
-    "@vueuse/nuxt": "latest",
-    "nuxt": "latest",
-    "nuxt-skew-protection": "./nuxt-skew-protection-1.0.0.tgz"
+    "@vueuse/nuxt": "catalog:",
+    "nuxt": "catalog:",
+    "nuxt-skew-protection": "workspace:*"
   }
 }

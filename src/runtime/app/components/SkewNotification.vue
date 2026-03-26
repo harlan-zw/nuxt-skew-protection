@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChunksOutdatedPayload } from '../../types'
 import { useTimeAgo } from '@vueuse/core'
-import { reloadNuxtApp } from 'nuxt/app'
+import { reloadNuxtApp, useNuxtApp } from 'nuxt/app'
 import { computed, ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
@@ -26,6 +26,11 @@ const emit = defineEmits<{
 }>()
 
 const skewProtection = useSkewProtection()
+
+// Prerendered pages have a stale buildId from build time, so version
+// mismatches are expected after every redeployment. Only actual chunk
+// invalidation (skew:chunks-outdated) should trigger the notification.
+const isPrerendered = !!useNuxtApp().payload.prerenderedAt
 
 const version = skewProtection.clientVersion
 const isOnline = skewProtection.isOnline
@@ -64,8 +69,15 @@ const isAppOutdated = computed(() => {
     return false
   if (props.forceOpen)
     return true
+  // Prerendered pages always have a stale buildId, so a version mismatch
+  // alone is not meaningful. Only chunksOutdated should drive the notification.
+  if (isPrerendered)
+    return false
   return appOutdated.value
 })
+
+// Combined convenience: true when either chunks or app is outdated
+const isOpen = computed(() => isCurrentChunksOutdated.value || isAppOutdated.value)
 
 // Get latest release date from manifest
 /* eslint-disable harlanzw/nuxt-no-unsafe-date -- client-only notification, no SSR hydration concern */
@@ -101,13 +113,15 @@ async function handleReload() {
   <ClientOnly>
     <slot
       :version="version"
+      :is-prerendered="isPrerendered"
       :is-current-chunks-outdated="isCurrentChunksOutdated"
+      :is-app-outdated="isAppOutdated"
+      :is-open="isOpen"
       :dismiss="handleDismiss"
       :reload="handleReload"
       :time-ago="timeAgo"
       :release-date="releaseDate"
       :payload="outdatedPayload"
-      :is-app-outdated="isAppOutdated"
     />
   </ClientOnly>
 </template>

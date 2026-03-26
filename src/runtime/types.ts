@@ -10,6 +10,8 @@ export interface NuxtSkewProtectionRuntimeConfig {
   connectionTracking?: boolean
   routeTracking?: boolean
   ipTracking?: boolean
+  reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
+  multiTab?: boolean
 }
 
 export interface SkewProtectionRuntimeConfig {
@@ -20,6 +22,8 @@ export interface SkewProtectionRuntimeConfig {
   connectionTracking?: boolean
   routeTracking?: boolean
   ipTracking?: boolean
+  reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
+  multiTab?: boolean
 }
 
 export interface ChunksOutdatedPayload {

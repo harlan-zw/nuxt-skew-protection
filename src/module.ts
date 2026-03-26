@@ -15,9 +15,8 @@ import {
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
-import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { hookNuxtSeoProLicense, isStaticPreset, registerNuxtSeoProModule, resolveNitroPreset } from './kit'
+import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -60,12 +59,12 @@ export interface ModuleOptions {
     name?: string
   }
   /**
-   * Bundle previous deployment chunks to support users on old versions
-   * When enabled, old build assets are stored and served to users who haven't refreshed
+   * Bundle old deployment assets to support users on previous versions.
+   * When enabled, old build assets are stored and served to users who haven't refreshed.
    * @default true
    * @note Automatically disabled when using CDN URL
    */
-  bundlePreviousDeploymentChunks?: boolean
+  bundleAssets?: boolean
   /**
    * Enable or disable the module
    * @default true
@@ -95,6 +94,21 @@ export interface ModuleOptions {
    * @default false
    */
   ipTracking?: boolean
+  /**
+   * How to handle outdated chunks.
+   * - 'prompt': Show notification, let user decide (default)
+   * - 'immediate': Reload immediately when chunks are invalidated
+   * - 'idle': Reload when user is idle (requestIdleCallback + visibility API)
+   * - false: Disable automatic handling, use hooks for custom logic
+   * @default 'prompt'
+   */
+  reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
+  /**
+   * Coordinate version updates across browser tabs via BroadcastChannel.
+   * When enabled, a version update detected in one tab notifies all others.
+   * @default true
+   */
+  multiTab?: boolean
 }
 
 export interface ModulePublicRuntimeConfig {
@@ -112,23 +126,31 @@ export default defineNuxtModule<ModuleOptions>({
       '@nuxtjs/robots': {
         version: '>=5.6.7',
       },
+      'nuxt-site-config': {
+        version: '>=3.2',
+      },
+      'nuxtseo-shared': {
+        version: '>=0.8.0',
+      },
     },
   },
   defaults: {
     retentionDays: 30,
     maxNumberOfVersions: 10,
-    bundlePreviousDeploymentChunks: true,
+    bundleAssets: true,
     cookie: {
       name: '__nkpv',
       path: '/',
-      sameSite: 'strict' as const,
-      maxAge: 60 * 60 * 24 * 60, // 60 days
+      sameSite: 'lax' as const,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     },
     storage: {
       driver: 'fs',
       base: 'node_modules/.cache/nuxt-seo/skew-protection',
     },
     debug: false,
+    reloadStrategy: 'prompt',
+    multiTab: true,
   },
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
@@ -139,8 +161,18 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
-    await installNuxtSiteConfig()
-    hookNuxtSeoProLicense()
+    nuxt.hooks.hook('nuxt-seo-pro:modules' as any, (modules: any[]) => {
+      const mod = modules.find((m: any) => m.name === 'nuxt-skew-protection')
+      if (mod) {
+        mod.features = {
+          updateStrategy: options.updateStrategy || 'polling',
+          reloadStrategy: options.reloadStrategy || 'prompt',
+          multiTab: options.multiTab !== false,
+          connectionTracking: !!options.connectionTracking,
+          bundleAssets: options.bundleAssets !== false,
+        }
+      }
+    })
     // Add runtime config for client access to module options
     nuxt.options.runtimeConfig.public = nuxt.options.runtimeConfig.public || {}
     if (options.routeTracking && !options.connectionTracking) {
@@ -157,6 +189,8 @@ export default defineNuxtModule<ModuleOptions>({
       connectionTracking: options.connectionTracking,
       routeTracking: options.connectionTracking && options.routeTracking,
       ipTracking: options.connectionTracking && options.ipTracking,
+      reloadStrategy: options.reloadStrategy ?? 'prompt',
+      multiTab: options.multiTab ?? true,
       version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
@@ -179,7 +213,7 @@ import type { ChunksOutdatedPayload, SkewAdapterConfig, SkewConnection, SkewSSEC
 
 declare module '#app' {
   interface RuntimeNuxtHooks {
-    'skew-protection:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
+    'skew:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
     'skew:message': (message: { type: string, [key: string]: unknown }) => void | Promise<void>
     'skew:ws:config': (config: SkewWebSocketConfig) => void | Promise<void>
     'skew:sse:config': (config: SkewSSEConfig) => void | Promise<void>
@@ -203,7 +237,7 @@ declare module '#app' {
 
 declare module 'nuxt/app' {
   interface RuntimeNuxtHooks {
-    'skew-protection:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
+    'skew:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
     'skew:message': (message: { type: string, [key: string]: unknown }) => void | Promise<void>
     'skew:ws:config': (config: SkewWebSocketConfig) => void | Promise<void>
     'skew:sse:config': (config: SkewSSEConfig) => void | Promise<void>
@@ -234,6 +268,13 @@ export type { ChunksOutdatedPayload, SkewAdapterConfig, SkewConnection, SkewSSEC
       filename: 'types/nuxt-skew-protection-nitro.d.ts',
       getContents: () => `// Generated by nuxt-skew-protection
 import type { H3Event } from 'h3'
+
+declare module 'h3' {
+  interface H3EventContext {
+    /** Client's deployment version from skew protection cookie */
+    skewVersion?: string
+  }
+}
 
 declare module 'nitropack/types' {
   interface NitroRuntimeHooks {
@@ -299,19 +340,19 @@ export {}
     if (nuxt.options.dev && options.connectionTracking) {
       if (nuxt.options.nitro?.experimental?.websocket) {
         addServerHandler({
-          route: '/_skew/ws',
-          handler: resolver.resolve('./runtime/server/routes/_skew/ws'),
+          route: '/__skew/ws',
+          handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
         })
         addServerHandler({
-          route: '/_skew/subscribe-stats',
+          route: '/__skew/subscribe-stats',
           method: 'post',
-          handler: resolver.resolve('./runtime/server/routes/_skew/subscribe-stats.post'),
+          handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
         })
         if (options.routeTracking) {
           addServerHandler({
-            route: '/_skew/route',
+            route: '/__skew/route',
             method: 'post',
-            handler: resolver.resolve('./runtime/server/routes/_skew/route.post'),
+            handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
           })
         }
         addPlugin(resolver.resolve('./runtime/app/plugins/check-updates-websocket.client'))
@@ -319,6 +360,20 @@ export {}
       else {
         logger.warn('connectionTracking in dev mode requires `nitro.experimental.websocket: true`')
       }
+    }
+
+    // Multi-tab + auto-reload in dev mode
+    if (nuxt.options.dev && (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt'))) {
+      addPlugin({
+        src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
+        mode: 'client',
+      })
+    }
+
+    // DevTools integration (dev mode only)
+    if (nuxt.options.dev) {
+      const { setupDevToolsUI } = await import('./build/devtools')
+      setupDevToolsUI(resolver.resolve, nuxt)
     }
 
     // Skip production setup in dev mode
@@ -353,25 +408,6 @@ export {}
         resolvedStrategy = 'polling'
       }
 
-      // Determine adapter name for analytics
-      const adapterName = isAdapter ? (options.updateStrategy as SkewAdapter).name : undefined
-
-      // Register module with nuxtseo.com for dashboard integration
-      registerNuxtSeoProModule({
-        name: 'nuxt-skew-protection',
-        version,
-        features: {
-          updateStrategy: adapterName || resolvedStrategy,
-          connectionTracking: !!options.connectionTracking,
-          routeTracking: !!(options.connectionTracking && options.routeTracking),
-          ipTracking: !!(options.connectionTracking && options.ipTracking),
-          bundlePreviousDeploymentChunks: options.bundlePreviousDeploymentChunks !== false,
-          storageDriver: options.storage?.driver || 'none',
-          preset: nitroPreset,
-          isStatic,
-        },
-      })
-
       if (isVercel) {
         addServerHandler({
           handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
@@ -386,12 +422,21 @@ export {}
         })
       }
 
+      // Health check endpoint
+      if (!isStatic) {
+        addServerHandler({
+          route: '/__skew/health',
+          method: 'get',
+          handler: resolver.resolve('./runtime/server/routes/__skew/health.get'),
+        })
+      }
+
       // Admin stats endpoint for nuxtseo.com dashboard (requires connectionTracking)
       if (options.connectionTracking && !isStatic) {
         addServerHandler({
-          route: '/_skew/admin/stats',
+          route: '/__skew/admin/stats',
           method: 'get',
-          handler: resolver.resolve('./runtime/server/routes/_skew/admin/stats.get'),
+          handler: resolver.resolve('./runtime/server/routes/__skew/admin/stats.get'),
         })
       }
 
@@ -399,6 +444,14 @@ export {}
         src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
         mode: 'client',
       })
+
+      // Multi-tab coordination and auto-reload handling
+      if (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt')) {
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
+          mode: 'client',
+        })
+      }
 
       // allow us to use the non-transpiled version of the service worker from the module or root dir
       let swPath = resolver.resolve('./sw')
@@ -415,7 +468,7 @@ export {}
       })
 
       // Add build hooks for asset versioning (skip if bundling is disabled)
-      if (options.storage && options.bundlePreviousDeploymentChunks) {
+      if (options.storage && options.bundleAssets) {
         nuxt.hook('nitro:init', (nitro) => {
           const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
           let assetManager: ReturnType<typeof createAssetManager>
@@ -593,8 +646,8 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: '/_skew/ws',
-            handler: resolver.resolve('./runtime/server/routes/_skew/ws'),
+            route: '/__skew/ws',
+            handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
           })
           addPlugin(resolver.resolve('./runtime/app/plugins/check-updates-websocket.client'))
         }
@@ -605,23 +658,23 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: '/_skew/sse',
-            handler: resolver.resolve('./runtime/server/routes/_skew/sse'),
+            route: '/__skew/sse',
+            handler: resolver.resolve('./runtime/server/routes/__skew/sse'),
           })
           // SSE is unidirectional so we need POST endpoints
           if (options.connectionTracking) {
             // Stats subscription endpoint
             addServerHandler({
-              route: '/_skew/subscribe-stats',
+              route: '/__skew/subscribe-stats',
               method: 'post',
-              handler: resolver.resolve('./runtime/server/routes/_skew/subscribe-stats.post'),
+              handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
             })
             // Route update endpoint
             if (options.routeTracking) {
               addServerHandler({
-                route: '/_skew/route',
+                route: '/__skew/route',
                 method: 'post',
-                handler: resolver.resolve('./runtime/server/routes/_skew/route.post'),
+                handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
               })
             }
           }

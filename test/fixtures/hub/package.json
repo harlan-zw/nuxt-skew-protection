@@ -9,12 +9,12 @@
     "deploy": "nuxthub deploy"
   },
   "dependencies": {
-    "@nuxthub/core": "latest",
-    "nuxt": "^4.0.0",
-    "vue": "^3.4.0",
-    "vue-router": "^4.3.0"
+    "@nuxthub/core": "catalog:",
+    "nuxt": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
   },
   "devDependencies": {
-    "wrangler": "^4.43.0"
+    "wrangler": "catalog:"
   }
 }

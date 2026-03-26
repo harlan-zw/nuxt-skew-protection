@@ -1,8 +1,8 @@
 {
   "name": "nuxt-skew-protection",
   "type": "module",
-  "version": "0.7.6",
-  "packageManager": "pnpm@10.32.1",
+  "version": "1.0.0-beta.1",
+  "packageManager": "pnpm@10.33.0",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
     "name": "Harlan Wilton",
@@ -23,25 +23,52 @@
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
     },
-    "./server": "./dist/runtime/server/index.js",
-    "./adapters": "./dist/runtime/adapters/index.js",
-    "./adapters/pusher": "./dist/runtime/adapters/pusher/index.js",
-    "./adapters/pusher/web": "./dist/runtime/adapters/pusher/web.js",
-    "./adapters/pusher/node": "./dist/runtime/adapters/pusher/node.js",
-    "./adapters/ably": "./dist/runtime/adapters/ably/index.js",
-    "./adapters/ably/web": "./dist/runtime/adapters/ably/web.js",
-    "./adapters/ably/node": "./dist/runtime/adapters/ably/node.js"
+    "./server": {
+      "types": "./dist/runtime/server/index.d.ts",
+      "import": "./dist/runtime/server/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/runtime/adapters/index.d.ts",
+      "import": "./dist/runtime/adapters/index.js"
+    },
+    "./adapters/pusher": {
+      "types": "./dist/runtime/adapters/pusher/index.d.ts",
+      "import": "./dist/runtime/adapters/pusher/index.js"
+    },
+    "./adapters/pusher/web": {
+      "types": "./dist/runtime/adapters/pusher/web.d.ts",
+      "import": "./dist/runtime/adapters/pusher/web.js"
+    },
+    "./adapters/pusher/node": {
+      "types": "./dist/runtime/adapters/pusher/node.d.ts",
+      "import": "./dist/runtime/adapters/pusher/node.js"
+    },
+    "./adapters/ably": {
+      "types": "./dist/runtime/adapters/ably/index.d.ts",
+      "import": "./dist/runtime/adapters/ably/index.js"
+    },
+    "./adapters/ably/web": {
+      "types": "./dist/runtime/adapters/ably/web.d.ts",
+      "import": "./dist/runtime/adapters/ably/web.js"
+    },
+    "./adapters/ably/node": {
+      "types": "./dist/runtime/adapters/ably/node.d.ts",
+      "import": "./dist/runtime/adapters/ably/node.js"
+    }
   },
   "main": "./dist/module.mjs",
   "files": [
     "dist"
   ],
   "scripts": {
-    "lint": "eslint . --fix",
-    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config sw.build.config.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config sw.build.config.ts && pnpm run build:devtools",
+    "build:devtools": "nuxt generate devtools",
     "dev": "nuxi dev playground",
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && nuxi prepare playground",
+    "devtools": "nuxi dev devtools --port 3030",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
     "test": "vitest",
@@ -73,76 +100,46 @@
     }
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0",
-    "@nuxt/kit": "^4.4.2",
-    "@vueuse/core": "^14.2.1",
-    "consola": "^3.4.2",
-    "cookie-es": "^2.0.0",
-    "defu": "^6.1.4",
-    "nuxt-site-config": "^3.2.21",
-    "ofetch": "^1.5.1",
-    "pathe": "^2.0.3",
-    "pkg-types": "^2.3.0",
-    "std-env": "^4.0.0",
-    "tinyexec": "^1.0.4",
-    "ufo": "^1.6.3",
-    "unstorage": "^1.17.4",
-    "zod": "^4.3.6"
+    "@nuxt/kit": "catalog:",
+    "@vueuse/core": "catalog:",
+    "consola": "catalog:",
+    "cookie-es": "catalog:",
+    "nuxt-site-config": "catalog:",
+    "nuxtseo-shared": "catalog:",
+    "pathe": "catalog:",
+    "pkg-types": "catalog:",
+    "tinyexec": "catalog:",
+    "unstorage": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^7.7.3",
-    "@arethetypeswrong/cli": "^0.18.2",
-    "@nuxt/content": "^3.12.0",
-    "@nuxt/devtools-ui-kit": "^3.2.4",
-    "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/test-utils": "^4.0.0",
-    "@nuxt/ui": "^4.5.1",
-    "@nuxtjs/color-mode": "^4.0.0",
-    "@nuxtjs/eslint-config-typescript": "^12.1.0",
-    "@nuxtjs/i18n": "^10.2.3",
-    "@nuxtjs/robots": "^5.7.1",
-    "@types/ioredis": "^5.0.0",
-    "@types/ws": "^8.18.1",
-    "@unocss/nuxt": "66.5.12",
-    "@unocss/preset-icons": "66.5.12",
-    "@unocss/preset-uno": "66.5.12",
-    "@unocss/runtime": "66.5.12",
-    "@vueuse/nuxt": "^14.2.1",
-    "ably": "^2.21.0",
-    "better-sqlite3": "^12.8.0",
-    "bumpp": "^11.0.1",
-    "eslint": "^10.0.3",
-    "eslint-plugin-harlanzw": "^0.8.0",
-    "eventsource": "^4.1.0",
-    "execa": "^9.6.1",
-    "firebase-functions": "^7.2.2",
-    "happy-dom": "^20.8.4",
-    "ioredis": "^5.10.1",
-    "nuxt": "^4.4.2",
-    "nuxt-auth-utils": "^0.5.29",
-    "playwright-core": "^1.58.2",
-    "pusher-js": "^8.4.3",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "unocss": "66.5.12",
-    "vitest": "^4.1.0",
-    "vue": "^3.5.30",
-    "vue-router": "^5.0.4",
-    "vue-tsc": "^3.2.6",
-    "wrangler": "^4.75.0",
-    "ws": "^8.19.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@firebase/util",
-      "@parcel/watcher",
-      "better-sqlite3",
-      "esbuild",
-      "protobufjs",
-      "unrs-resolver",
-      "vue-demi",
-      "workerd"
-    ]
+    "@antfu/eslint-config": "catalog:",
+    "@arethetypeswrong/cli": "catalog:",
+    "@nuxt/module-builder": "catalog:",
+    "@nuxt/test-utils": "catalog:",
+    "@nuxt/ui": "catalog:",
+    "@nuxtjs/robots": "catalog:",
+    "@types/ws": "catalog:",
+    "ably": "catalog:",
+    "better-sqlite3": "catalog:",
+    "bumpp": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-harlanzw": "catalog:",
+    "eventsource": "catalog:",
+    "happy-dom": "catalog:",
+    "ioredis": "catalog:",
+    "nuxt": "catalog:",
+    "nuxt-auth-utils": "catalog:",
+    "playwright-core": "catalog:",
+    "pusher-js": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:",
+    "vue-tsc": "catalog:",
+    "wrangler": "catalog:",
+    "ws": "catalog:"
   },
   "resolutions": {
     "nuxt-skew-protection": "workspace:*",

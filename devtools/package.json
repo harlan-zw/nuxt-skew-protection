@@ -1,0 +1,14 @@
+{
+  "name": "nuxt-skew-protection-devtools",
+  "private": true,
+  "devDependencies": {
+    "@nuxt/devtools-kit": "catalog:",
+    "@nuxt/devtools-ui-kit": "catalog:",
+    "@vueuse/core": "catalog:",
+    "nuxt": "catalog:",
+    "nuxtseo-layer-devtools": "catalog:",
+    "pathe": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  }
+}

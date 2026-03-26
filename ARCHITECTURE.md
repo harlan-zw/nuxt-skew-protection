@@ -50,11 +50,11 @@ This module provides version skew protection for Nuxt applications through:
 │  │  → Nuxt's built-in builds/latest.json  │        │
 │  │                                          │        │
 │  │ Strategy: sse (Node.js compatible)      │        │
-│  │  → /_skew/sse endpoint                  │        │
+│  │  → /__skew/sse endpoint                  │        │
 │  │  → Real-time SSE connection             │        │
 │  │                                          │        │
 │  │ Strategy: ws (Cloudflare Durable)       │        │
-│  │  → /_skew/ws endpoint                   │        │
+│  │  → /__skew/ws endpoint                   │        │
 │  │  → WebSocket connection                 │        │
 │  └────────────────────────────────────────┘        │
 │                                                      │
@@ -140,14 +140,14 @@ The module supports three strategies for detecting new deployments:
 - Selected automatically for static sites
 
 **Strategy 2: SSE (Node.js, Bun, Deno)**
-- Endpoint: `/_skew/sse` (src/runtime/server/routes/_skew/sse.ts)
+- Endpoint: `/__skew/sse` (src/runtime/server/routes/__skew/sse.ts)
 - Plugin: `check-updates-sse.client.ts`
 - Persistent connection sends version updates in real-time
 - Keepalive every 30 seconds
 - NOT compatible with Cloudflare Workers (no persistent connections)
 
 **Strategy 3: WebSocket (Cloudflare Durable Objects)**
-- Endpoint: `/_skew/ws` (src/runtime/server/routes/_skew/ws.ts)
+- Endpoint: `/__skew/ws` (src/runtime/server/routes/__skew/ws.ts)
 - Plugin: `check-updates-websocket.client.ts`
 - Bidirectional WebSocket connection
 - Heartbeat every 30 seconds
@@ -218,7 +218,7 @@ export default defineNuxtConfig({
 
 **Admin Stats Endpoint:**
 ```text
-GET /_skew/admin/stats
+GET /__skew/admin/stats
 Authorization: Bearer <seoProKey>
 
 Response: {
@@ -267,7 +267,7 @@ export default defineNitroPlugin((nitroApp) => {
   2. Extracts deletedChunks from builds/latest.json manifest
   3. Collects all passed release IDs
   4. Checks if any loaded modules are in deletedChunks
-  5. If yes, fires `skew-protection:chunks-outdated` hook
+  5. If yes, fires `skew:chunks-outdated` hook
 
 **Why this matters:**
 - Only notifies users when their *current session* is affected
@@ -294,8 +294,8 @@ interface SkewConnection {
 - Bot detection via `@nuxtjs/robots` (skips connection for bots)
 - Client-side cookie fallback (sets buildId if missing)
 - Exponential backoff retry via `backoff-queue.ts`
-- Route tracking: sends via WebSocket or POST to `/_skew/route`
-- Stats subscription: WebSocket direct or POST to `/_skew/subscribe-stats`
+- Route tracking: sends via WebSocket or POST to `/__skew/route`
+- Stats subscription: WebSocket direct or POST to `/__skew/subscribe-stats`
 - Hook interface: `skew:message` for all message types
 - Automatic cleanup on error/beforeunload
 
@@ -321,7 +321,7 @@ const skew = useSkewProtection()
 // Reactive state
 skew.manifest // NuxtAppManifestMeta | null
 skew.currentVersion // string (user's build ID)
-skew.isOutdated // Ref<boolean>
+skew.isAppOutdated // Ref<boolean>
 skew.cookie // CookieRef<string> - reactive cookie reference
 
 // Methods
@@ -395,9 +395,9 @@ nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
 })
 ```
 
-**skew-protection:chunks-outdated** (Custom)
+**skew:chunks-outdated** (Custom)
 ```typescript
-nuxtApp.hooks.hook('skew-protection:chunks-outdated', (payload) => {
+nuxtApp.hooks.hook('skew:chunks-outdated', (payload) => {
   // Called when user's loaded modules are deleted
   // payload: {
   //   deletedChunks: string[],
@@ -500,7 +500,7 @@ Instead of platform-specific implementations, the module uses a **single univers
 1. Service worker tracks which JS modules user has loaded
 2. Build manifest includes `deletedChunks` for each version
 3. When new version detected, check if user's loaded modules are deleted
-4. Only fire `skew-protection:chunks-outdated` if user is affected
+4. Only fire `skew:chunks-outdated` if user is affected
 
 **Result:** Users only notified when their session is truly broken
 
@@ -557,7 +557,7 @@ Instead of platform-specific implementations, the module uses a **single univers
 **Solution:** Opt-in connection tracking
 - Server plugins maintain in-memory connection maps
 - Tracks version, route, and optionally IP per connection
-- Stats endpoint (`/_skew/admin/stats`) for dashboards
+- Stats endpoint (`/__skew/admin/stats`) for dashboards
 - Real-time stats subscription via WebSocket/SSE
 - Nitro hook (`skew:authorize-stats`) for custom authorization
 
@@ -627,13 +627,13 @@ Middleware: set-skew-protection-cookie.ts (on every HTML request)
 Middleware: vercel-skew.ts (Vercel only, on HTML requests)
 └─► Sets __vdpl cookie for Vercel's native skew protection
 
-Route: /_skew/sse (SSE strategy only)
+Route: /__skew/sse (SSE strategy only)
 ├─► Client connects with persistent connection
 ├─► Server sends initial version
 ├─► Sends keepalive every 30s
 └─► On new deployment, sends version update
 
-Route: /_skew/ws (WebSocket strategy only)
+Route: /__skew/ws (WebSocket strategy only)
 ├─► Client connects via WebSocket
 ├─► Server sends initial version
 ├─► Heartbeat every 30s
@@ -645,7 +645,7 @@ Route: /_skew/ws (WebSocket strategy only)
 
 Plugin: 0.skew-protection.ts (root plugin)
 ├─► Gets currentVersion from cookie or buildId
-├─► Creates reactive refs: manifest, latestVersion, isOutdated
+├─► Creates reactive refs: manifest, latestVersion, isAppOutdated
 ├─► Listens to app:manifest:update hook
 └─► Provides $skewProtection globally
 
@@ -660,17 +660,17 @@ Plugin: sw-track-user-modules.client.ts (service worker plugin)
 │   ├─► Collects all passed release IDs
 │   ├─► Checks intersection
 │   └─► If user's modules are deleted:
-│       └─► Fire skew-protection:chunks-outdated hook
+│       └─► Fire skew:chunks-outdated hook
 └─► Provides getLoadedModules() helper
 
 Plugin: check-updates-sse.client.ts (SSE strategy only)
-├─► Connects to /_skew/sse
+├─► Connects to /__skew/sse
 ├─► Listens for version updates
 └─► Calls fetchLatestManifest() on version change
     └─► Fires app:manifest:update hook
 
 Plugin: check-updates-websocket.client.ts (WebSocket strategy only)
-├─► Connects to /_skew/ws
+├─► Connects to /__skew/ws
 ├─► Listens for version updates
 └─► Fires app:manifest:update hook directly
 
@@ -697,7 +697,7 @@ User Flow:
 4. Update detection (polling/sse/ws) → Detects new version
 5. app:manifest:update fired → manifest.value updated
 6. SW plugin checks loaded modules vs deletedChunks
-7. If intersection found → skew-protection:chunks-outdated fired
+7. If intersection found → skew:chunks-outdated fired
 8. SkewNotification shows → User sees notification
 9. User clicks reload → window.location.reload()
 10. User gets new version → New __nkpv cookie set
@@ -739,8 +739,8 @@ export default defineNuxtConfig({
     cookie: {
       name: '__nkpv', // Cookie name for version tracking
       path: '/',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 60, // 60 days
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     },
 
     // Enable debug logging

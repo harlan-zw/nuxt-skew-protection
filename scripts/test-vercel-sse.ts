@@ -139,7 +139,7 @@ async function verifyBuildManifest(serverUrl: string, _expectedDeploymentId: str
 async function testSseEndpoint(serverUrl: string, deploymentId: string): Promise<void> {
   log('  🔍 Testing SSE endpoint...', 'yellow')
 
-  const sseUrl = `${serverUrl}/_skew/sse?version=${encodeURIComponent(deploymentId)}`
+  const sseUrl = `${serverUrl}/__skew/sse?version=${encodeURIComponent(deploymentId)}`
 
   // Just verify the endpoint exists and responds (don't test actual SSE streaming here)
   const response = await fetchWithRetry(sseUrl, {

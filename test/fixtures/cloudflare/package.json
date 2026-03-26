@@ -16,11 +16,5 @@
     "logs": "cd app && wrangler tail",
     "versions": "cd app && wrangler versions list",
     "clean": "cd app && rm -rf node_modules .output dist"
-  },
-  "dependencies": {
-    "bc": "^1.0.0"
-  },
-  "devDependencies": {
-    "jq": "^1.6.0"
   }
 }

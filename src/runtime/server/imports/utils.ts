@@ -3,8 +3,15 @@ import { useRuntimeConfig } from 'nitropack/runtime'
 import { getSkewProtectionCookie } from './cookie'
 
 /**
+ * Get the client's deployment version from the skew protection cookie.
+ * Returns undefined if no cookie is set.
+ */
+export function getClientVersion(event: H3Event): string | undefined {
+  return getSkewProtectionCookie(event)
+}
+
+/**
  * Check if the client is outdated based on cookie version vs current build ID
- * @returns Object with outdated status and version info
  */
 export function isClientOutdated(event: H3Event) {
   const config = useRuntimeConfig(event)

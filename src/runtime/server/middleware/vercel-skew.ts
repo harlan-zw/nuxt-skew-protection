@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   // Set Vercel's __vdpl cookie for document requests using h3's setCookie
   setCookie(event, '__vdpl', deploymentId, {
     path: '/',
-    sameSite: 'strict',
+    sameSite: 'lax',
     secure: true,
     httpOnly: true,
   })
