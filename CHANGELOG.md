@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v1.0.3...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.3...main)
+
+### 🏡 Chore
+
+- Broken build ([74f2c5e](https://github.com/harlan-zw/nuxt-skew-protection/commit/74f2c5e))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.0.2...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.2...main)

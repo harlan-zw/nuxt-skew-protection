@@ -18,9 +18,9 @@ catalog:
   '@nuxt/test-utils': ^4.0.0
   '@nuxt/ui': ^4.6.0
   '@nuxthub/core': latest
-  '@nuxtjs/robots': ^6.0.5
+  '@nuxtjs/robots': ^6.0.6
   '@types/ws': ^8.18.1
-  '@upstash/redis': ^1.35.0
+  '@upstash/redis': ^1.37.0
   '@vueuse/core': ^14.2.1
   '@vueuse/nuxt': latest
   ably: ^2.21.0
@@ -29,16 +29,16 @@ catalog:
   consola: ^3.4.2
   cookie-es: ^3.0.1
   eslint: ^10.1.0
-  eslint-plugin-harlanzw: ^0.11.0
+  eslint-plugin-harlanzw: ^0.12.0
   eventsource: ^4.1.0
   happy-dom: ^20.8.8
   ioredis: ^5.10.1
-  laravel-echo: ^2.2.6
+  laravel-echo: ^2.3.1
   nuxt: ^4.4.2
   nuxt-auth-utils: ^0.5.29
-  nuxt-site-config: ^4.0.6
-  nuxtseo-layer-devtools: ^0.5.1
-  nuxtseo-shared: ^0.9.0
+  nuxt-site-config: ^4.0.7
+  nuxtseo-layer-devtools: ^5.0.1
+  nuxtseo-shared: ^5.0.1
   pathe: ^2.0.3
   pkg-types: ^2.3.0
   playwright-core: ^1.58.2
@@ -47,7 +47,7 @@ catalog:
   tsx: ^4.21.0
   typescript: ^6.0.2
   unstorage: ^1.17.4
-  vitest: ^4.1.1
+  vitest: ^4.1.2
   vue: ^3.5.31
   vue-router: ^5.0.4
   vue-tsc: ^3.2.6
