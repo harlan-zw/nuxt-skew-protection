@@ -126,13 +126,15 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     return new Date(serverTs).getTime() < new Date(clientTs).getTime()
   })
 
-  return {
+  const isAppOutdated = computed(() => !!(manifest.value && clientVersion !== manifest.value.id))
+
+  const result = {
     manifest,
     clientVersion,
     serverVersion: computed(() => serverVersion.value),
     isConnected: computed(() => isConnected.value),
     isOnline: useOnline(),
-    isAppOutdated: computed(() => !!(manifest.value && clientVersion !== manifest.value.id)),
+    isAppOutdated,
     isRollback,
     connect,
     disconnect,
@@ -150,4 +152,21 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       })
     },
   }
+
+  // v1 migration: deprecated `isOutdated` alias
+  if (import.meta.dev) {
+    let warned = false
+    Object.defineProperty(result, 'isOutdated', {
+      get() {
+        if (!warned) {
+          console.warn('[nuxt-skew-protection] `isOutdated` is deprecated, use `isAppOutdated` instead. See https://nuxtseo.com/docs/skew-protection/releases/v1')
+          warned = true
+        }
+        return isAppOutdated
+      },
+      enumerable: false,
+    })
+  }
+
+  return result
 }

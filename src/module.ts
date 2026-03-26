@@ -161,6 +161,15 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
+    // v1 migration: accept old config names with deprecation warnings
+    const rawOptions = (nuxt.options as any).skewProtection || {}
+    if ('bundlePreviousDeploymentChunks' in rawOptions) {
+      logger.warn('`bundlePreviousDeploymentChunks` is deprecated, use `bundleAssets` instead. See https://nuxtseo.com/docs/skew-protection/releases/v1')
+      if (!('bundleAssets' in rawOptions)) {
+        options.bundleAssets = rawOptions.bundlePreviousDeploymentChunks
+      }
+    }
+
     nuxt.hooks.hook('nuxt-seo-pro:modules' as any, (modules: any[]) => {
       const mod = modules.find((m: any) => m.name === 'nuxt-skew-protection')
       if (mod) {
