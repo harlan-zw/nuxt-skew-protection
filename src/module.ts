@@ -15,9 +15,8 @@ import {
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
-import { installNuxtSiteConfig } from 'nuxt-site-config/kit'
 import { readPackageJSON } from 'pkg-types'
-import { hookNuxtSeoProLicense, isStaticPreset, resolveNitroPreset } from './kit'
+import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -130,6 +129,9 @@ export default defineNuxtModule<ModuleOptions>({
       'nuxt-site-config': {
         version: '>=3.2',
       },
+      'nuxtseo-shared': {
+        version: '>=0.8.0',
+      },
     },
   },
   defaults: {
@@ -159,8 +161,18 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
-    await installNuxtSiteConfig()
-    hookNuxtSeoProLicense()
+    nuxt.hooks.hook('nuxt-seo-pro:modules', (modules) => {
+      const mod = modules.find(m => m.name === 'nuxt-skew-protection')
+      if (mod) {
+        mod.features = {
+          updateStrategy: options.updateStrategy || 'polling',
+          reloadStrategy: options.reloadStrategy || 'prompt',
+          multiTab: options.multiTab !== false,
+          connectionTracking: !!options.connectionTracking,
+          bundleAssets: options.bundleAssets !== false,
+        }
+      }
+    })
     // Add runtime config for client access to module options
     nuxt.options.runtimeConfig.public = nuxt.options.runtimeConfig.public || {}
     if (options.routeTracking && !options.connectionTracking) {
@@ -356,6 +368,12 @@ export {}
         src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
         mode: 'client',
       })
+    }
+
+    // DevTools integration (dev mode only)
+    if (nuxt.options.dev) {
+      const { setupDevToolsUI } = await import('./build/devtools')
+      setupDevToolsUI(resolver.resolve, nuxt)
     }
 
     // Skip production setup in dev mode

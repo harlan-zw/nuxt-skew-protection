@@ -1,0 +1,18 @@
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - '@parcel/watcher'
+  - better-sqlite3
+  - esbuild
+  - protobufjs
+  - unrs-resolver
+  - vue-demi
+  - workerd
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+packages:
+  - playground
+  - devtools
+
+trustPolicyIgnoreAfter: 262800

@@ -1,0 +1,10 @@
+{
+  "name": "nuxt-skew-protection-playground",
+  "private": true,
+  "devDependencies": {
+    "@nuxt/ui": "^4.6.0",
+    "nuxt": "^4.4.2",
+    "nuxt-auth-utils": "^0.5.29",
+    "nuxt-skew-protection": "workspace:*"
+  }
+}
