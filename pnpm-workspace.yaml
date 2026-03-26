@@ -1,4 +1,6 @@
+shellEmulator: true
 
+trustPolicy: no-downgrade
 packages:
   - playground
   - devtools
@@ -59,7 +61,4 @@ onlyBuiltDependencies:
   - unrs-resolver
   - vue-demi
   - workerd
-shellEmulator: true
-
-trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 262800

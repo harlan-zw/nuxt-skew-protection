@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v1.0.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.0...main)
+
+### 🩹 Fixes
+
+- Broken module deps ([58c6ac9](https://github.com/harlan-zw/nuxt-skew-protection/commit/58c6ac9))
+
+### 🏡 Chore
+
+- Sync ([ab74289](https://github.com/harlan-zw/nuxt-skew-protection/commit/ab74289))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v0.7.6...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v0.7.6...main)
