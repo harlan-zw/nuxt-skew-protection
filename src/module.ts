@@ -122,16 +122,16 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt: '>=4.0.0',
     },
     configKey: 'skewProtection',
-    moduleDependencies: {
-      '@nuxtjs/robots': {
-        version: '>=5.6.7',
-      },
-      'nuxt-site-config': {
-        version: '>=3.2',
-      },
-      'nuxtseo-shared': {
-        version: '>=0.8.0',
-      },
+  },
+  moduleDependencies: {
+    '@nuxtjs/robots': {
+      version: '>=5.6.7',
+    },
+    'nuxt-site-config': {
+      version: '>=4.0',
+    },
+    'nuxtseo-shared': {
+      version: '>=0.8.0',
     },
   },
   defaults: {
