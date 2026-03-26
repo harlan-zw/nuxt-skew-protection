@@ -1,7 +1,7 @@
 import type { AblyAdapterConfig } from './types'
 import { Rest } from 'ably'
-import { defineNodeBroadcast } from '../../../utils'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
+import { defineNodeBroadcast } from '../types'
 
 export const broadcast = defineNodeBroadcast<AblyAdapterConfig>(async (config, version) => {
   const ably = new Rest({ key: config.key })

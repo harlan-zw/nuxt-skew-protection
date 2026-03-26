@@ -23,14 +23,38 @@
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
     },
-    "./server": "./dist/runtime/server/index.js",
-    "./adapters": "./dist/runtime/adapters/index.js",
-    "./adapters/pusher": "./dist/runtime/adapters/pusher/index.js",
-    "./adapters/pusher/web": "./dist/runtime/adapters/pusher/web.js",
-    "./adapters/pusher/node": "./dist/runtime/adapters/pusher/node.js",
-    "./adapters/ably": "./dist/runtime/adapters/ably/index.js",
-    "./adapters/ably/web": "./dist/runtime/adapters/ably/web.js",
-    "./adapters/ably/node": "./dist/runtime/adapters/ably/node.js"
+    "./server": {
+      "types": "./dist/runtime/server/index.d.ts",
+      "import": "./dist/runtime/server/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/runtime/adapters/index.d.ts",
+      "import": "./dist/runtime/adapters/index.js"
+    },
+    "./adapters/pusher": {
+      "types": "./dist/runtime/adapters/pusher/index.d.ts",
+      "import": "./dist/runtime/adapters/pusher/index.js"
+    },
+    "./adapters/pusher/web": {
+      "types": "./dist/runtime/adapters/pusher/web.d.ts",
+      "import": "./dist/runtime/adapters/pusher/web.js"
+    },
+    "./adapters/pusher/node": {
+      "types": "./dist/runtime/adapters/pusher/node.d.ts",
+      "import": "./dist/runtime/adapters/pusher/node.js"
+    },
+    "./adapters/ably": {
+      "types": "./dist/runtime/adapters/ably/index.d.ts",
+      "import": "./dist/runtime/adapters/ably/index.js"
+    },
+    "./adapters/ably/web": {
+      "types": "./dist/runtime/adapters/ably/web.d.ts",
+      "import": "./dist/runtime/adapters/ably/web.js"
+    },
+    "./adapters/ably/node": {
+      "types": "./dist/runtime/adapters/ably/node.d.ts",
+      "import": "./dist/runtime/adapters/ably/node.js"
+    }
   },
   "main": "./dist/module.mjs",
   "files": [

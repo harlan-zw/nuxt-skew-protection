@@ -1,7 +1,7 @@
 import type { AblyAdapterConfig } from './types'
 import { onNuxtReady } from 'nuxt/app'
-import { defineWebSubscribe } from '../../../utils'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
+import { defineWebSubscribe } from '../types'
 
 export const subscribe = defineWebSubscribe<AblyAdapterConfig>((config, onMessage) => {
   let cleanup: (() => void) | undefined
