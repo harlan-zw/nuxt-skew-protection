@@ -27,6 +27,11 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   const serverVersion = useState<string | undefined>('skew-server-version', () => undefined)
   const manifest = useState<NuxtAppManifestMeta | undefined>('skew-manifest', () => undefined)
 
+  // Track versions we've already detected/processed to avoid
+  // re-triggering on SSE/WS reconnection or repeated backoff ticks
+  let lastDetectedServerVersion: string | undefined
+  let lastProcessedManifestId: string | undefined
+
   async function checkForUpdates() {
     // Don't check for updates when offline
     if (import.meta.client && !useOnline().value)
@@ -35,7 +40,9 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     const meta = await ($fetch(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`) as Promise<NuxtAppManifestMeta>).catch(() => {
       return null
     })
-    if (meta && meta?.id !== clientVersion) {
+    if (meta && meta.id !== clientVersion && meta.id !== lastProcessedManifestId) {
+      lastProcessedManifestId = meta.id
+      queue.clear()
       await nuxtApp.hooks.callHook('app:manifest:update', meta)
     }
   }
@@ -62,6 +69,12 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     if (!msg.version || msg.version === clientVersion)
       return
 
+    // Skip if we've already started checking for this server version
+    // (e.g., SSE/WS reconnection resends the same CONNECTED message)
+    if (msg.version === lastDetectedServerVersion)
+      return
+
+    lastDetectedServerVersion = msg.version as string
     logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
     queue.start()
   })
