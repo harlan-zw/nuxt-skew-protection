@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v1.0.5...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.5...main)
+
+### 🩹 Fixes
+
+- Deduplicate SSE/WS reconnection version checks ([#13](https://github.com/harlan-zw/nuxt-skew-protection/pull/13))
+
+### 🏡 Chore
+
+- Broken build ([96ca452](https://github.com/harlan-zw/nuxt-skew-protection/commit/96ca452))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.0.3...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.3...main)

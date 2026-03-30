@@ -9,7 +9,7 @@
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "MIT",
   "homepage": "https://nuxtseo.com/skew-protection",
   "repository": {
     "type": "git",
