@@ -63,8 +63,15 @@ export default defineNuxtPlugin({
 
     const channel = new BroadcastChannel(CHANNEL_NAME)
 
+    // Guard to prevent re-broadcasting messages received from other tabs
+    let receivedFromChannel = false
+
     // When this tab detects an update, broadcast to other tabs
     nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
+      if (receivedFromChannel) {
+        receivedFromChannel = false
+        return
+      }
       logger.debug('[MultiTab] Broadcasting version update to other tabs')
       channel.postMessage({ type: 'version-update', id: manifest?.id, timestamp: manifest?.timestamp })
     })
@@ -73,6 +80,7 @@ export default defineNuxtPlugin({
     channel.onmessage = (event) => {
       if (event.data?.type === 'version-update' && event.data.id) {
         logger.debug('[MultiTab] Received version update from another tab')
+        receivedFromChannel = true
         nuxtApp.hooks.callHook('app:manifest:update', event.data)
       }
     }
