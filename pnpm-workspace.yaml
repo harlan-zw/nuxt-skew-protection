@@ -5,9 +5,6 @@ packages:
   - playground
   - devtools
   - test/fixtures/*
-
-patchedDependencies:
-  nuxtseo-shared@5.0.2: patches/nuxtseo-shared@5.0.2.patch
 catalog:
   '@antfu/eslint-config': ^7.7.3
   '@arethetypeswrong/cli': ^0.18.2
@@ -38,10 +35,10 @@ catalog:
   nuxt-auth-utils: ^0.5.29
   nuxt-site-config: ^4.0.7
   nuxtseo-layer-devtools: ^5.0.2
-  nuxtseo-shared: ^5.0.2
+  nuxtseo-shared: ^5.1.0
   pathe: ^2.0.3
   pkg-types: ^2.3.0
-  playwright-core: ^1.58.2
+  playwright-core: ^1.59.0
   pusher-js: ^8.4.3
   tinyexec: ^1.0.4
   tsx: ^4.21.0
@@ -51,7 +48,7 @@ catalog:
   vue: ^3.5.31
   vue-router: ^5.0.4
   vue-tsc: ^3.2.6
-  wrangler: ^4.78.0
+  wrangler: ^4.79.0
   ws: ^8.20.0
   zod: ^4.3.6
 onlyBuiltDependencies:
@@ -63,4 +60,5 @@ onlyBuiltDependencies:
   - unrs-resolver
   - vue-demi
   - workerd
+
 trustPolicyIgnoreAfter: 262800
