@@ -25,10 +25,16 @@ export function modifyVersion(fixtureDir: string, version: string, pages = ['ind
 }
 
 export async function build(fixtureDir: string, deploymentId: string) {
-  await execAsync(`pnpm build`, {
-    cwd: fixtureDir,
-    env: { ...process.env, NUXT_DEPLOYMENT_ID: deploymentId },
-  })
+  try {
+    await execAsync(`pnpm build`, {
+      cwd: fixtureDir,
+      env: { ...process.env, NUXT_DEPLOYMENT_ID: deploymentId },
+    })
+  }
+  catch (err: any) {
+    const message = err.stderr || err.stdout || err.message
+    throw new Error(`Fixture build failed in ${fixtureDir}:\n${message}`)
+  }
 }
 
 export function startServer(fixtureDir: string, port: number): Promise<ChildProcess> {

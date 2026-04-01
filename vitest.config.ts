@@ -30,10 +30,11 @@ export default defineConfig({
           ],
         },
       }),
-      // E2E tests
+      // E2E tests (sequential to avoid fixture directory races)
       defineProject({
         test: {
           name: 'e2e',
+          fileParallelism: false,
           include: [
             './test/e2e/**/*.test.ts',
           ],
