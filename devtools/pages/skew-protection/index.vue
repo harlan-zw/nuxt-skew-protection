@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed } from '#imports'
 import { hasProductionUrl, isProductionMode, productionUrl } from 'nuxtseo-layer-devtools/composables/state'
-import { debugData, productionData, productionError } from '../composables/data'
+import { debugData, productionData, productionError } from '../../lib/skew-protection/data'
 
 const configItems = computed(() => {
   const c = debugData.value?.config

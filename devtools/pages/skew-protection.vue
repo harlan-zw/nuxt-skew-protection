@@ -2,8 +2,8 @@
 import { useRoute, watch } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
 import { ref } from 'vue'
-import { fetchProductionData, isLoading, moduleVersion, refreshAll } from './composables/data'
-import './composables/rpc'
+import { fetchProductionData, isLoading, moduleVersion, refreshAll } from '../lib/skew-protection/data'
+import '../lib/skew-protection/rpc'
 
 const route = useRoute()
 
@@ -18,21 +18,21 @@ const activeTab = ref('overview')
 
 // Sync tab from route
 watch(() => route.path, (p) => {
-  if (p === '/versions')
+  if (p === '/skew-protection/versions')
     activeTab.value = 'versions'
-  else if (p === '/connections')
+  else if (p === '/skew-protection/connections')
     activeTab.value = 'connections'
-  else if (p === '/docs')
+  else if (p === '/skew-protection/docs')
     activeTab.value = 'docs'
   else
     activeTab.value = 'overview'
 }, { immediate: true })
 
 const navItems = [
-  { value: 'overview', to: '/', icon: 'carbon:dashboard', label: 'Overview' },
-  { value: 'versions', to: '/versions', icon: 'carbon:version', label: 'Versions' },
-  { value: 'connections', to: '/connections', icon: 'carbon:connection-signal', label: 'Connections', devOnly: true },
-  { value: 'docs', to: '/docs', icon: 'carbon:book', label: 'Docs' },
+  { value: 'overview', to: '/skew-protection', icon: 'carbon:dashboard', label: 'Overview' },
+  { value: 'versions', to: '/skew-protection/versions', icon: 'carbon:version', label: 'Versions' },
+  { value: 'connections', to: '/skew-protection/connections', icon: 'carbon:connection-signal', label: 'Connections', devOnly: true },
+  { value: 'docs', to: '/skew-protection/docs', icon: 'carbon:book', label: 'Docs' },
 ]
 </script>
 
