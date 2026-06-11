@@ -1,13 +1,20 @@
 <script lang="ts" setup>
 import type { VersionInfo } from '../../lib/skew-protection/types'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
-import { computed } from '#imports'
+import { computed, onMounted, ref } from '#imports'
 import { productionData, productionError } from '../../lib/skew-protection/data'
+
+const now = ref<number | null>(null)
+
+onMounted(() => {
+  now.value = Date.now()
+})
 
 const versions = computed(() => {
   const skew = productionData.value?.manifest?.skewProtection
   if (!skew?.versions)
     return []
+  const currentTime = now.value
   return Object.entries(skew.versions as Record<string, VersionInfo>)
     .map(([id, info]) => ({
       id,
@@ -16,7 +23,7 @@ const versions = computed(() => {
       expires: new Date(info.expires),
       assetCount: info.assets?.length || 0,
       deletedChunks: info.deletedChunks?.length || 0,
-      isExpired: new Date(info.expires).getTime() < Date.now(),
+      isExpired: currentTime === null ? false : new Date(info.expires).getTime() < currentTime,
     }))
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 })
@@ -38,7 +45,9 @@ function formatDate(date: Date): string {
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'narrow' })
 
 function formatRelative(date: Date): string {
-  const diff = Date.now() - date.getTime()
+  if (now.value === null)
+    return ''
+  const diff = now.value - date.getTime()
   const seconds = Math.floor(diff / 1000)
   if (seconds < 60)
     return rtf.format(-seconds, 'second')

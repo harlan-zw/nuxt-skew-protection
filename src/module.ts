@@ -557,7 +557,9 @@ export {}
           // Clean up expired versions on close
           nitro.hooks.hook('close', async () => {
             if (assetManager) {
-              await assetManager.cleanupExpiredVersions().catch(() => {})
+              await assetManager.cleanupExpiredVersions().catch((error) => {
+                logger.debug('Failed to clean up expired skew protection versions:', error)
+              })
               await assetManager.dispose()
             }
           })

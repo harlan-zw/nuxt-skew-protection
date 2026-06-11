@@ -45,8 +45,8 @@ async function clearKVManifest(): Promise<void> {
   await execCommand(
     'npx wrangler kv key delete "skew-protection:version-manifest.json" --namespace-id="3de5b8fa99f545c7a78f40ea3fc71646" --remote',
     fixtureDir,
-  ).catch(() => {
-    // Ignore errors if key doesn't exist
+  ).catch((error) => {
+    log(`  KV manifest was not deleted, likely because it does not exist: ${error}`, 'gray')
   })
   log(`  ✅ KV namespace cleared`, 'green')
 }

@@ -32,8 +32,8 @@ export async function fetchProductionData() {
   const url = productionUrl.value
   productionData.value = await appFetch.value<ProductionDebugResponse>('/__skew-devtools/debug-production', {
     query: { url },
-  }).catch((err) => {
-    productionError.value = err.message || 'Failed to connect to production'
+  }).catch((err: unknown) => {
+    productionError.value = err instanceof Error ? err.message : 'Failed to connect to production'
     return null
   })
 }

@@ -15,10 +15,12 @@ minimumReleaseAgeExclude:
   - nuxtseo-shared@5.2.6
   - site-config-stack@4.1.0
   - vue@3.5.38
+  - nuxtseo-layer-devtools@5.2.6
 
 shellEmulator: true
 
 trustPolicy: no-downgrade
+trustLockfile: true
 packages:
   - playground
   - devtools
@@ -50,6 +52,7 @@ catalog:
   nuxt: ^4.4.8
   nuxt-auth-utils: ^0.5.29
   nuxt-site-config: ^4.1.0
+  nuxtseo-layer-devtools: ^5.2.6
   nuxtseo-shared: ^5.2.6
   pathe: ^2.0.3
   pkg-types: ^2.3.1
@@ -58,6 +61,7 @@ catalog:
   tinyexec: ^1.2.4
   tsx: ^4.22.4
   typescript: ^6.0.3
+  unbuild: ^3.6.1
   unstorage: ^1.17.5
   vitest: ^4.1.8
   vue: ^3.5.38

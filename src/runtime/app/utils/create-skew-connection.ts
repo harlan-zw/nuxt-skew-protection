@@ -112,7 +112,9 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId, route }),
-      }).catch(() => {})
+      }).catch((error) => {
+        logger.debug(`[${name}] Failed to send route update:`, error)
+      })
     }
   }
 
@@ -129,7 +131,9 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ connectionId }),
-      }).catch(() => {})
+      }).catch((error) => {
+        logger.debug(`[${name}] Failed to subscribe to stats:`, error)
+      })
     }
   }
 
