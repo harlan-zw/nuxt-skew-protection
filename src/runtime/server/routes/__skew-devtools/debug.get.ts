@@ -1,6 +1,6 @@
-import { getSiteConfig } from '#site-config/server/composables'
 import { defineEventHandler } from 'h3'
 import { useRuntimeConfig } from 'nitropack/runtime'
+import { getSiteConfig } from '#site-config/server/composables'
 
 /**
  * Devtools debug endpoint returning module configuration and resolved state.

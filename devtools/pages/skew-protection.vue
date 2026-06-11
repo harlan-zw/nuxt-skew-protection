@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import { useRoute, watch } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
 import { ref } from 'vue'
+import { useRoute, watch } from '#imports'
 import { fetchProductionData, isLoading, moduleVersion, refreshAll } from '../lib/skew-protection/data'
 import '../lib/skew-protection/rpc'
 

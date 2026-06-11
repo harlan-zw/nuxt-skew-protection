@@ -1,7 +1,7 @@
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { reloadNuxtApp, useCookie, useNuxtApp, useRuntimeConfig } from '#app'
 import { useSkewProtection, useToast } from '#imports'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const runtimeConfig = useRuntimeConfig()
 const buildId = ref(runtimeConfig.app?.buildId)

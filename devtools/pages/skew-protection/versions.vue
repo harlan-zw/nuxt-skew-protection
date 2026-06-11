@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { VersionInfo } from '../../lib/skew-protection/types'
-import { computed } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
+import { computed } from '#imports'
 import { productionData, productionError } from '../../lib/skew-protection/data'
 
 const versions = computed(() => {

@@ -1,3 +1,21 @@
+minimumReleaseAgeExclude:
+  - '@vue/compiler-core@3.5.38'
+  - '@vue/compiler-dom@3.5.38'
+  - '@vue/compiler-sfc@3.5.38'
+  - '@vue/compiler-ssr@3.5.38'
+  - '@vue/reactivity@3.5.38'
+  - '@vue/runtime-core@3.5.38'
+  - '@vue/runtime-dom@3.5.38'
+  - '@vue/server-renderer@3.5.38'
+  - '@vue/shared@3.5.38'
+  - nuxt-site-config-kit@4.1.0
+  - nuxt-site-config@4.1.0
+  - nuxtseo-layer-devtools@5.2.3
+  - nuxtseo-shared@5.2.3
+  - nuxtseo-shared@5.2.6
+  - site-config-stack@4.1.0
+  - vue@3.5.38
+
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -6,48 +24,48 @@ packages:
   - devtools
   - test/fixtures/*
 catalog:
-  '@antfu/eslint-config': ^7.7.3
-  '@arethetypeswrong/cli': ^0.18.2
-  '@nuxt/kit': ^4.4.2
+  '@antfu/eslint-config': ^9.0.0
+  '@arethetypeswrong/cli': ^0.18.3
+  '@nuxt/kit': ^4.4.8
   '@nuxt/module-builder': ^1.0.2
-  '@nuxt/test-utils': ^4.0.0
-  '@nuxt/ui': ^4.6.0
+  '@nuxt/test-utils': ^4.0.3
+  '@nuxt/ui': ^4.8.2
   '@nuxthub/core': latest
-  '@nuxtjs/robots': ^6.0.6
+  '@nuxtjs/robots': ^6.0.9
   '@types/ws': ^8.18.1
-  '@upstash/redis': ^1.37.0
-  '@vueuse/core': ^14.2.1
+  '@upstash/redis': ^1.38.0
+  '@vueuse/core': ^14.3.0
   '@vueuse/nuxt': latest
-  ably: ^2.21.0
-  better-sqlite3: ^12.8.0
-  bumpp: ^11.0.1
+  ably: ^2.22.1
+  better-sqlite3: ^12.10.0
+  bumpp: ^11.1.0
   consola: ^3.4.2
   cookie-es: ^3.1.1
-  eslint: ^10.1.0
-  eslint-plugin-harlanzw: ^0.12.0
+  eslint: ^10.4.1
+  eslint-plugin-harlanzw: ^0.17.0
   eventsource: ^4.1.0
-  happy-dom: ^20.8.9
-  ioredis: ^5.10.1
-  laravel-echo: ^2.3.1
-  nuxt: ^4.4.2
+  happy-dom: ^20.10.2
+  ioredis: ^5.11.1
+  laravel-echo: ^2.3.7
+  nuxt: ^4.4.8
   nuxt-auth-utils: ^0.5.29
-  nuxt-site-config: ^4.0.7
-  nuxtseo-shared: ^5.2.0
+  nuxt-site-config: ^4.1.0
+  nuxtseo-shared: ^5.2.6
   pathe: ^2.0.3
-  pkg-types: ^2.3.0
-  playwright-core: ^1.59.0
-  pusher-js: ^8.4.3
-  tinyexec: ^1.0.4
-  tsx: ^4.21.0
-  typescript: ^6.0.2
+  pkg-types: ^2.3.1
+  playwright-core: ^1.60.0
+  pusher-js: ^8.5.0
+  tinyexec: ^1.2.4
+  tsx: ^4.22.4
+  typescript: ^6.0.3
   unstorage: ^1.17.5
-  vitest: ^4.1.2
-  vue: ^3.5.31
-  vue-router: ^5.0.4
-  vue-tsc: ^3.2.6
-  wrangler: ^4.79.0
-  ws: ^8.20.0
-  zod: ^4.3.6
+  vitest: ^4.1.8
+  vue: ^3.5.38
+  vue-router: ^5.1.0
+  vue-tsc: ^3.3.4
+  wrangler: ^4.99.0
+  ws: ^8.21.0
+  zod: ^4.4.3
 onlyBuiltDependencies:
   - '@firebase/util'
   - '@parcel/watcher'
@@ -59,3 +77,11 @@ onlyBuiltDependencies:
   - workerd
 
 trustPolicyIgnoreAfter: 262800
+
+allowBuilds:
+  '@parcel/watcher': true
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+  vue-demi: true
+  workerd: true

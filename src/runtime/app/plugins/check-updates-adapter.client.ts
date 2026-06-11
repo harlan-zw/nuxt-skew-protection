@@ -1,7 +1,7 @@
 import type { SkewAdapterConfig } from '../types'
+import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 // @ts-expect-error virtual module
 import { config as adapterConfig, subscribe } from '#skew-adapter'
-import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { createSkewConnection } from '../utils/create-skew-connection'
 

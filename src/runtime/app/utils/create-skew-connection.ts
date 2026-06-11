@@ -1,7 +1,7 @@
 import type { CookieOptions } from 'nuxt/app'
 import type { Ref } from 'vue'
-import { useBotDetection } from '#imports'
 import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { useBotDetection } from '#imports'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { init, logger } from '../../shared/logger'
 

@@ -1,10 +1,10 @@
 import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { ChunksOutdatedPayload } from '../../types'
-// @ts-expect-error virtual file
-import { buildAssetsURL } from '#internal/nuxt/paths'
 import { useOnline } from '@vueuse/core'
 import { useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
 import { computed, onMounted, onUnmounted } from 'vue'
+// @ts-expect-error virtual file
+import { buildAssetsURL } from '#internal/nuxt/paths'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { logger } from '../../shared/logger'
 import { createBackoffQueue } from '../utils/backoff-queue'

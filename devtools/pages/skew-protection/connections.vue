@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { computed } from '#imports'
 import { isProductionMode } from 'nuxtseo-layer-devtools/composables/state'
+import { computed } from '#imports'
 import { debugData, productionData, productionError } from '../../lib/skew-protection/data'
 
 const connectionTrackingEnabled = computed(() => debugData.value?.config?.connectionTracking === true)
