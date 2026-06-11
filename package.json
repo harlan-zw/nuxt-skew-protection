@@ -136,6 +136,7 @@
     "nuxtseo-layer-devtools": "catalog:",
     "playwright-core": "catalog:",
     "pusher-js": "catalog:",
+    "std-env": "^4.1.0",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "unbuild": "catalog:",

@@ -237,6 +237,9 @@ importers:
       pusher-js:
         specifier: 'catalog:'
         version: 8.5.0
+      std-env:
+        specifier: ^4.1.0
+        version: 4.1.0
       tsx:
         specifier: 'catalog:'
         version: 4.22.4
