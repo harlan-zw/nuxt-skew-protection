@@ -330,6 +330,8 @@ importers:
 
   test/fixtures/node: {}
 
+  test/fixtures/path-routed: {}
+
   test/fixtures/pusher:
     dependencies:
       laravel-echo:

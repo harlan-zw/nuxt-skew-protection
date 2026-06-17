@@ -15,13 +15,15 @@ export default defineNuxtPlugin({
     const nuxtApp = useNuxtApp()
     const router = useRouter()
     const runtimeConfig = useRuntimeConfig()
-    const routeTracking = (runtimeConfig.public.skewProtection as { routeTracking?: boolean })?.routeTracking
+    const skewConfig = runtimeConfig.public.skewProtection as { routeTracking?: boolean, basePath?: string }
+    const routeTracking = skewConfig?.routeTracking
+    const basePath = skewConfig?.basePath || '/__skew'
 
     // Include initial route in connection URL if route tracking enabled
     const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
 
     const config: SkewSSEConfig = {
-      url: `/__skew/sse${initialRoute}`,
+      url: `${basePath}/sse${initialRoute}`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
       },

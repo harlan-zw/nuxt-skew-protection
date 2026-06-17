@@ -42,6 +42,11 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   // Skip connection for bots using @nuxtjs/robots detection
   const { isBot } = useBotDetection()
 
+  // Endpoint prefix for the SSE-fallback POST routes (`/route`,
+  // `/subscribe-stats`). Mirrors the server route registration so a sub-path
+  // deployment (e.g. `/pro/__skew`) hits its own worker.
+  const basePath = (runtimeConfig.public.skewProtection as { basePath?: string }).basePath || '/__skew'
+
   // Initialize cookie first (always needed for return value)
   const cookieConfig = runtimeConfig.public.skewProtection.cookie
   const { name: cookieName, ...cookieOpts } = cookieConfig
@@ -108,7 +113,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     }
     // Otherwise, POST to the route endpoint (SSE fallback)
     else if (connectionId) {
-      fetch('/__skew/route', {
+      fetch(`${basePath}/route`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId, route }),
@@ -126,7 +131,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
       sendFn({ type: SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS })
     }
     else {
-      fetch('/__skew/subscribe-stats', {
+      fetch(`${basePath}/subscribe-stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',

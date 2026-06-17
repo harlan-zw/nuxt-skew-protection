@@ -18,6 +18,7 @@ import { colors } from 'consola/utils'
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
+import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import { createAssetManager } from './utils/version-manager'
@@ -49,12 +50,28 @@ export interface ModuleOptions {
    */
   updateStrategy?: 'polling' | 'sse' | 'ws' | SkewAdapter
   /**
+   * Path prefix for the module's runtime endpoints (`/ws`, `/sse`, `/health`,
+   * `/route`, `/subscribe-stats`, `/admin/stats`).
+   *
+   * Defaults to `/__skew`. Set a sub-path when the app is path-routed behind a
+   * worker that only owns part of the host (e.g. a Pro dashboard mounted under
+   * `/pro/*` on a host shared with a marketing app): use `/pro/__skew` so the
+   * websocket/health requests resolve to this worker's deployment instead of
+   * leaking to the sibling app that owns the host route.
+   * @default '/__skew'
+   */
+  basePath?: string
+  /**
    * Cookie configuration for storing deployment version
    */
   cookie?: false | Omit<CookieSerializeOptions, 'encode'> & {
     /**
-     * Cookie name for storing deployment version
-     * @default '__nkpv'
+     * Cookie name for storing deployment version.
+     *
+     * Defaults to `__nkpv`, suffixed with the mount point for a path-routed app
+     * (e.g. `/pro/*` → `__nkpv_pro`) so apps sharing a host don't clobber each
+     * other's cookie. Set this to override the derived name.
+     * @default '__nkpv' (or `__nkpv_<mount>` when path-routed)
      */
     name?: string
   }
@@ -139,7 +156,9 @@ export default defineNuxtModule<ModuleOptions>({
     maxNumberOfVersions: 10,
     bundleAssets: true,
     cookie: {
-      name: '__nkpv',
+      // `name` intentionally omitted — derived from the mount point in setup
+      // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
+      // explicit `cookie.name` overrides it.
       path: '/',
       sameSite: 'lax' as const,
       maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -159,6 +178,22 @@ export default defineNuxtModule<ModuleOptions>({
     if (options.enabled === false) {
       logger.debug('The module is disabled, skipping setup.')
       return
+    }
+
+    // Resolve the endpoint prefix. When `basePath` isn't set explicitly it's
+    // auto-detected from the app mount point (absolute `buildAssetsDir` parent,
+    // then `app.baseURL`), so a path-routed worker like a `/pro/*` dashboard
+    // gets `/pro/__skew` with zero config. See resolveBasePath.
+    const basePathExplicit = !!options.basePath
+    const basePath = resolveBasePath({ basePath: options.basePath, app: nuxt.options.app })
+    options.basePath = basePath
+    logger.debug(`Endpoints mounted at ${basePath}/* (${basePathExplicit ? 'explicit' : 'auto-detected'})`)
+
+    // Derive a per-mount cookie name so path-routed apps sharing a host don't
+    // clobber each other's version cookie (explicit `cookie.name` wins).
+    if (options.cookie !== false) {
+      options.cookie = options.cookie || {}
+      options.cookie.name = resolveCookieName(options.cookie.name, basePath)
     }
 
     // v1 migration: accept old config names with deprecation warnings
@@ -193,6 +228,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     // @ts-expect-error untyped
     nuxt.options.runtimeConfig.public.skewProtection = {
+      basePath,
       cookie: options.cookie as Required<NuxtSkewProtectionRuntimeConfig['cookie']>,
       debug: options.debug,
       connectionTracking: options.connectionTracking,
@@ -349,17 +385,17 @@ export {}
     if (nuxt.options.dev && options.connectionTracking) {
       if (nuxt.options.nitro?.experimental?.websocket) {
         addServerHandler({
-          route: '/__skew/ws',
+          route: `${basePath}/ws`,
           handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
         })
         addServerHandler({
-          route: '/__skew/subscribe-stats',
+          route: `${basePath}/subscribe-stats`,
           method: 'post',
           handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
         })
         if (options.routeTracking) {
           addServerHandler({
-            route: '/__skew/route',
+            route: `${basePath}/route`,
             method: 'post',
             handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
           })
@@ -434,7 +470,7 @@ export {}
       // Health check endpoint
       if (!isStatic) {
         addServerHandler({
-          route: '/__skew/health',
+          route: `${basePath}/health`,
           method: 'get',
           handler: resolver.resolve('./runtime/server/routes/__skew/health.get'),
         })
@@ -443,7 +479,7 @@ export {}
       // Admin stats endpoint for nuxtseo.com dashboard (requires connectionTracking)
       if (options.connectionTracking && !isStatic) {
         addServerHandler({
-          route: '/__skew/admin/stats',
+          route: `${basePath}/admin/stats`,
           method: 'get',
           handler: resolver.resolve('./runtime/server/routes/__skew/admin/stats.get'),
         })
@@ -657,7 +693,7 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: '/__skew/ws',
+            route: `${basePath}/ws`,
             handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
           })
           addPlugin(resolver.resolve('./runtime/app/plugins/check-updates-websocket.client'))
@@ -669,21 +705,21 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: '/__skew/sse',
+            route: `${basePath}/sse`,
             handler: resolver.resolve('./runtime/server/routes/__skew/sse'),
           })
           // SSE is unidirectional so we need POST endpoints
           if (options.connectionTracking) {
             // Stats subscription endpoint
             addServerHandler({
-              route: '/__skew/subscribe-stats',
+              route: `${basePath}/subscribe-stats`,
               method: 'post',
               handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
             })
             // Route update endpoint
             if (options.routeTracking) {
               addServerHandler({
-                route: '/__skew/route',
+                route: `${basePath}/route`,
                 method: 'post',
                 handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
               })
