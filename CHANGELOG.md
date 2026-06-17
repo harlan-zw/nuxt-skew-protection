@@ -1,6 +1,24 @@
 # Changelog
 
 
+## v1.1.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.1.1...main)
+
+### 🚀 Enhancements
+
+- **devtools:** Ship devtools as a layer ([#15](https://github.com/harlan-zw/nuxt-skew-protection/pull/15))
+
+### 🏡 Chore
+
+- Bump ([5e7661f](https://github.com/harlan-zw/nuxt-skew-protection/commit/5e7661f))
+- Bump ([eadce7b](https://github.com/harlan-zw/nuxt-skew-protection/commit/eadce7b))
+- Bump ([218cf5b](https://github.com/harlan-zw/nuxt-skew-protection/commit/218cf5b))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.0.5...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.0.5...main)

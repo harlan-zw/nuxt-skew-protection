@@ -16,14 +16,16 @@ export default defineNuxtPlugin({
     const nuxtApp = useNuxtApp()
     const router = useRouter()
     const runtimeConfig = useRuntimeConfig()
-    const routeTracking = (runtimeConfig.public.skewProtection as { routeTracking?: boolean })?.routeTracking
+    const skewConfig = runtimeConfig.public.skewProtection as { routeTracking?: boolean, basePath?: string }
+    const routeTracking = skewConfig?.routeTracking
+    const basePath = skewConfig?.basePath || '/__skew'
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
     // Include initial route in connection URL if route tracking enabled
     const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
 
     const config: SkewWebSocketConfig = {
-      url: `${protocol}//${window.location.host}/__skew/ws${initialRoute}`,
+      url: `${protocol}//${window.location.host}${basePath}/ws${initialRoute}`,
       options: {
         autoReconnect: { retries: 10, delay: 5000 },
         immediate: false,
