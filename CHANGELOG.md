@@ -1,6 +1,23 @@
 # Changelog
 
 
+## v1.2.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.2.0...main)
+
+### 🚀 Enhancements
+
+- Base path support ([#16](https://github.com/harlan-zw/nuxt-skew-protection/pull/16))
+
+### 🏡 Chore
+
+- Bump deps ([0bc8e1c](https://github.com/harlan-zw/nuxt-skew-protection/commit/0bc8e1c))
+- Bump deps ([3b6e932](https://github.com/harlan-zw/nuxt-skew-protection/commit/3b6e932))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.1.1...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.1.1...main)

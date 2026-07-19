@@ -10,14 +10,15 @@ minimumReleaseAgeExclude:
   - '@vue/shared@3.5.38'
   - nuxt-site-config-kit@4.1.0
   - nuxt-site-config@4.1.0
-  - nuxtseo-layer-devtools@5.2.3
-  - nuxtseo-shared@5.2.3
-  - nuxtseo-shared@5.2.6
+  - nuxtseo-layer-devtools@5.2.3 || 5.2.6 || 5.3.0
+  - nuxtseo-shared@5.2.3 || 5.2.6 || 5.3.0
   - site-config-stack@4.1.0
   - vue@3.5.38
-  - nuxtseo-layer-devtools@5.2.6
-  - nuxtseo-layer-devtools@5.3.0
-  - nuxtseo-shared@5.3.0
+  - '@nuxt/kit@4.5.0'
+  - '@nuxt/nitro-server@4.5.0'
+  - '@nuxt/schema@4.5.0'
+  - '@nuxt/vite-builder@4.5.0'
+  - nuxt@4.5.0
 
 shellEmulator: true
 
@@ -28,50 +29,50 @@ packages:
   - devtools
   - test/fixtures/*
 catalog:
-  '@antfu/eslint-config': ^9.0.0
-  '@arethetypeswrong/cli': ^0.18.3
-  '@nuxt/kit': ^4.4.8
+  '@antfu/eslint-config': ^9.1.0
+  '@arethetypeswrong/cli': ^0.18.5
+  '@nuxt/kit': ^4.5.0
   '@nuxt/module-builder': ^1.0.2
   '@nuxt/test-utils': ^4.0.3
-  '@nuxt/ui': ^4.8.2
+  '@nuxt/ui': ^4.10.0
   '@nuxthub/core': latest
-  '@nuxtjs/robots': ^6.1.1
+  '@nuxtjs/robots': ^6.1.2
   '@types/ws': ^8.18.1
   '@upstash/redis': ^1.38.0
   '@vueuse/core': ^14.3.0
   '@vueuse/nuxt': latest
-  ably: ^2.22.1
+  ably: ^2.25.0
   better-sqlite3: ^12.11.1
   bumpp: ^11.1.0
   consola: ^3.4.2
   cookie-es: ^3.1.1
-  eslint: ^10.5.0
+  eslint: ^10.7.0
   eslint-plugin-harlanzw: ^0.17.0
   eventsource: ^4.1.0
-  happy-dom: ^20.10.4
+  happy-dom: ^20.10.6
   ioredis: ^5.11.1
-  laravel-echo: ^2.3.7
-  nuxt: ^4.4.8
+  laravel-echo: ^2.4.0
+  nuxt: ^4.5.0
   nuxt-auth-utils: ^0.5.29
-  nuxt-site-config: ^4.1.0
-  nuxtseo-layer-devtools: ^5.3.0
-  nuxtseo-shared: ^5.3.0
+  nuxt-site-config: ^4.1.1
+  nuxtseo-layer-devtools: ^5.3.2
+  nuxtseo-shared: ^5.3.2
   pathe: ^2.0.3
   pkg-types: ^2.3.1
-  playwright-core: ^1.61.0
+  playwright-core: ^1.61.1
   pusher-js: ^8.5.0
-  std-env: ^4.1.0
+  std-env: ^4.2.0
   tinyexec: ^1.2.4
-  tsx: ^4.22.4
+  tsx: ^4.23.1
   typescript: ^6.0.3
   unbuild: ^3.6.1
   unstorage: ^1.17.5
-  vitest: ^4.1.9
-  vue: ^3.5.38
-  vue-router: ^5.1.0
-  vue-tsc: ^3.3.5
-  wrangler: ^4.100.0
-  ws: ^8.21.0
+  vitest: ^4.1.10
+  vue: ^3.5.40
+  vue-router: ^5.2.0
+  vue-tsc: ^3.3.7
+  wrangler: ^4.112.0
+  ws: ^8.21.1
   zod: ^4.4.3
 onlyBuiltDependencies:
   - '@firebase/util'
