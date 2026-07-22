@@ -1,8 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
 
 export interface NuxtSkewProtectionRuntimeConfig {
-  sse: boolean
-  durableObjects: boolean
   /**
    * Path prefix for the module's runtime endpoints (`/ws`, `/sse`, `/health`,
    * `/route`, `/subscribe-stats`, `/admin/stats`). Defaults to `/__skew`. Set a

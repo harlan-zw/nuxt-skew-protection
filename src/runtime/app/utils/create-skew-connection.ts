@@ -1,5 +1,5 @@
 import type { CookieOptions } from 'nuxt/app'
-import type { Ref } from 'vue'
+import type { SkewConnection } from '../types'
 import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { useBotDetection } from '#imports'
 import { SKEW_MESSAGE_TYPE } from '../../const'
@@ -18,16 +18,6 @@ export interface CreateSkewConnectionConfig {
     cleanup?: () => void
     send?: (data: unknown) => void
   } | (() => void) | void
-}
-
-export interface SkewConnection {
-  connect: () => void
-  disconnect: () => void
-  send: (data: unknown) => void
-  sendRoute: (route: string) => void
-  subscribeStats: () => void
-  buildId: string
-  cookie: Ref<string | null | undefined>
 }
 
 export function createSkewConnection(config: CreateSkewConnectionConfig): SkewConnection {
