@@ -4,6 +4,7 @@ import { defineNuxtPlugin, useNuxtApp, useRouter, useRuntimeConfig } from 'nuxt/
 import { watch } from 'vue'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { createSkewConnection } from '../utils/create-skew-connection'
+import { resolveInitialRouteQuery, trackRouteChanges } from '../utils/route-tracking'
 
 export type { SkewWebSocketConfig }
 
@@ -22,7 +23,7 @@ export default defineNuxtPlugin({
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
     // Include initial route in connection URL if route tracking enabled
-    const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
+    const initialRoute = resolveInitialRouteQuery(routeTracking, router)
 
     const config: SkewWebSocketConfig = {
       url: `${protocol}//${window.location.host}${basePath}/ws${initialRoute}`,
@@ -60,11 +61,7 @@ export default defineNuxtPlugin({
     })
 
     // Track route changes if enabled
-    if (routeTracking) {
-      router.afterEach((to) => {
-        skewConnection.sendRoute(to.path)
-      })
-    }
+    trackRouteChanges(router, routeTracking, skewConnection)
 
     return { provide: { skewConnection } }
   },

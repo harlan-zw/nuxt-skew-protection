@@ -187,6 +187,19 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
+function formatAge(timestamp: number, now: number): string {
+  const ageMinutes = Math.floor((now - timestamp) / 60000)
+  const ageHours = Math.floor(ageMinutes / 60)
+  const ageDays = Math.floor(ageHours / 24)
+  if (ageDays > 0)
+    return `${ageDays}d ago`
+  if (ageHours > 0)
+    return `${ageHours}h ago`
+  if (ageMinutes > 0)
+    return `${ageMinutes}m ago`
+  return 'just now'
+}
+
 export function createAssetManager(options: {
   driver?: Driver
   retentionDays?: number
@@ -571,30 +584,12 @@ export function createAssetManager(options: {
 
             // Calculate time ago
             const versionTimestamp = new Date(versionData.timestamp).getTime()
-            const ageMs = now - versionTimestamp
-            const ageMinutes = Math.floor(ageMs / 60000)
-            const ageHours = Math.floor(ageMinutes / 60)
-            const ageDays = Math.floor(ageHours / 24)
-
-            let ageStr: string
-            if (ageDays > 0) {
-              ageStr = `${ageDays}d ago`
-            }
-            else if (ageHours > 0) {
-              ageStr = `${ageHours}h ago`
-            }
-            else if (ageMinutes > 0) {
-              ageStr = `${ageMinutes}m ago`
-            }
-            else {
-              ageStr = 'just now'
-            }
 
             return {
               asset,
               size: dataToWrite.byteLength,
               versionId,
-              age: ageStr,
+              age: formatAge(versionTimestamp, now),
             }
           }
           return null
@@ -627,11 +622,7 @@ export function createAssetManager(options: {
         const isLast = index === otherVersions.length - 1
         const prefix = isLast ? '  └─' : '  ├─'
         const versionTimestamp = new Date(versionData.timestamp).getTime()
-        const ageMs = now - versionTimestamp
-        const ageMinutes = Math.floor(ageMs / 60000)
-        const ageHours = Math.floor(ageMinutes / 60)
-        const ageDays = Math.floor(ageHours / 24)
-        const ageStr = ageDays > 0 ? `${ageDays}d ago` : ageHours > 0 ? `${ageHours}h ago` : ageMinutes > 0 ? `${ageMinutes}m ago` : 'just now'
+        const ageStr = formatAge(versionTimestamp, now)
         const restored = restoredByVersion.get(versionId) || 0
         const total = versionData.originalAssets?.length || versionData.assets.length
         logger.log(colors.gray(`${prefix} ${versionId.slice(0, 8)} (${restored}/${total} files restored, ${ageStr})`))

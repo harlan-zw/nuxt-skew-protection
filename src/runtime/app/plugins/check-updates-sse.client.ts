@@ -3,6 +3,7 @@ import { useEventSource } from '@vueuse/core'
 import { defineNuxtPlugin, useNuxtApp, useRouter, useRuntimeConfig } from 'nuxt/app'
 import { watch } from 'vue'
 import { createSkewConnection } from '../utils/create-skew-connection'
+import { resolveInitialRouteQuery, trackRouteChanges } from '../utils/route-tracking'
 
 export type { SkewSSEConfig }
 
@@ -20,7 +21,7 @@ export default defineNuxtPlugin({
     const basePath = skewConfig?.basePath || '/__skew'
 
     // Include initial route in connection URL if route tracking enabled
-    const initialRoute = routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
+    const initialRoute = resolveInitialRouteQuery(routeTracking, router)
 
     const config: SkewSSEConfig = {
       url: `${basePath}/sse${initialRoute}`,
@@ -47,11 +48,7 @@ export default defineNuxtPlugin({
     })
 
     // Track route changes if enabled
-    if (routeTracking) {
-      router.afterEach((to) => {
-        skewConnection.sendRoute(to.path)
-      })
-    }
+    trackRouteChanges(router, routeTracking, skewConnection)
 
     return { provide: { skewConnection } }
   },

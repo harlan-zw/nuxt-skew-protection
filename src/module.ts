@@ -424,7 +424,6 @@ export {}
     // Skip production setup in dev mode
     if (!nuxt.options.dev) {
       // Detect platform at build time (reuse nitroPreset from above)
-      // const nitroPreset = await resolveNitroPreset(nuxt) - already declared above
       const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
