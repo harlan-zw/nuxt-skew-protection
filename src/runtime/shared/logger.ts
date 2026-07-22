@@ -1,11 +1,7 @@
-import { createConsola } from 'consola'
 import { useRuntimeConfig } from 'nuxt/app'
+import { createModuleLogger } from 'nuxtseo-shared/utils'
 
-export const logger = createConsola({
-  defaults: {
-    tag: 'nuxt-skew-protection',
-  },
-})
+export const logger = createModuleLogger('nuxt-skew-protection')
 
 /**
  * Initialize logger with runtime config

@@ -11,7 +11,7 @@ minimumReleaseAgeExclude:
   - nuxt-site-config-kit@4.1.0
   - nuxt-site-config@4.1.0
   - nuxtseo-layer-devtools@5.2.3 || 5.2.6 || 5.3.0
-  - nuxtseo-shared@5.2.3 || 5.2.6 || 5.3.0
+  - nuxtseo-shared@5.2.3 || 5.2.6 || 5.3.0 || 5.3.4
   - site-config-stack@4.1.0
   - vue@3.5.38
   - '@nuxt/kit@4.5.0'
@@ -56,7 +56,7 @@ catalog:
   nuxt-auth-utils: ^0.5.29
   nuxt-site-config: ^4.1.1
   nuxtseo-layer-devtools: ^5.3.2
-  nuxtseo-shared: ^5.3.2
+  nuxtseo-shared: ^5.3.4
   pathe: ^2.0.3
   pkg-types: ^2.3.1
   playwright-core: ^1.61.1
