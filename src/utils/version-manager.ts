@@ -404,40 +404,47 @@ export function createAssetManager(options: {
 
       // Store the file in current build's storage
       const assetPath = join(publicDir, asset)
-      const assetData = await fs.readFile(assetPath)
+      const assetData = await fs.readFile(assetPath).catch((error) => {
+        logger.debug(`Failed to read ${assetPath}: ${error}`)
+        return null
+      })
 
-      totalBytes += assetData.byteLength
-      const storageKey = `${buildId}/${asset}`
-      await storage.setItemRaw(storageKey, assetData)
-      storedCount++
+      if (assetData) {
+        totalBytes += assetData.byteLength
+        const storageKey = `${buildId}/${asset}`
+        await storage.setItemRaw(storageKey, assetData).catch((error) => {
+          logger.error(`Failed to store ${storageKey}:`, error?.message || error)
+        })
+        storedCount++
 
-      // Check if this file ID already exists in a previous version
-      // If so, remove it from the old location since we now have it in the new location
-      if (fileId && fileIdToVersion[fileId] && fileIdToVersion[fileId] !== buildId) {
-        const previousVersionId = fileIdToVersion[fileId]
+        // Check if this file ID already exists in a previous version
+        // If so, remove it from the old location since we now have it in the new location
+        if (fileId && fileIdToVersion[fileId] && fileIdToVersion[fileId] !== buildId) {
+          const previousVersionId = fileIdToVersion[fileId]
 
-        // Remove the asset from the previous version's assets list
-        if (manifest.versions[previousVersionId]) {
-          const previousAssets = manifest.versions[previousVersionId].assets
-          const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
-          if (assetIndex !== -1) {
-            // Get the actual old asset path (may differ from current asset path)
-            const oldAssetPath = previousAssets[assetIndex]
-            previousAssets.splice(assetIndex, 1)
+          // Remove the asset from the previous version's assets list
+          if (manifest.versions[previousVersionId]) {
+            const previousAssets = manifest.versions[previousVersionId].assets
+            const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
+            if (assetIndex !== -1) {
+              // Get the actual old asset path (may differ from current asset path)
+              const oldAssetPath = previousAssets[assetIndex]
+              previousAssets.splice(assetIndex, 1)
 
-            // Remove from storage using the correct old path
-            const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
-            await storage.removeItem(oldStorageKey).catch((error) => {
-              logger.debug(`Failed to remove duplicate asset ${oldStorageKey}: ${error}`)
-            })
-            deduplicatedCount++
+              // Remove from storage using the correct old path
+              const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
+              await storage.removeItem(oldStorageKey).catch((error) => {
+                logger.debug(`Failed to remove duplicate asset ${oldStorageKey}: ${error}`)
+              })
+              deduplicatedCount++
+            }
           }
         }
-      }
 
-      // Update the file ID mapping to point to the current version
-      if (fileId) {
-        fileIdToVersion[fileId] = buildId
+        // Update the file ID mapping to point to the current version
+        if (fileId) {
+          fileIdToVersion[fileId] = buildId
+        }
       }
     })
 
@@ -544,6 +551,7 @@ export function createAssetManager(options: {
 
     const restoreStart = Date.now()
     let totalBytes = 0
+    let failedCount = 0
     const createdDirs = new Set<string>()
 
     // Process restoration tasks in batches to limit memory
@@ -587,21 +595,22 @@ export function createAssetManager(options: {
               age: formatAge(versionTimestamp, now),
             }
           }
-          throw new Error(`Retained asset "${asset}" from version "${versionId}" is missing from storage.`)
+          return null
         })
         .catch((error: NodeJS.ErrnoException) => {
           // EEXIST = file already exists, expected with wx flag - not a failure
-          if (error.code === 'EEXIST') {
-            return null
+          if (error.code !== 'EEXIST') {
+            failedCount++
+            logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
           }
-          throw error
+          return null
         })
     })
 
     // Filter out null results and add to restoredAssets
     restoredAssets.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null))
 
-    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}`)
+    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
 
     // Count restored assets per version
     const restoredByVersion = new Map<string, number>()

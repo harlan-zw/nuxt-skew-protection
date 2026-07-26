@@ -1,63 +1,148 @@
-interface PublicAssetDirectory {
-  baseURL?: string
-  fallthrough?: boolean
-  maxAge?: number
+interface TransformCloudflareModuleAdapterOptions {
+  buildAssetsDir: string
+  code: string
+  id: string
+  runtimeHelperId: string
 }
 
-interface RouteRule {
-  headers?: Record<string, string>
-}
-
-interface NitroAssetConfig {
-  publicAssets?: Array<PublicAssetDirectory | undefined>
-  routeRules?: Record<string, RouteRule>
-}
-
-export type CloudflareCacheProtectionResult
+export type TransformCloudflareModuleAdapterResult
   = | {
-    _tag: 'Protected'
-    route: string
+    _tag: 'NotCloudflareModuleAdapter'
   }
   | {
-    _tag: 'BuildAssetDirectoryNotFound'
-    buildAssetsDir: string
+    _tag: 'Transformed'
+    code: string
+  }
+  | {
+    _tag: 'IncompatibleCloudflareModuleAdapter'
+    reason: 'PublicAssetImportNotFound' | 'AssetFetchBranchNotFound'
   }
 
-function normalizeAssetBase(value: string) {
-  const path = value.replace(/^\/+|\/+$/g, '')
-  return path ? `/${path}` : '/'
+interface RollupPluginContext {
+  error: (message: string) => never
 }
 
-export function applyCloudflareCacheProtection(
-  config: NitroAssetConfig,
-  buildAssetsDir: string,
-): CloudflareCacheProtectionResult {
-  const normalizedBuildAssetsDir = normalizeAssetBase(buildAssetsDir)
-  const buildAssetDirectory = config.publicAssets?.find((asset): asset is PublicAssetDirectory =>
-    !!asset && normalizeAssetBase(asset.baseURL || '/') === normalizedBuildAssetsDir,
-  )
+interface RollupTransformResult {
+  code: string
+  map: null
+}
 
-  if (!buildAssetDirectory) {
+interface CloudflareAssetProtectionPlugin {
+  name: string
+  transform: (
+    this: RollupPluginContext,
+    code: string,
+    id: string,
+  ) => RollupTransformResult | null
+  buildEnd: (
+    this: RollupPluginContext,
+    error?: Error,
+  ) => void
+}
+
+const cloudflareModuleAdapterSuffix
+  = '/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs'
+
+const publicAssetImportPattern
+  = /import\s*\{\s*isPublicAssetURL\s*\}\s*from\s*["']#nitro-internal-virtual\/public-assets["'];?/
+
+const assetFetchBranchPattern
+  = /return\s+env\.ASSETS\.fetch\(\s*request\s*\)\s*;/
+
+function isCloudflareModuleAdapter(id: string) {
+  return id
+    .split('?', 1)[0]!
+    .replaceAll('\\', '/')
+    .endsWith(cloudflareModuleAdapterSuffix)
+}
+
+function normalizeBuildAssetsDir(value: string) {
+  const path = value.replace(/^\/+|\/+$/g, '')
+  return `/${path}/`
+}
+
+export function transformCloudflareModuleAdapter(
+  options: TransformCloudflareModuleAdapterOptions,
+): TransformCloudflareModuleAdapterResult {
+  if (!isCloudflareModuleAdapter(options.id)) {
     return {
-      _tag: 'BuildAssetDirectoryNotFound',
-      buildAssetsDir,
+      _tag: 'NotCloudflareModuleAdapter',
     }
   }
 
-  buildAssetDirectory.fallthrough = true
-
-  const route = `${normalizedBuildAssetsDir}/**`
-  config.routeRules ||= {}
-  const routeRule = config.routeRules[route] ||= {}
-  const headers = routeRule.headers ||= {}
-  const hasCacheControl = Object.keys(headers).some(header => header.toLowerCase() === 'cache-control')
-
-  if (!hasCacheControl && buildAssetDirectory.maxAge && buildAssetDirectory.maxAge > 0) {
-    headers['cache-control'] = `public, max-age=${Math.floor(buildAssetDirectory.maxAge)}, immutable`
+  if (!publicAssetImportPattern.test(options.code)) {
+    return {
+      _tag: 'IncompatibleCloudflareModuleAdapter',
+      reason: 'PublicAssetImportNotFound',
+    }
   }
 
+  if (!assetFetchBranchPattern.test(options.code)) {
+    return {
+      _tag: 'IncompatibleCloudflareModuleAdapter',
+      reason: 'AssetFetchBranchNotFound',
+    }
+  }
+
+  const helperImport
+    = `import { fetchCloudflareAsset } from ${JSON.stringify(options.runtimeHelperId)};`
+  const buildAssetsDir = JSON.stringify(normalizeBuildAssetsDir(options.buildAssetsDir))
+  const code = options.code
+    .replace(
+      publicAssetImportPattern,
+      match => `${match}\n${helperImport}`,
+    )
+    .replace(
+      assetFetchBranchPattern,
+      () => `return url.pathname.startsWith(${buildAssetsDir}) ? fetchCloudflareAsset(request, env.ASSETS) : env.ASSETS.fetch(request);`,
+    )
+
   return {
-    _tag: 'Protected',
-    route,
+    _tag: 'Transformed',
+    code,
+  }
+}
+
+export function createCloudflareAssetProtectionPlugin(
+  options: {
+    buildAssetsDir: string
+    runtimeHelperId: string
+  },
+): CloudflareAssetProtectionPlugin {
+  let adapterTransformed = false
+
+  return {
+    name: 'nuxt-skew-protection:cloudflare-asset-fetch',
+    transform(code, id) {
+      const result = transformCloudflareModuleAdapter({
+        buildAssetsDir: options.buildAssetsDir,
+        code,
+        id,
+        runtimeHelperId: options.runtimeHelperId,
+      })
+
+      if (result._tag === 'NotCloudflareModuleAdapter') {
+        return null
+      }
+
+      if (result._tag === 'IncompatibleCloudflareModuleAdapter') {
+        this.error(
+          `[nuxt-skew-protection] Nitro's cloudflare-module adapter is incompatible with asset 404 protection (${result.reason}).`,
+        )
+      }
+
+      adapterTransformed = true
+      return {
+        code: result.code,
+        map: null,
+      }
+    },
+    buildEnd(error) {
+      if (!error && !adapterTransformed) {
+        this.error(
+          `[nuxt-skew-protection] Nitro's cloudflare-module adapter was not bundled. Refusing to build without asset 404 protection.`,
+        )
+      }
+    },
   }
 }

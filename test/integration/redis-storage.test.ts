@@ -183,7 +183,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/chunk-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `chunk ${i} content`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
       }
 
       // Verify both versions exist
@@ -214,7 +214,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `version ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -249,7 +249,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `version ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -293,11 +293,11 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       // Build 1 with shared vendor
       await manager.updateVersionsManifest('build-1', [sharedAsset])
-      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), [sharedAsset])
+      await manager.storeAssetsInStorage('build-1', outputDir, [sharedAsset])
 
       // Build 2 with same shared vendor - this triggers deduplication
       await manager.updateVersionsManifest('build-2', [sharedAsset])
-      await manager.storeAssetsInStorage('build-2', join(outputDir, 'public'), [sharedAsset])
+      await manager.storeAssetsInStorage('build-2', outputDir, [sharedAsset])
 
       // Get the updated versions list to see final state
       const versions = await manager.listExistingVersions()
