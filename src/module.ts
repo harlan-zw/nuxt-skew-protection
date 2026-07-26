@@ -22,6 +22,7 @@ import { logger } from './logger'
 import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
+import { applyCloudflareCacheProtection } from './utils/cloudflare-cache-protection'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {
@@ -424,6 +425,23 @@ export {}
       const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
+
+      if (isCloudflareRuntime) {
+        nuxt.hook('nitro:config', (nitroConfig) => {
+          const result = applyCloudflareCacheProtection(nitroConfig, nuxt.options.app.buildAssetsDir)
+
+          if (result._tag === 'BuildAssetDirectoryNotFound') {
+            throw new Error(
+              `[nuxt-skew-protection] Unable to protect Cloudflare asset caching. Nitro did not expose build asset directory "${result.buildAssetsDir}". Refusing to build because missing chunks could be cached as immutable 404 responses.`,
+            )
+          }
+        })
+
+        nuxt.options.nitro.plugins ||= []
+        nuxt.options.nitro.plugins.push(
+          resolver.resolve('./runtime/server/plugins/cloudflare-asset-cache-protection'),
+        )
+      }
 
       // Determine resolved strategy
       const isAdapter = isSkewAdapter(options.updateStrategy)

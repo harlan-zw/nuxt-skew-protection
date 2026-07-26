@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'pathe'
+import memoryDriver from 'unstorage/drivers/memory'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveBuildTimeDriver } from '../../src/unstorage/utils'
 import { createAssetManager, extractFileId } from '../../src/utils/version-manager'
@@ -123,6 +124,60 @@ describe('version Manager', () => {
       const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
 
       expect(assets).toEqual([])
+    })
+  })
+
+  describe('storage Failures', () => {
+    it('throws when an asset cannot be stored', async () => {
+      const driver = memoryDriver()
+      const setItemRaw = driver.setItemRaw!.bind(driver)
+      driver.setItemRaw = async (key, value, options) => {
+        if (key.includes('entry.ABC123.js')) {
+          throw new Error('storage write failed')
+        }
+        return setItemRaw(key, value, options)
+      }
+      const manager = createAssetManager({ driver, debug: false })
+      const publicDir = join(outputDir, 'public')
+      const asset = '_nuxt/entry.ABC123.js'
+
+      await mkdir(join(publicDir, '_nuxt'), { recursive: true })
+      await writeFile(join(publicDir, asset), 'entry')
+      await manager.updateVersionsManifest('build-1', [asset])
+
+      await expect(
+        manager.storeAssetsInStorage('build-1', publicDir, [asset]),
+      ).rejects.toThrow('storage write failed')
+    })
+
+    it('throws when a retained asset cannot be restored', async () => {
+      const driver = memoryDriver()
+      const getItemRaw = driver.getItemRaw!.bind(driver)
+      let failAssetReads = false
+      driver.getItemRaw = async (key) => {
+        if (failAssetReads && key.includes('entry.OLD123.js')) {
+          throw new Error('storage read failed')
+        }
+        return getItemRaw(key)
+      }
+      const manager = createAssetManager({ driver, debug: false })
+      const publicDir = join(outputDir, 'public')
+      const oldAsset = '_nuxt/entry.OLD123.js'
+      const currentAsset = '_nuxt/entry.NEW456.js'
+
+      await mkdir(join(publicDir, '_nuxt'), { recursive: true })
+      await writeFile(join(publicDir, oldAsset), 'old')
+      await manager.updateVersionsManifest('build-1', [oldAsset])
+      await manager.storeAssetsInStorage('build-1', publicDir, [oldAsset])
+      await rm(join(publicDir, oldAsset))
+      await writeFile(join(publicDir, currentAsset), 'new')
+      await manager.updateVersionsManifest('build-2', [currentAsset])
+      await manager.storeAssetsInStorage('build-2', publicDir, [currentAsset])
+      failAssetReads = true
+
+      await expect(
+        manager.restoreOldAssetsToPublic('build-2', publicDir, [currentAsset]),
+      ).rejects.toThrow('storage read failed')
     })
   })
 
@@ -841,6 +896,7 @@ export default assets;
       await writeFile(metaPath, JSON.stringify({ id: buildId }), 'utf-8')
 
       const assets = ['_nuxt/entry.ABC123.js']
+      await writeFile(join(outputDir, 'public', assets[0]!), 'entry')
       await manager.updateVersionsManifest(buildId, assets)
       await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
       await manager.augmentBuildMetadata(buildId, join(outputDir, 'public'))
