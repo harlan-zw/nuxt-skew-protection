@@ -113,6 +113,20 @@ describe('cloudflare asset cache protection', () => {
     )
   })
 
+  it('patches the Cloudflare Durable adapter used by stateful Nuxt apps', () => {
+    const result = transformCloudflareModuleAdapter({
+      buildAssetsDir: '/_nuxt/',
+      code: cloudflareModuleAdapter,
+      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-durable.mjs',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+
+    expect(result._tag).toBe('Transformed')
+    if (result._tag === 'Transformed') {
+      expect(result.code).toContain('fetchCloudflareAsset(request, env.ASSETS)')
+    }
+  })
+
   it('returns a tagged incompatibility when Nitro changes its asset branch', () => {
     const incompatibleAdapter = cloudflareModuleAdapter.replace(
       'return env.ASSETS.fetch(request);',

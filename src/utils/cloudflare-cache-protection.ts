@@ -40,8 +40,10 @@ interface CloudflareAssetProtectionPlugin {
   ) => void
 }
 
-const cloudflareModuleAdapterSuffix
-  = '/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs'
+const cloudflareAssetAdapterSuffixes = [
+  '/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
+  '/nitropack/dist/presets/cloudflare/runtime/cloudflare-durable.mjs',
+]
 
 const publicAssetImportPattern
   = /import\s*\{\s*isPublicAssetURL\s*\}\s*from\s*["']#nitro-internal-virtual\/public-assets["'];?/
@@ -50,10 +52,10 @@ const assetFetchBranchPattern
   = /return\s+env\.ASSETS\.fetch\(\s*request\s*\)\s*;/
 
 function isCloudflareModuleAdapter(id: string) {
-  return id
+  const normalizedId = id
     .split('?', 1)[0]!
     .replaceAll('\\', '/')
-    .endsWith(cloudflareModuleAdapterSuffix)
+  return cloudflareAssetAdapterSuffixes.some(suffix => normalizedId.endsWith(suffix))
 }
 
 function normalizeBuildAssetsDir(value: string) {

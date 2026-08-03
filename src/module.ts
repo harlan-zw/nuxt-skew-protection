@@ -426,7 +426,7 @@ export {}
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
 
-      if (nitroPreset === 'cloudflare-module') {
+      if (nitroPreset === 'cloudflare-module' || nitroPreset === 'cloudflare-durable') {
         // Nitro returns static asset responses before H3 hooks run.
         nuxt.hook('nitro:config', (nitroConfig) => {
           nitroConfig.rollupConfig ||= {}
