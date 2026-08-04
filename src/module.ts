@@ -12,7 +12,6 @@ import {
   createResolver,
   defineNuxtModule,
   hasNuxtModule,
-  resolveModule,
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
@@ -182,7 +181,6 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
-    nuxt.options.nitro.alias!.ofetch ||= resolveModule('ofetch', { url: new URL(import.meta.url) })
 
     // Resolve the endpoint prefix. When `basePath` isn't set explicitly it's
     // auto-detected from the app mount point (absolute `buildAssetsDir` parent,
