@@ -1,5 +1,5 @@
-import { createError, defineEventHandler, getHeader } from 'h3'
-import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
+import { createError, defineEventHandler, getHeader } from '#nuxtseo/h3'
+import { useNitroApp, useRuntimeConfig } from '#nuxtseo/nitro'
 
 /**
  * Admin endpoint for nuxtseo.com dashboard to query live connection stats.

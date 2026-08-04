@@ -1,4 +1,4 @@
-import { defineEventHandler, getHeader, setCookie } from 'h3'
+import { defineEventHandler, getHeader, setCookie } from '#nuxtseo/h3'
 
 export default defineEventHandler(async (event) => {
   // Only handle document requests (not assets/API)

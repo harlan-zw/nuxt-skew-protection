@@ -1,4 +1,4 @@
-import { createError, defineEventHandler, readBody } from 'h3'
+import { createError, defineEventHandler, readBody } from '#nuxtseo/h3'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ email?: string }>(event)

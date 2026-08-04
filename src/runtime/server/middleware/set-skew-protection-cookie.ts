@@ -1,5 +1,5 @@
-import { defineEventHandler, getHeader } from 'h3'
-import { useRuntimeConfig } from 'nitropack/runtime'
+import { defineEventHandler, getHeader } from '#nuxtseo/h3'
+import { useRuntimeConfig } from '#nuxtseo/nitro'
 import { getSkewProtectionCookie, setSkewProtectionCookie } from '../imports/cookie'
 
 /**

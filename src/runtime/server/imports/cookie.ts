@@ -1,6 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { H3Event } from 'h3'
-import { getCookie, setCookie } from 'h3'
+import type { H3Event } from '#nuxtseo/h3'
+import { getCookie, setCookie } from '#nuxtseo/h3'
 import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection'
 
 /**

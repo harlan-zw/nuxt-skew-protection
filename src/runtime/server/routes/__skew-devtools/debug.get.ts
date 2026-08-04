@@ -1,5 +1,5 @@
-import { defineEventHandler } from 'h3'
-import { useRuntimeConfig } from 'nitropack/runtime'
+import { defineEventHandler } from '#nuxtseo/h3'
+import { useRuntimeConfig } from '#nuxtseo/nitro'
 import { getSiteConfig } from '#site-config/server/composables'
 
 /**

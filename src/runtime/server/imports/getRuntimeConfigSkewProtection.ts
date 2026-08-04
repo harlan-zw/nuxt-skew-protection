@@ -1,6 +1,6 @@
-import type { H3Event } from 'h3'
+import type { H3Event } from '#nuxtseo/h3'
 import type { SkewProtectionRuntimeConfig } from '../../types'
-import { useRuntimeConfig } from 'nitropack/runtime'
+import { useRuntimeConfig } from '#nuxtseo/nitro'
 
 /**
  * Get skew protection runtime config with proper types

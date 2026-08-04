@@ -1,6 +1,6 @@
 import { parse as parseCookie } from 'cookie-es'
-import { defineWebSocketHandler } from 'h3'
-import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
+import { defineWebSocketHandler } from '#nuxtseo/h3'
+import { useNitroApp, useRuntimeConfig } from '#nuxtseo/nitro'
 import { SKEW_MESSAGE_TYPE } from '../../../const'
 import { getSkewProtectionCookieName } from '../../imports/cookie'
 

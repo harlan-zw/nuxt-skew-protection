@@ -1,0 +1,21 @@
+{
+  "name": "nuxt-skew-protection-nuxt5-fixture",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@11.15.0",
+  "scripts": {
+    "test": "nuxt prepare && vue-tsc --noEmit -p .nuxt/tsconfig.server.json && nuxt build && node test.mjs"
+  },
+  "dependencies": {
+    "@nuxtjs/robots": "file:stubs/robots",
+    "nitro": "catalog:",
+    "nuxt": "catalog:",
+    "nuxt-skew-protection": "file:module.tgz",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

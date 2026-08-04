@@ -1,5 +1,5 @@
-import { defineEventHandler } from 'h3'
-import { useRuntimeConfig } from 'nitropack/runtime'
+import { defineEventHandler } from '#nuxtseo/h3'
+import { useRuntimeConfig } from '#nuxtseo/nitro'
 
 /**
  * Health check endpoint returning current deployment version.

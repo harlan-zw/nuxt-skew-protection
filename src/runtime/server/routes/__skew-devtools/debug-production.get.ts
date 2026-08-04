@@ -1,5 +1,5 @@
-import { defineEventHandler, getQuery } from 'h3'
 import { $fetch } from 'ofetch'
+import { defineEventHandler, getQuery } from '#nuxtseo/h3'
 
 const RE_TRAILING_SLASHES = /\/+$/
 
