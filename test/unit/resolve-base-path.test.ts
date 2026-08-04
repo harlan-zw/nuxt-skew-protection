@@ -12,6 +12,11 @@ describe('resolveBasePath', () => {
     expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/' } })).toBe('/pro/__skew')
   })
 
+  it('ignores nested namespaces inside the Nuxt assets directory', () => {
+    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/_nuxt/v2/' } })).toBe('/__skew')
+    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/v2/' } })).toBe('/pro/__skew')
+  })
+
   it('auto-detects from app.baseURL when buildAssetsDir is the default', () => {
     expect(resolveBasePath({ app: { baseURL: '/pro/', buildAssetsDir: '/_nuxt/' } })).toBe('/pro/__skew')
   })

@@ -521,6 +521,7 @@ export {}
 
             assetManager = createAssetManager({
               ...options,
+              buildAssetsDir: nuxt.options.app.buildAssetsDir,
               driver: await resolveBuildTimeDriver(options.storage!),
             })
 

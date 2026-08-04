@@ -26,9 +26,11 @@ function trimSlashes(value: string): string {
  *
  * Priority:
  * 1. An explicit `basePath` option — used verbatim (slash-normalized).
- * 2. The parent directory of an absolute `app.buildAssetsDir`. A worker that
+ * 2. The path before `_nuxt` in an absolute `app.buildAssetsDir`. A worker that
  *    only owns part of a shared host bakes its mount point into the asset path
- *    (e.g. a Pro dashboard serving chunks from `/pro/_nuxt/` owns `/pro`). The
+ *    (e.g. a Pro dashboard serving chunks from `/pro/_nuxt/` owns `/pro`). Any
+ *    namespace inside `_nuxt`, such as `/_nuxt/v2/`, remains part of the asset
+ *    path rather than becoming the app mount. The
  *    skew endpoints must sit beside the chunks they guard so the SAME worker
  *    serves both — otherwise the websocket leaks to whichever app owns the host
  *    route and compares against the wrong deployment.
@@ -41,13 +43,14 @@ export function resolveBasePath(input: ResolveBasePathInput = {}): string {
 
   const app = input.app || {}
 
-  // 2) absolute buildAssetsDir → its parent dir is the worker mount point.
+  // 2) absolute buildAssetsDir → the prefix before `_nuxt` is the mount point.
   const assetsDir = app.buildAssetsDir || ''
   let mount = ''
   if (assetsDir.startsWith('/')) {
     const segments = trimSlashes(assetsDir).split('/').filter(Boolean)
-    // Drop the assets-dir leaf (e.g. `_nuxt`); the prefix is the mount point.
-    mount = segments.slice(0, -1).join('/')
+    const nuxtAssetsIndex = segments.indexOf('_nuxt')
+    const mountEnd = nuxtAssetsIndex === -1 ? segments.length - 1 : nuxtAssetsIndex
+    mount = segments.slice(0, mountEnd).join('/')
   }
 
   // 3) otherwise fall back to the app baseURL.
