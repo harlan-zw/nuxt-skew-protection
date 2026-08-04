@@ -215,8 +215,9 @@ describe('version Management Integration', () => {
         debug: false,
       })
 
-      await expect(manager.getAssetsFromBuild(join(testDir, 'non-existent')))
-        .rejects.toThrow('No build assets found')
+      await expect(manager.getAssetsFromBuild(join(testDir, 'non-existent'))).rejects.toThrow(
+        'No build assets found',
+      )
     })
 
     it('should handle missing storage directory gracefully', async () => {
