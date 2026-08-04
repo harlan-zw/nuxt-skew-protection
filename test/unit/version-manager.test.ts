@@ -112,7 +112,7 @@ describe('version Manager', () => {
       expect(assets).toHaveLength(2)
     })
 
-    it('should return empty array when no assets exist', async () => {
+    it('fails when no assets exist in the configured build directory', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
         debug: false,
@@ -120,9 +120,9 @@ describe('version Manager', () => {
 
       await mkdir(join(outputDir, 'public', '_nuxt'), { recursive: true })
 
-      const assets = await manager.getAssetsFromBuild(join(outputDir, 'public'))
-
-      expect(assets).toEqual([])
+      await expect(manager.getAssetsFromBuild(join(outputDir, 'public'))).rejects.toThrow(
+        'No build assets found in',
+      )
     })
   })
 

@@ -230,6 +230,10 @@ export function createAssetManager(options: {
       assets.push(`${buildAssetsDir}${relativePath}`)
     }
 
+    if (assets.length === 0) {
+      throw new Error(`No build assets found in ${nuxtDir}. Check that app.buildAssetsDir matches the generated output.`)
+    }
+
     logger.debug(`Found ${assets.length} assets in ${formatDuration(Date.now() - startTime)}`)
     return assets
   }
