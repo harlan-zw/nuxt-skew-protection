@@ -204,6 +204,7 @@ export function createAssetManager(options: {
   driver?: Driver
   retentionDays?: number
   maxNumberOfVersions?: number
+  buildAssetsDir?: string
   debug?: boolean
 }) {
   // Create storage with proper driver
@@ -212,10 +213,12 @@ export function createAssetManager(options: {
   })
   const retentionDays = options.retentionDays || 7
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
+  const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
+  const buildAssetsPath = `/${buildAssetsDir}`
 
   async function getAssetsFromBuild(publicDir: string) {
     const startTime = Date.now()
-    const nuxtDir = join(publicDir, '_nuxt')
+    const nuxtDir = join(publicDir, buildAssetsDir)
 
     logger.debug(`Scanning build assets from ${nuxtDir}`)
 
@@ -224,7 +227,7 @@ export function createAssetManager(options: {
 
     for (const file of nuxtFiles) {
       const relativePath = file.replace(nuxtDir, '')
-      assets.push(`_nuxt${relativePath}`)
+      assets.push(`${buildAssetsDir}${relativePath}`)
     }
 
     logger.debug(`Found ${assets.length} assets in ${formatDuration(Date.now() - startTime)}`)
@@ -636,7 +639,7 @@ export function createAssetManager(options: {
     const manifest = await getVersionManifest(storage)
 
     // Augment builds/latest.json
-    const latestPath = join(publicDir, '_nuxt', 'builds', 'latest.json')
+    const latestPath = join(publicDir, buildAssetsDir, 'builds', 'latest.json')
     let newLatestContent: string | undefined
     try {
       const latestData = await fs.readFile(latestPath, 'utf-8')
@@ -665,7 +668,7 @@ export function createAssetManager(options: {
     }
 
     // Augment builds/meta/{buildId}.json
-    const metaPath = join(publicDir, '_nuxt', 'builds', 'meta', `${buildId}.json`)
+    const metaPath = join(publicDir, buildAssetsDir, 'builds', 'meta', `${buildId}.json`)
     try {
       const metaData = await fs.readFile(metaPath, 'utf-8')
       const metaJson = JSON.parse(metaData)
@@ -689,7 +692,7 @@ export function createAssetManager(options: {
     // Patch Nitro's static asset manifest to fix Content-Length
     // Nitro pre-calculates file sizes during rollup, but we modify files after
     if (serverDir && newLatestContent) {
-      await patchNitroManifest(serverDir, '/_nuxt/builds/latest.json', newLatestContent)
+      await patchNitroManifest(serverDir, `${buildAssetsPath}/builds/latest.json`, newLatestContent)
     }
   }
 

@@ -78,6 +78,22 @@ describe('version Manager', () => {
       expect(assets).toHaveLength(2)
     })
 
+    it('collects only the configured build assets directory', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        buildAssetsDir: '/_nuxt/v2/',
+        debug: false,
+      })
+
+      await mkdir(join(outputDir, 'public', '_nuxt', 'v2'), { recursive: true })
+      await writeFile(join(outputDir, 'public', '_nuxt', 'v2', 'entry.CURRENT.js'), 'current')
+      await writeFile(join(outputDir, 'public', '_nuxt', 'legacy.js'), 'unrelated')
+
+      await expect(manager.getAssetsFromBuild(join(outputDir, 'public'))).resolves.toEqual([
+        '_nuxt/v2/entry.CURRENT.js',
+      ])
+    })
+
     it('should handle nested directories', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
@@ -626,6 +642,52 @@ describe('version Manager', () => {
   })
 
   describe('build Metadata Augmentation', () => {
+    it('augments metadata under a custom build assets directory', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        buildAssetsDir: '/_nuxt/v2/',
+        debug: false,
+      })
+      const buildId = 'build-custom'
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'v2', 'builds')
+      const metaDir = join(buildsDir, 'meta')
+      const serverDir = join(outputDir, 'server')
+      const nitroChunksDir = join(serverDir, 'chunks', 'nitro')
+      await mkdir(metaDir, { recursive: true })
+      await mkdir(nitroChunksDir, { recursive: true })
+
+      const latestPath = join(buildsDir, 'latest.json')
+      const metaPath = join(metaDir, `${buildId}.json`)
+      const initialContent = JSON.stringify({ id: buildId })
+      const initialSize = Buffer.byteLength(initialContent, 'utf-8')
+      await writeFile(latestPath, initialContent, 'utf-8')
+      await writeFile(metaPath, initialContent, 'utf-8')
+
+      const nitroChunkPath = join(nitroChunksDir, 'nitro.mjs')
+      await writeFile(nitroChunkPath, `
+const assets = {
+  "/_nuxt/v2/builds/latest.json": {
+    "etag": "\\\"${initialSize.toString(16)}-abcdefg\\\"",
+    "size": ${initialSize}
+  }
+};
+`, 'utf-8')
+
+      const assets = ['_nuxt/v2/entry.CURRENT.js']
+      await manager.updateVersionsManifest(buildId, assets)
+      await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
+      await manager.augmentBuildMetadata(buildId, join(outputDir, 'public'), serverDir)
+
+      const latest = JSON.parse(await readFile(latestPath, 'utf-8'))
+      const meta = JSON.parse(await readFile(metaPath, 'utf-8'))
+      const patchedNitro = await readFile(nitroChunkPath, 'utf-8')
+      const augmentedSize = Buffer.byteLength(JSON.stringify(latest, null, 2), 'utf-8')
+
+      expect(latest.skewProtection.versions[buildId]).toBeDefined()
+      expect(meta.skewProtection.timestamp).toBeDefined()
+      expect(patchedNitro).toMatch(new RegExp(`"size":\\s*${augmentedSize}[,}\\s]`))
+    })
+
     it('should augment builds/latest.json', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
