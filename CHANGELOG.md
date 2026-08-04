@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v1.3.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.0...main)
+
+### 📖 Documentation
+
+- Content audit sweep (grammar, links, structure) ([#17](https://github.com/harlan-zw/nuxt-skew-protection/pull/17))
+
+### 🏡 Chore
+
+- Bump ([b45cd93](https://github.com/harlan-zw/nuxt-skew-protection/commit/b45cd93))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.2.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.2.0...main)
@@ -729,4 +745,3 @@
 ### ❤️ Contributors
 
 - Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
-

@@ -38,6 +38,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       return
 
     const meta = await ($fetch(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`) as Promise<NuxtAppManifestMeta>).catch(() => {
+      // A deployment may not have propagated the manifest yet; the backoff queue retries.
       return null
     })
     if (meta && meta.id !== clientVersion && meta.id !== lastProcessedManifestId) {

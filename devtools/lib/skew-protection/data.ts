@@ -9,7 +9,10 @@ export const productionError = ref<string | null>(null)
 const { data: debugData, status: debugStatus } = useAsyncData<DebugResponse | null>('debug', () => {
   if (!appFetch.value)
     return Promise.resolve(null)
-  return appFetch.value<DebugResponse>('/__skew-devtools/debug').catch(() => null)
+  return appFetch.value<DebugResponse>('/__skew-devtools/debug').catch(() => {
+    // The devtools panel may load before its debug endpoint is available.
+    return null
+  })
 }, { watch: [refreshTime] })
 
 export { debugData }

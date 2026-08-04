@@ -702,7 +702,10 @@ export function createAssetManager(options: {
    */
   async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
     const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
-    let nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => null)
+    let nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => {
+      // Some presets do not emit an embedded Nitro asset manifest to patch.
+      return null
+    })
     if (!nitro)
       return
 
