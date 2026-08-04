@@ -209,16 +209,14 @@ describe('version Management Integration', () => {
   })
 
   describe('error Handling', () => {
-    it('should handle missing build output gracefully', async () => {
+    it('should reject missing build output', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }),
         debug: false,
       })
 
-      // Try to get assets from non-existent directory
-      const assets = await manager.getAssetsFromBuild(join(testDir, 'non-existent'))
-
-      expect(assets).toEqual([])
+      await expect(manager.getAssetsFromBuild(join(testDir, 'non-existent')))
+        .rejects.toThrow('No build assets found')
     })
 
     it('should handle missing storage directory gracefully', async () => {
