@@ -1,5 +1,5 @@
-import { createError, defineEventHandler, readBody } from 'h3'
-import { useNitroApp } from 'nitropack/runtime'
+import { createError, defineEventHandler, readBody } from '#nuxtseo/h3'
+import { useNitroApp } from '#nuxtseo/nitro'
 
 /**
  * POST endpoint for SSE connections to request stats subscription.

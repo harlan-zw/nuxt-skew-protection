@@ -1,6 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { H3Event } from 'h3'
-import { getCookie, setCookie } from 'h3'
+import type { SkewProtectionEvent } from './getRuntimeConfigSkewProtection'
+import { getCookie, setCookie } from '#nuxtseo/h3'
 import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection'
 
 /**
@@ -9,7 +9,7 @@ import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection
  * @param event - H3 event (optional, for better type safety)
  * @returns The configured cookie name
  */
-export function getSkewProtectionCookieName(event?: H3Event): string {
+export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string {
   const { cookie } = getRuntimeConfigSkewProtection(event)
   return cookie.name
 }
@@ -28,9 +28,9 @@ export function getSkewProtectionCookieName(event?: H3Event): string {
  * })
  * ```
  */
-export function getSkewProtectionCookie(event: H3Event): string | undefined {
+export function getSkewProtectionCookie(event: SkewProtectionEvent): string | undefined {
   const cookieName = getSkewProtectionCookieName(event)
-  return getCookie(event, cookieName)
+  return getCookie(event as Parameters<typeof getCookie>[0], cookieName)
 }
 
 /**
@@ -46,8 +46,8 @@ export function getSkewProtectionCookie(event: H3Event): string | undefined {
  * })
  * ```
  */
-export function setSkewProtectionCookie(event: H3Event, value: string): void {
+export function setSkewProtectionCookie(event: SkewProtectionEvent, value: string): void {
   const { cookie: cookieConfig } = getRuntimeConfigSkewProtection(event)
   const { name: cookieName, ...cookieOptions } = cookieConfig
-  setCookie(event, cookieName, value, cookieOptions as CookieSerializeOptions)
+  setCookie(event as Parameters<typeof setCookie>[0], cookieName, value, cookieOptions as CookieSerializeOptions)
 }

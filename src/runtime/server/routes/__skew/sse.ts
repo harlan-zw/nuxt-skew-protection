@@ -1,5 +1,5 @@
-import { createEventStream, defineEventHandler, getQuery, getRequestIP } from 'h3'
-import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
+import { createEventStream, defineEventHandler, getQuery, getRequestIP } from '#nuxtseo/h3'
+import { useNitroApp, useRuntimeConfig } from '#nuxtseo/nitro'
 import { SKEW_MESSAGE_TYPE } from '../../../const'
 import { getSkewProtectionCookie } from '../../imports/cookie'
 

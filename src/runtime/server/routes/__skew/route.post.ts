@@ -1,5 +1,5 @@
-import { defineEventHandler, readBody } from 'h3'
-import { useNitroApp } from 'nitropack/runtime'
+import { defineEventHandler, readBody } from '#nuxtseo/h3'
+import { useNitroApp } from '#nuxtseo/nitro'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ connectionId: string, route: string }>(event)

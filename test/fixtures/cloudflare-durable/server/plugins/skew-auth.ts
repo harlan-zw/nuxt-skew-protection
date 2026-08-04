@@ -1,4 +1,4 @@
-import { defineNitroPlugin } from 'nitropack/runtime'
+import { defineNitroPlugin } from '#nuxtseo/nitro'
 
 // Auto-authorize all connections for testing
 export default defineNitroPlugin((nitroApp) => {

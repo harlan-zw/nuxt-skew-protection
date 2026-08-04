@@ -1,0 +1,21 @@
+minimumReleaseAgeExclude:
+  - '@nuxt/kit-nightly@5.0.0-29762711.192612c7'
+  - '@nuxt/nitro-server-nightly@5.0.0-29762711.192612c7'
+  - '@nuxt/schema-nightly@5.0.0-29762711.192612c7'
+  - '@nuxt/vite-builder-nightly@5.0.0-29762711.192612c7'
+  - nuxt-nightly@5.0.0-29762711.192612c7
+  - nuxt-site-config
+  - nuxt-site-config-kit
+  - nuxtseo-shared
+  - site-config-stack
+overrides:
+  nuxt-site-config: 4.1.4
+catalog:
+  nitro: 3.0.260610-beta
+  nuxt: npm:nuxt-nightly@5.0.0-29762711.192612c7
+  nuxt-site-config: ^4.1.4
+  nuxtseo-shared: ^5.3.9
+  typescript: 6.0.3
+  vue: ^3.5.40
+  vue-router: ^5.2.0
+  vue-tsc: ^3.3.8

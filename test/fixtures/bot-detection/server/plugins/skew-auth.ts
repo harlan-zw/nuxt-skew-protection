@@ -1,4 +1,4 @@
-import { defineNitroPlugin } from 'nitropack/runtime'
+import { defineNitroPlugin } from '#nuxtseo/nitro'
 
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('skew:authorize-stats', ({ authorize }) => {
