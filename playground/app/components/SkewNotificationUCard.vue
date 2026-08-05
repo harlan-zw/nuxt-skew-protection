@@ -1,12 +1,12 @@
 <template>
-  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
+  <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
     <Transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 translate-y-2"
       leave-active-class="transition duration-200 ease-in"
       leave-to-class="opacity-0 translate-y-2"
     >
-      <div v-if="isCurrentChunksOutdated" class="fixed bottom-4 right-4 z-50 w-80">
+      <div v-if="isAppOutdated" class="fixed bottom-4 right-4 z-50 w-80">
         <UCard>
           <div class="flex gap-3">
             <div class="shrink-0 size-10 rounded-full bg-primary-50 dark:bg-primary-950 flex items-center justify-center">

@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { reloadNuxtApp, useCookie, useNuxtApp, useRuntimeConfig } from '#app'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { reloadNuxtApp, useCookie, useRuntimeConfig } from '#app'
 import { useSkewProtection, useToast } from '#imports'
 
 const runtimeConfig = useRuntimeConfig()
@@ -10,7 +10,8 @@ const skew = useSkewProtection()
 
 async function checkForUpdates() {
   console.log('Manually checking for updates via Nuxt API...')
-  console.log(await skew.getDeploymentInfo())
+  await skew.checkForUpdates()
+  console.log(skew.manifest.value)
 }
 
 function clearVersionCookie() {
@@ -52,29 +53,14 @@ function startNewVersionAnimations() {
   }, 2000)
 }
 
-const app = useNuxtApp()
-const modules = ref([])
-const chunksOutdatedPayload = ref(null)
-
-onMounted(() => {
-  app.$skewServiceWorker?.getLoadedModules().then((m) => {
-    modules.value = m || []
-  })
-
-  app.hooks.hook('skew:chunks-outdated', (payload) => {
-    console.log('Chunks outdated detected:', payload)
-    chunksOutdatedPayload.value = payload
-  })
-})
-
 onBeforeUnmount(() => {
   if (animationInterval) {
     clearInterval(animationInterval)
   }
 })
 
-const latestVersion = computed(() => skew.manifest.value?.buildId)
-const isNewVersionAvailable = computed(() => buildId.value !== latestVersion.value)
+const latestVersion = computed(() => skew.manifest.value?.id)
+const isNewVersionAvailable = computed(() => skew.isAppOutdated.value)
 const versions = computed(() => skew.manifest.value?.skewProtection?.versions || {})
 
 const notificationVariants = [
@@ -107,7 +93,6 @@ watch(selectedVariant, (newVariant, oldVariant) => {
           toast.remove('skew-update')
           await reloadNuxtApp({
             force: true,
-            persistState: true,
           })
         },
       }, {
@@ -130,7 +115,7 @@ watch(selectedVariant, (newVariant, oldVariant) => {
         Nuxt Skew Protection Playground
       </h1>
       <p class="text-gray-600 dark:text-gray-400 mt-2">
-        Intelligent module invalidation detection
+        Retained assets and deployment update detection
       </p>
     </div>
 
@@ -160,7 +145,7 @@ watch(selectedVariant, (newVariant, oldVariant) => {
           </UBadge>
         </div>
         <div class="flex justify-between items-center">
-          <span class="font-medium text-gray-700 dark:text-gray-300">Chunks Outdated:</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">Deployment Outdated:</span>
           <UBadge :color="skew.isAppOutdated ? 'error' : 'neutral'">
             {{ skew.isAppOutdated ? 'Yes' : 'No' }}
           </UBadge>
@@ -243,43 +228,6 @@ watch(selectedVariant, (newVariant, oldVariant) => {
         >
           {{ isAnimating ? 'Stop' : 'Start' }} Animations
         </UButton>
-      </div>
-    </UCard>
-
-    <UCard v-if="chunksOutdatedPayload">
-      <template #header>
-        <h3 class="text-lg font-semibold text-red-600 dark:text-red-400">
-          Chunks Outdated Event
-        </h3>
-      </template>
-      <div class="space-y-3">
-        <div>
-          <span class="font-medium">Deleted Chunks:</span>
-          <code class="block text-xs bg-gray-100 dark:bg-gray-800 px-2 py-2 rounded mt-1">{{ chunksOutdatedPayload.deletedChunks?.length || 0 }} chunks</code>
-        </div>
-        <div>
-          <span class="font-medium">Invalidated Modules:</span>
-          <code class="block text-xs bg-gray-100 dark:bg-gray-800 px-2 py-2 rounded mt-1">{{ chunksOutdatedPayload.invalidatedModules?.join(', ') || 'None' }}</code>
-        </div>
-      </div>
-    </UCard>
-
-    <UCard>
-      <template #header>
-        <h3 class="text-lg font-semibold">
-          Service Worker Tracked Modules ({{ modules.length }})
-        </h3>
-      </template>
-      <div class="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded">
-        <ul class="space-y-1 p-2">
-          <li
-            v-for="module in modules"
-            :key="module"
-            class="text-xs font-mono text-gray-600 dark:text-gray-400 py-1 border-b border-gray-100 dark:border-gray-800 last:border-0"
-          >
-            {{ module }}
-          </li>
-        </ul>
       </div>
     </UCard>
 

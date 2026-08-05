@@ -13,10 +13,10 @@ const { total, versions } = useActiveConnections()
         {{ version.slice(0, 8) }}: {{ count }} users
       </li>
     </ul>
-    <SkewNotification v-slot="{ isCurrentChunksOutdated, isAppOutdated, dismiss, reload }">
+    <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
       <div class="notification">
         <div>
-          current chunk outdated: {{ isCurrentChunksOutdated }}
+          deployment outdated: {{ isAppOutdated }}
         </div>
         <div>
           app outdated: {{ isAppOutdated }}

@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
+import { z } from 'zod'
 import { logger } from '../logger'
 
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
@@ -14,164 +15,146 @@ const RE_ETAG_PROP = /(['"]?)etag\1\s*:\s*(['"])(?:[^\\]|\\.)*?\2/
 const RE_ETAG_KEY_PREFIX = /^(['"]?)etag\1\s*:\s*/
 const RE_ETAG_QUOTE = /:\s*(['"])/
 const RE_ESCAPE_DOUBLE_QUOTE = /"/g
+const RE_SAFE_BUILD_ID = /^[\w.-]+$/
+const VERSION_RECORD_PREFIX = 'version-records'
+const VERSION_ASSET_PREFIX = 'version-assets'
+const VERSION_RECORD_SCHEMA = 2 as const
+
+const versionRecordSchema = z.object({
+  schemaVersion: z.literal(VERSION_RECORD_SCHEMA),
+  id: z.string().min(1),
+  timestamp: z.iso.datetime(),
+  expires: z.iso.datetime(),
+  bundled: z.boolean(),
+  assets: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
+})
+
+type VersionRecord = z.infer<typeof versionRecordSchema>
+
+export interface VersionManifest {
+  current: string
+  versions: Record<string, {
+    timestamp: string
+    expires: string
+    assets: string[]
+  }>
+}
+
+function assertSafeBuildId(buildId: string): void {
+  if (!RE_SAFE_BUILD_ID.test(buildId) || buildId === '.' || buildId === '..')
+    throw new Error(`Invalid build ID ${JSON.stringify(buildId)}. Use letters, numbers, dots, underscores, or hyphens.`)
+}
+
+function assertSafeAssetPath(asset: string): void {
+  const segments = asset.split('/')
+  if (!asset || asset.startsWith('/') || segments.some(segment => !segment || segment === '.' || segment === '..'))
+    throw new Error(`Invalid build asset path ${JSON.stringify(asset)}.`)
+}
+
+function recordKey(buildId: string): string {
+  assertSafeBuildId(buildId)
+  return `${VERSION_RECORD_PREFIX}/${buildId}.json`
+}
+
+function assetKey(buildId: string, asset: string): string {
+  assertSafeBuildId(buildId)
+  assertSafeAssetPath(asset)
+  return `${VERSION_ASSET_PREFIX}/${buildId}/${asset}`
+}
 
 function formatStorageError(error: unknown, operation: string): Error {
   const cause = error instanceof Error ? (error.cause as Error | undefined) : undefined
   const message = error instanceof Error ? error.message : String(error)
   const causeMessage = cause?.message || ''
 
-  // DNS resolution failure
   if (causeMessage.includes('ENOTFOUND') || causeMessage.includes('getaddrinfo')) {
     const hostMatch = causeMessage.match(RE_ENOTFOUND) || causeMessage.match(RE_GETADDRINFO)
     const host = hostMatch?.[1] || 'unknown host'
-    return new Error(`Storage ${operation} failed: Could not resolve host '${host}'. Check your storage URL/credentials are correct.`)
+    return new Error(`Storage ${operation} failed: Could not resolve host '${host}'. Check your storage URL and credentials.`, { cause: error })
   }
-
-  // Connection refused
-  if (causeMessage.includes('ECONNREFUSED') || message.includes('ECONNREFUSED')) {
-    return new Error(`Storage ${operation} failed: Connection refused. Is the storage server running and accessible?`)
-  }
-
-  // Auth/permission errors
-  if (message.includes('401') || message.includes('Unauthorized') || message.includes('WRONGPASS')) {
-    return new Error(`Storage ${operation} failed: Authentication failed. Check your storage credentials.`)
-  }
-
-  // Timeout
-  if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
-    return new Error(`Storage ${operation} failed: Connection timed out. Check network connectivity to storage.`)
-  }
-
-  // Generic fetch failure
-  if (message === 'fetch failed') {
-    return new Error(`Storage ${operation} failed: Network error. ${causeMessage || 'Check your storage configuration.'}`)
-  }
-
-  return new Error(`Storage ${operation} failed: ${message}`)
+  if (causeMessage.includes('ECONNREFUSED') || message.includes('ECONNREFUSED'))
+    return new Error(`Storage ${operation} failed: Connection refused. Is the storage server reachable?`, { cause: error })
+  if (message.includes('401') || message.includes('Unauthorized') || message.includes('WRONGPASS'))
+    return new Error(`Storage ${operation} failed: Authentication failed. Check your storage credentials.`, { cause: error })
+  if (message.includes('timeout') || message.includes('ETIMEDOUT'))
+    return new Error(`Storage ${operation} failed: Connection timed out.`, { cause: error })
+  if (message === 'fetch failed')
+    return new Error(`Storage ${operation} failed: Network error. ${causeMessage || 'Check your storage configuration.'}`, { cause: error })
+  return new Error(`Storage ${operation} failed: ${message}`, { cause: error })
 }
 
-/**
- * Process array items in batches to limit memory usage
- */
-async function processBatch<T, R>(
-  items: T[],
-  batchSize: number,
-  processor: (item: T) => Promise<R>,
-): Promise<R[]> {
+async function fromStorage<T>(operation: string, read: () => Promise<T>): Promise<T> {
+  return read().catch((error: unknown) => {
+    throw formatStorageError(error, operation)
+  })
+}
+
+async function processBatch<T, R>(items: T[], batchSize: number, processor: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = []
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize)
-    const batchResults = await Promise.all(batch.map(processor))
-    results.push(...batchResults)
-  }
+  for (let index = 0; index < items.length; index += batchSize)
+    results.push(...await Promise.all(items.slice(index, index + batchSize).map(processor)))
   return results
 }
 
-// Unified manifest format used by all platforms
-export interface VersionManifest {
-  current: string
-  versions: Record<string, {
-    timestamp: string
-    expires: string
-    // Assets currently stored for this version (shrinks as newer versions deduplicate)
-    assets: string[]
-    // Original assets at build time (never changes, used for deletedChunks calculation)
-    originalAssets?: string[]
-    // Chunks deleted in this version compared to previous version
-    deletedChunks?: string[]
-  }>
-  // Maps file IDs (hashes from filename) to the latest version that contains them
-  fileIdToVersion?: Record<string, string>
-}
-
-/**
- * Extract file ID from asset path
- * Returns the filename (e.g., "entry.BBOLE4X7.js" from "_nuxt/entry.BBOLE4X7.js")
- * Used for deduplication - same filename = same content (Nuxt uses content hashing)
- */
-export function extractFileId(assetPath: string): string | null {
-  const filename = assetPath.split('/').pop()
-  if (!filename || !filename.includes('.'))
-    return null
-
-  return filename
-}
-
-/**
- * Calculate deleted chunks in the current version compared to a previous version
- * Only includes .js files since CSS files are not tracked by the service worker
- */
-function calculateDeletedChunks(currentAssets: string[], previousAssets: string[]): string[] {
-  const currentSet = new Set(currentAssets)
-  return previousAssets
-    .filter(asset => !currentSet.has(asset))
-    .filter(asset => asset.endsWith('.js'))
-}
-
-/**
- * Get the previous version by timestamp
- */
-function getPreviousVersion(manifest: VersionManifest, currentVersionId: string): string | null {
-  const sortedVersions = Object.entries(manifest.versions)
-    .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
-    .sort((a, b) => b.timestamp - a.timestamp)
-
-  const currentIndex = sortedVersions.findIndex(v => v.id === currentVersionId)
-  if (currentIndex === -1 || currentIndex === sortedVersions.length - 1) {
-    return null
-  }
-
-  return sortedVersions[currentIndex + 1]?.id || null
-}
-
 async function getFilesRecursively(dir: string): Promise<string[]> {
+  const items = await fs.readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT')
+      return []
+    throw error
+  })
   const files: string[] = []
-  const items = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
-
   for (const item of items) {
     const fullPath = join(dir, item.name)
-    if (item.isDirectory()) {
-      const subFiles = await getFilesRecursively(fullPath)
-      files.push(...subFiles)
-    }
-    else {
+    if (item.isDirectory())
+      files.push(...await getFilesRecursively(fullPath))
+    else
       files.push(fullPath)
-    }
   }
-
   return files
 }
 
-// Get the unified manifest
-async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
-  const emptyManifest: VersionManifest = { current: '', versions: {} }
-
-  return storage.getItem('version-manifest.json')
-    .then((manifest) => {
-      if (manifest && typeof manifest === 'object' && 'versions' in manifest)
-        return manifest as VersionManifest
-      return emptyManifest
-    })
-    .catch((e: unknown) => {
-      const message = e instanceof Error ? e.message : String(e)
-      const cause = e instanceof Error ? (e.cause as Error | undefined)?.message || '' : ''
-      // Connection errors should throw, not return empty manifest
-      if (cause.includes('ENOTFOUND') || cause.includes('ECONNREFUSED') || message.includes('401') || message === 'fetch failed')
-        throw formatStorageError(e, 'read')
-      // Other errors (not found, etc.) return empty manifest
-      return emptyManifest
-    })
+function parseVersionRecord(value: unknown, key: string): VersionRecord {
+  const parsed = versionRecordSchema.safeParse(value)
+  if (!parsed.success)
+    throw new Error(`Stored skew protection record ${key} is invalid: ${z.prettifyError(parsed.error)}`)
+  assertSafeBuildId(parsed.data.id)
+  Object.keys(parsed.data.assets).forEach(assertSafeAssetPath)
+  return parsed.data
 }
 
-// Update the manifest
-async function setVersionManifest(manifest: VersionManifest, storage: Storage): Promise<void> {
-  await storage.setItem('version-manifest.json', manifest)
-    .catch((e) => { throw formatStorageError(e, 'write') })
+function toBuffer(value: unknown, description: string): Buffer {
+  if (Buffer.isBuffer(value))
+    return value
+  if (typeof value === 'string' || value instanceof Uint8Array)
+    return Buffer.from(value)
+  if (value instanceof ArrayBuffer)
+    return Buffer.from(value)
+  if (value && typeof value === 'object' && 'type' in value && value.type === 'Buffer' && 'data' in value && Array.isArray(value.data))
+    return Buffer.from(value.data)
+  throw new Error(`${description} has an unsupported storage representation.`)
 }
 
-// ============================================================================
-// ASSET MANAGER: Full asset versioning with copy/storage
-// ============================================================================
+async function getVersionRecords(storage: Storage): Promise<VersionRecord[]> {
+  const keys = await fromStorage('list version records', () => storage.getKeys(VERSION_RECORD_PREFIX))
+  const records = await processBatch(keys, 25, async (key) => {
+    const value = await fromStorage(`read ${key}`, () => storage.getItem(key))
+    if (value === null)
+      return null
+    return parseVersionRecord(value, key)
+  })
+  return records.filter((record): record is VersionRecord => record !== null)
+}
+
+function toManifest(records: VersionRecord[], current: string): VersionManifest {
+  return {
+    current,
+    versions: Object.fromEntries(records.map(record => [record.id, {
+      timestamp: record.timestamp,
+      expires: record.expires,
+      assets: Object.keys(record.assets),
+    }])),
+  }
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024)
@@ -182,9 +165,7 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDuration(ms: number): string {
-  if (ms < 1000)
-    return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`
 }
 
 function formatAge(timestamp: number, now: number): string {
@@ -202,590 +183,254 @@ function formatAge(timestamp: number, now: number): string {
 
 export function createAssetManager(options: {
   driver?: Driver
+  storage?: Storage
   retentionDays?: number
   maxNumberOfVersions?: number
   buildAssetsDir?: string
   debug?: boolean
 }) {
-  // Create storage with proper driver
-  const storage: Storage = createStorage({
-    driver: options.driver,
-  })
-  const retentionDays = options.retentionDays || 7
-  const maxNumberOfVersions = options.maxNumberOfVersions || 20
+  const storage = options.storage || createStorage({ driver: options.driver })
+  const retentionDays = options.retentionDays ?? 30
+  const maxNumberOfVersions = options.maxNumberOfVersions ?? 10
   const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
   const buildAssetsPath = `/${buildAssetsDir}`
+  const mutableAssets = new Set([`${buildAssetsDir}/builds/latest.json`])
+  let currentBuildId = ''
 
-  async function getAssetsFromBuild(publicDir: string) {
-    const startTime = Date.now()
+  async function getAssetsFromBuild(publicDir: string): Promise<string[]> {
+    const startedAt = Date.now()
     const nuxtDir = join(publicDir, buildAssetsDir)
-
-    logger.debug(`Scanning build assets from ${nuxtDir}`)
-
-    const assets: string[] = []
-    const nuxtFiles = await getFilesRecursively(nuxtDir)
-
-    for (const file of nuxtFiles) {
-      const relativePath = file.replace(nuxtDir, '')
-      assets.push(`${buildAssetsDir}${relativePath}`)
-    }
-
-    logger.debug(`Found ${assets.length} assets in ${formatDuration(Date.now() - startTime)}`)
+    const files = await getFilesRecursively(nuxtDir)
+    const assets = files
+      .map(file => `${buildAssetsDir}${file.slice(nuxtDir.length)}`)
+      .sort()
+    if (assets.length === 0)
+      throw new Error(`No build assets found in ${nuxtDir}. Check that app.buildAssetsDir matches the generated output.`)
+    logger.debug(`Found ${assets.length} assets in ${formatDuration(Date.now() - startedAt)}`)
     return assets
   }
 
-  async function updateVersionsManifest(buildId: string, assets: string[]) {
-    const startTime = Date.now()
-    logger.debug(`updateVersionsManifest: starting for ${buildId}`)
+  async function storeVersion(
+    buildId: string,
+    publicDir: string,
+    assets: string[],
+    options: { bundleAssets?: boolean } = {},
+  ): Promise<VersionRecord> {
+    assertSafeBuildId(buildId)
+    const protectedAssets = [...new Set(assets.filter(asset => !mutableAssets.has(asset)))]
+    protectedAssets.forEach(assertSafeAssetPath)
+    if (protectedAssets.length === 0)
+      throw new Error(`Build ${buildId} contains no immutable assets to protect.`)
 
-    const now = new Date()
-    const expires = new Date(now.getTime() + (retentionDays * 24 * 60 * 60 * 1000))
-
-    const manifestStart = Date.now()
-    const manifest = await getVersionManifest(storage)
-    logger.debug(`updateVersionsManifest: loaded manifest in ${formatDuration(Date.now() - manifestStart)} (${Object.keys(manifest.versions).length} versions)`)
-
-    // Check if this version already exists (for skipping restoration later)
-    const isExistingVersion = !!manifest.versions[buildId]
-
-    manifest.current = buildId
-    manifest.versions[buildId] = {
-      timestamp: now.toISOString(),
-      expires: expires.toISOString(),
-      assets,
-      // Store original assets for deletedChunks calculation (assets array gets modified by deduplication)
-      originalAssets: [...assets],
-      // deletedChunks will be calculated in storeAssetsInStorage
-      deletedChunks: [],
-    }
-
-    const saveStart = Date.now()
-    await setVersionManifest(manifest, storage)
-    logger.debug(`updateVersionsManifest: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
-    logger.debug(`updateVersionsManifest: total ${formatDuration(Date.now() - startTime)}`)
-
-    return { manifest, isExistingVersion }
-  }
-
-  async function cleanupExpiredVersions() {
-    const manifest = await getVersionManifest(storage)
-    if (!manifest || !manifest.versions) {
-      return
-    }
-
-    const now = new Date()
-    const removedVersions: Array<{ id: string, reason: string, assetCount: number }> = []
-
-    const sortedVersions = Object.entries(manifest.versions)
-      .map(([id, data]) => ({ id, ...data, timestamp: new Date(data.timestamp).getTime() }))
-      .sort((a, b) => b.timestamp - a.timestamp)
-
-    const maxAge = retentionDays * 24 * 60 * 60 * 1000
-
-    for (let i = 0; i < sortedVersions.length; i++) {
-      const version = sortedVersions[i]!
-      const isExpired = (now.getTime() - version.timestamp) > maxAge
-      const exceedsCount = i >= maxNumberOfVersions
-      const isCurrent = version.id === manifest.current
-
-      if (isCurrent || (i === 0 && sortedVersions.length === 1)) {
-        continue
-      }
-
-      if (isExpired || exceedsCount) {
-        // Remove assets from storage in batches to limit memory
-        await processBatch(version.assets, 50, async (asset) => {
-          await storage.removeItem(`${version.id}/${asset}`).catch((error) => {
-            if (options.debug) {
-              logger.warn(`Failed to remove asset ${asset}:`, error)
-            }
-          })
-        })
-
-        delete manifest.versions[version.id]
-
-        // Clean up fileIdToVersion mapping if it exists
-        if (manifest.fileIdToVersion) {
-          for (const [fileId, versionId] of Object.entries(manifest.fileIdToVersion)) {
-            if (versionId === version.id) {
-              delete manifest.fileIdToVersion[fileId]
-            }
-          }
-        }
-
-        removedVersions.push({
-          id: version.id,
-          reason: isExpired ? 'expired' : 'exceeded count limit',
-          assetCount: version.assets.length,
-        })
+    const existingRecords = await getVersionRecords(storage)
+    const previousHashes = new Map<string, string>()
+    for (const record of existingRecords) {
+      for (const [asset, hash] of Object.entries(record.assets)) {
+        const existingHash = previousHashes.get(asset)
+        if (existingHash && existingHash !== hash)
+          throw new Error(`Stored versions disagree about immutable asset ${asset}. Clear the skew protection storage before deploying.`)
+        previousHashes.set(asset, hash)
       }
     }
 
-    if (removedVersions.length > 0) {
-      logger.log(`Removing outdated build artifacts...`)
-      removedVersions.forEach((item, index) => {
-        const isLast = index === removedVersions.length - 1
-        const prefix = isLast ? '  └─' : '  ├─'
-        const versionInfo = `${item.id.slice(0, 8)}`
-        const assetInfo = `(${item.assetCount} asset${item.assetCount > 1 ? 's' : ''})`
-        const reasonInfo = `[${item.reason}]`
-
-        logger.log(colors.gray(`${prefix} ${versionInfo} ${assetInfo} ${reasonInfo}`))
-      })
-    }
-
-    // Final pruning: remove any orphaned fileId entries referencing non-existent versions
-    if (manifest.fileIdToVersion) {
-      const validVersionIds = new Set(Object.keys(manifest.versions))
-      let prunedCount = 0
-      for (const [fileId, versionId] of Object.entries(manifest.fileIdToVersion)) {
-        if (!validVersionIds.has(versionId)) {
-          delete manifest.fileIdToVersion[fileId]
-          prunedCount++
-        }
-      }
-      if (prunedCount > 0 && options.debug) {
-        logger.debug(`Pruned ${prunedCount} orphaned fileId entries from map`)
-      }
-    }
-
-    // Save manifest if any changes were made
-    if (removedVersions.length > 0 || (manifest.fileIdToVersion && Object.keys(manifest.fileIdToVersion).length > 0)) {
-      await setVersionManifest(manifest, storage)
-    }
-  }
-
-  async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[]) {
-    const startTime = Date.now()
-    logger.debug(`storeAssetsInStorage: starting for ${buildId} (${assets.length} assets)`)
-
-    const manifestStart = Date.now()
-    const manifest = await getVersionManifest(storage)
-    logger.debug(`storeAssetsInStorage: loaded manifest in ${formatDuration(Date.now() - manifestStart)}`)
-
-    // Initialize fileIdToVersion map if it doesn't exist
-    if (!manifest.fileIdToVersion) {
-      manifest.fileIdToVersion = {}
-    }
-
-    const fileIdToVersion = manifest.fileIdToVersion
-    const existingFileIds = Object.keys(fileIdToVersion).length
-    logger.debug(`storeAssetsInStorage: fileIdToVersion has ${existingFileIds} entries`)
-
-    // Calculate deletedChunks using originalAssets (not deduplicated assets array)
-    const currentVersion = manifest.versions[buildId]
-    if (currentVersion) {
-      const previousVersionId = getPreviousVersion(manifest, buildId)
-      // Use originalAssets for accurate diff (falls back to assets for older manifests)
-      const previousVersion = previousVersionId ? manifest.versions[previousVersionId] : null
-      const previousAssets = previousVersion?.originalAssets || previousVersion?.assets || []
-      currentVersion.deletedChunks = calculateDeletedChunks(assets, previousAssets)
-      logger.debug(`storeAssetsInStorage: calculated ${currentVersion.deletedChunks.length} deleted chunks vs ${previousVersionId || 'none'}`)
-    }
-
-    // Stats for logging
-    let storedCount = 0
-    let deduplicatedCount = 0
     let totalBytes = 0
-    let skippedCount = 0
-
-    const storeStart = Date.now()
-
-    // Process assets in batches to limit memory usage
-    // Use smaller batches for memory efficiency
-    await processBatch(assets, 25, async (asset) => {
-      const fileId = extractFileId(asset)
-
-      // Check if already deduplicated BEFORE reading file (memory optimization)
-      if (fileId && fileIdToVersion[fileId] === buildId) {
-        skippedCount++
-        return
-      }
-
-      // Store the file in current build's storage
-      const assetPath = join(publicDir, asset)
-      const assetData = await fs.readFile(assetPath).catch((error) => {
-        logger.debug(`Failed to read ${assetPath}: ${error}`)
-        return null
+    const storedAssets = await processBatch(protectedAssets, 25, async (asset) => {
+      const sourcePath = join(publicDir, asset)
+      const data = await fs.readFile(sourcePath).catch((error: unknown) => {
+        throw new Error(`Failed to read build asset ${sourcePath}.`, { cause: error })
       })
-
-      if (assetData) {
-        totalBytes += assetData.byteLength
-        const storageKey = `${buildId}/${asset}`
-        await storage.setItemRaw(storageKey, assetData).catch((error) => {
-          logger.error(`Failed to store ${storageKey}:`, error?.message || error)
-        })
-        storedCount++
-
-        // Check if this file ID already exists in a previous version
-        // If so, remove it from the old location since we now have it in the new location
-        if (fileId && fileIdToVersion[fileId] && fileIdToVersion[fileId] !== buildId) {
-          const previousVersionId = fileIdToVersion[fileId]
-
-          // Remove the asset from the previous version's assets list
-          if (manifest.versions[previousVersionId]) {
-            const previousAssets = manifest.versions[previousVersionId].assets
-            const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
-            if (assetIndex !== -1) {
-              // Get the actual old asset path (may differ from current asset path)
-              const oldAssetPath = previousAssets[assetIndex]
-              previousAssets.splice(assetIndex, 1)
-
-              // Remove from storage using the correct old path
-              const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
-              await storage.removeItem(oldStorageKey).catch((error) => {
-                logger.debug(`Failed to remove duplicate asset ${oldStorageKey}: ${error}`)
-              })
-              deduplicatedCount++
-            }
-          }
-        }
-
-        // Update the file ID mapping to point to the current version
-        if (fileId) {
-          fileIdToVersion[fileId] = buildId
-        }
-      }
+      const hash = createHash('sha256').update(data).digest('hex')
+      const previousHash = previousHashes.get(asset)
+      if (previousHash && previousHash !== hash)
+        throw new Error(`Immutable asset ${asset} changed without changing its URL. Previous clients cannot be protected.`)
+      if (options.bundleAssets !== false)
+        await fromStorage(`write ${asset}`, () => storage.setItemRaw(assetKey(buildId, asset), data))
+      totalBytes += data.byteLength
+      return [asset, hash] as const
     })
 
-    logger.debug(`storeAssetsInStorage: stored ${storedCount} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - storeStart)}`)
-    logger.debug(`storeAssetsInStorage: deduplicated ${deduplicatedCount}, skipped ${skippedCount}`)
+    const now = new Date()
+    const record: VersionRecord = {
+      schemaVersion: VERSION_RECORD_SCHEMA,
+      id: buildId,
+      timestamp: now.toISOString(),
+      expires: new Date(now.getTime() + retentionDays * 86400000).toISOString(),
+      bundled: options.bundleAssets !== false,
+      assets: Object.fromEntries(storedAssets),
+    }
+    await fromStorage(`write version record ${buildId}`, () => storage.setItem(recordKey(buildId), record))
+    currentBuildId = buildId
+    logger.debug(`${record.bundled ? 'Stored' : 'Tracked'} ${protectedAssets.length} assets (${formatBytes(totalBytes)}) for ${buildId}`)
+    return record
+  }
 
-    // Save updated manifest with fileIdToVersion mapping
-    const saveStart = Date.now()
-    await setVersionManifest(manifest, storage)
-    logger.debug(`storeAssetsInStorage: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
-    logger.debug(`storeAssetsInStorage: total ${formatDuration(Date.now() - startTime)}`)
+  async function cleanupExpiredVersions(activeBuildId = currentBuildId): Promise<void> {
+    const records = (await getVersionRecords(storage))
+      .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+    const now = Date.now()
+    const retainedByCount = new Set(records.slice(0, maxNumberOfVersions).map(record => record.id))
+    retainedByCount.add(activeBuildId)
+    const removed = records.filter(record => record.id !== activeBuildId && (
+      new Date(record.expires).getTime() <= now || !retainedByCount.has(record.id)
+    ))
+
+    for (const record of removed) {
+      if (record.bundled)
+        await processBatch(Object.keys(record.assets), 50, asset => fromStorage(`remove ${asset}`, () => storage.removeItem(assetKey(record.id, asset))))
+      await fromStorage(`remove version record ${record.id}`, () => storage.removeItem(recordKey(record.id)))
+    }
+
+    if (removed.length > 0) {
+      logger.log('Removing outdated build artifacts...')
+      removed.forEach((record, index) => {
+        const prefix = index === removed.length - 1 ? '  └─' : '  ├─'
+        logger.log(colors.gray(`${prefix} ${record.id.slice(0, 8)} (${Object.keys(record.assets).length} assets)`))
+      })
+    }
   }
 
   async function listExistingVersions(): Promise<{ id: string, createdAt: number }[]> {
-    const manifest = await getVersionManifest(storage)
-    if (!manifest) {
-      return []
-    }
-
-    return Object.entries(manifest.versions).map(([id, data]) => ({
-      id,
-      createdAt: new Date(data.timestamp).getTime(),
+    return (await getVersionRecords(storage)).map(record => ({
+      id: record.id,
+      createdAt: new Date(record.timestamp).getTime(),
     }))
   }
 
-  async function restoreOldAssetsToPublic(currentBuildId: string, publicDir: string, currentAssets: string[] = [], isExistingVersion = false) {
-    const startTime = Date.now()
-    logger.debug(`restoreOldAssetsToPublic: starting for ${currentBuildId}`)
-
-    const manifestStart = Date.now()
-    const manifest = await getVersionManifest(storage)
-    logger.debug(`restoreOldAssetsToPublic: loaded manifest in ${formatDuration(Date.now() - manifestStart)}`)
-
-    if (!manifest || !manifest.versions) {
-      logger.debug(`restoreOldAssetsToPublic: no manifest or versions, skipping`)
-      return
-    }
-
-    // If this build ID already existed before this build, no need to restore
-    // because the assets are already in place
-    if (isExistingVersion) {
-      logger.debug(`restoreOldAssetsToPublic: build ${currentBuildId} already exists, skipping restore`)
-      return
-    }
-
-    const versionCount = Object.keys(manifest.versions).length - 1 // exclude current
-    logger.debug(`restoreOldAssetsToPublic: checking ${versionCount} previous versions`)
-    const restoredAssets: Array<{ asset: string, size: number, versionId: string, age: string }> = []
-    const currentAssetsSet = new Set(currentAssets)
-
-    // Build a set of file IDs from current assets to skip duplicates
-    const currentFileIds = new Set<string>()
-    for (const asset of currentAssets) {
-      const fileId = extractFileId(asset)
-      if (fileId) {
-        currentFileIds.add(fileId)
+  async function restoreOldAssetsToPublic(activeBuildId: string, publicDir: string, currentAssets: string[] = []): Promise<void> {
+    const startedAt = Date.now()
+    const currentAssetSet = new Set(currentAssets)
+    const records = (await getVersionRecords(storage)).filter(record => record.id !== activeBuildId && record.bundled)
+    const tasks: Array<{ record: VersionRecord, asset: string }> = []
+    const collected = new Set<string>()
+    for (const record of records) {
+      for (const asset of Object.keys(record.assets)) {
+        if (currentAssetSet.has(asset) || collected.has(asset))
+          continue
+        collected.add(asset)
+        tasks.push({ record, asset })
       }
     }
-    logger.debug(`restoreOldAssetsToPublic: current build has ${currentAssets.length} assets, ${currentFileIds.size} unique fileIds`)
 
     const now = Date.now()
-
-    // Collect all asset restoration tasks across versions
-    const assetTasks: Array<{ versionId: string, asset: string, versionData: any }> = []
-    let skippedSamePath = 0
-    let skippedSameFileId = 0
-    const collectedPaths = new Set<string>()
-
-    for (const [versionId, versionData] of Object.entries(manifest.versions)) {
-      if (versionId === currentBuildId) {
-        continue
-      }
-
-      for (const asset of versionData.assets) {
-        // Skip if this asset path is already in the current version
-        if (currentAssetsSet.has(asset)) {
-          skippedSamePath++
-          continue
-        }
-
-        // Skip if a file with the same file ID exists in current version
-        const fileId = extractFileId(asset)
-        if (fileId && currentFileIds.has(fileId)) {
-          skippedSameFileId++
-          continue
-        }
-
-        // Skip if already collected from another old version
-        if (collectedPaths.has(asset)) {
-          continue
-        }
-        collectedPaths.add(asset)
-
-        assetTasks.push({ versionId, asset, versionData })
-      }
-    }
-
-    logger.debug(`restoreOldAssetsToPublic: ${assetTasks.length} assets to restore (skipped: ${skippedSamePath} same path, ${skippedSameFileId} same fileId)`)
-
-    if (assetTasks.length === 0) {
-      logger.debug(`restoreOldAssetsToPublic: nothing to restore, total ${formatDuration(Date.now() - startTime)}`)
-      return
-    }
-
-    const restoreStart = Date.now()
-    let totalBytes = 0
-    let failedCount = 0
-    const createdDirs = new Set<string>()
-
-    // Process restoration tasks in batches to limit memory
-    // Use smaller batches for memory efficiency
-    const batchResults = await processBatch(assetTasks, 25, async ({ versionId, asset, versionData }) => {
-      const storageKey = `${versionId}/${asset}`
-      return await storage.getItemRaw(storageKey)
-        .then(async (assetData) => {
-          if (assetData) {
-            const targetPath = join(publicDir, asset)
-            const dir = dirname(targetPath)
-
-            if (!createdDirs.has(dir)) {
-              await fs.mkdir(dir, { recursive: true })
-              createdDirs.add(dir)
-            }
-
-            // Ensure we write Buffer data directly without JSON serialization
-            let dataToWrite: Buffer
-            if (Buffer.isBuffer(assetData)) {
-              dataToWrite = assetData
-            }
-            else if (typeof assetData === 'object' && assetData.type === 'Buffer' && Array.isArray(assetData.data)) {
-              // Handle serialized Buffer format from storage
-              dataToWrite = Buffer.from(assetData.data)
-            }
-            else {
-              dataToWrite = Buffer.from(assetData)
-            }
-            // wx flag = exclusive write, fails if file exists (atomic check+write)
-            await fs.writeFile(targetPath, dataToWrite, { flag: 'wx' })
-            totalBytes += dataToWrite.byteLength
-
-            // Calculate time ago
-            const versionTimestamp = new Date(versionData.timestamp).getTime()
-
-            return {
-              asset,
-              size: dataToWrite.byteLength,
-              versionId,
-              age: formatAge(versionTimestamp, now),
-            }
-          }
-          return null
-        })
-        .catch((error: NodeJS.ErrnoException) => {
-          // EEXIST = file already exists, expected with wx flag - not a failure
-          if (error.code !== 'EEXIST') {
-            failedCount++
-            logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
-          }
-          return null
-        })
+    const restored = await processBatch(tasks, 25, async ({ record, asset }) => {
+      const data = await fromStorage(`read ${asset}`, () => storage.getItemRaw(assetKey(record.id, asset)))
+      if (data === null)
+        throw new Error(`Stored asset ${asset} for build ${record.id} is missing. Skew protection cannot be guaranteed.`)
+      const buffer = toBuffer(data, `Stored asset ${asset} for build ${record.id}`)
+      const actualHash = createHash('sha256').update(buffer).digest('hex')
+      if (actualHash !== record.assets[asset])
+        throw new Error(`Stored asset ${asset} for build ${record.id} is corrupt.`)
+      const targetPath = join(publicDir, asset)
+      await fs.mkdir(dirname(targetPath), { recursive: true })
+      await fs.writeFile(targetPath, buffer, { flag: 'wx' }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EEXIST')
+          throw error
+      })
+      return { record, asset }
     })
 
-    // Filter out null results and add to restoredAssets
-    restoredAssets.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null))
-
-    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
-
-    // Count restored assets per version
     const restoredByVersion = new Map<string, number>()
-    for (const item of restoredAssets) {
-      restoredByVersion.set(item.versionId, (restoredByVersion.get(item.versionId) || 0) + 1)
-    }
-
-    // Log summary per version showing restored/total
-    const otherVersions = Object.entries(manifest.versions).filter(([id]) => id !== currentBuildId)
-    if (otherVersions.length > 0) {
-      otherVersions.forEach(([versionId, versionData], index) => {
-        const isLast = index === otherVersions.length - 1
-        const prefix = isLast ? '  └─' : '  ├─'
-        const versionTimestamp = new Date(versionData.timestamp).getTime()
-        const ageStr = formatAge(versionTimestamp, now)
-        const restored = restoredByVersion.get(versionId) || 0
-        const total = versionData.originalAssets?.length || versionData.assets.length
-        logger.log(colors.gray(`${prefix} ${versionId.slice(0, 8)} (${restored}/${total} files restored, ${ageStr})`))
-      })
-    }
-
-    logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
+    restored.forEach(({ record }) => restoredByVersion.set(record.id, (restoredByVersion.get(record.id) || 0) + 1))
+    records.forEach((record, index) => {
+      const prefix = index === records.length - 1 ? '  └─' : '  ├─'
+      logger.log(colors.gray(`${prefix} ${record.id.slice(0, 8)} (${restoredByVersion.get(record.id) || 0}/${Object.keys(record.assets).length} files restored, ${formatAge(new Date(record.timestamp).getTime(), now)})`))
+    })
+    logger.debug(`Restored ${restored.length} assets in ${formatDuration(Date.now() - startedAt)}`)
   }
 
-  async function augmentBuildMetadata(buildId: string, publicDir: string, serverDir?: string) {
-    const manifest = await getVersionManifest(storage)
-
-    // Augment builds/latest.json
+  async function augmentBuildMetadata(buildId: string, publicDir: string, serverDir?: string): Promise<void> {
+    const records = await getVersionRecords(storage)
+    const versions = Object.fromEntries(records.map(record => [record.id, {
+      timestamp: record.timestamp,
+      expires: record.expires,
+    }]))
     const latestPath = join(publicDir, buildAssetsDir, 'builds', 'latest.json')
-    let newLatestContent: string | undefined
-    try {
-      const latestData = await fs.readFile(latestPath, 'utf-8')
-      const latestJson = JSON.parse(latestData)
+    const latestData = await fs.readFile(latestPath, 'utf8').catch((error: unknown) => {
+      throw new Error(`Nuxt app manifest is missing at ${latestPath}.`, { cause: error })
+    })
+    const latestJson = JSON.parse(latestData) as Record<string, unknown>
+    latestJson.skewProtection = { versions }
+    const newLatestContent = JSON.stringify(latestJson, null, 2)
+    await fs.writeFile(latestPath, newLatestContent, 'utf8')
 
-      // Clean up versions - only expose what client needs
-      const clientVersions: Record<string, { timestamp: string, deletedChunks?: string[] }> = {}
-      for (const [versionId, versionData] of Object.entries(manifest.versions)) {
-        clientVersions[versionId] = {
-          timestamp: versionData.timestamp,
-          deletedChunks: versionData.deletedChunks,
-        }
-      }
-
-      latestJson.skewProtection = {
-        versions: clientVersions,
-      }
-
-      newLatestContent = JSON.stringify(latestJson, null, 2)
-      await fs.writeFile(latestPath, newLatestContent, 'utf-8')
-    }
-    catch (error) {
-      if (options.debug) {
-        logger.warn('Failed to augment builds/latest.json:', error)
-      }
-    }
-
-    // Augment builds/meta/{buildId}.json
+    const record = records.find(version => version.id === buildId)
+    if (!record)
+      throw new Error(`Stored version record ${buildId} is missing before metadata augmentation.`)
     const metaPath = join(publicDir, buildAssetsDir, 'builds', 'meta', `${buildId}.json`)
-    try {
-      const metaData = await fs.readFile(metaPath, 'utf-8')
-      const metaJson = JSON.parse(metaData)
+    const metaData = await fs.readFile(metaPath, 'utf8').catch((error: unknown) => {
+      throw new Error(`Nuxt build metadata is missing at ${metaPath}.`, { cause: error })
+    })
+    const metaJson = JSON.parse(metaData) as Record<string, unknown>
+    metaJson.skewProtection = { timestamp: record.timestamp, expires: record.expires }
+    await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), 'utf8')
 
-      const versionData = manifest.versions[buildId]
-      if (versionData) {
-        metaJson.skewProtection = {
-          deletedChunks: versionData.deletedChunks,
-          timestamp: versionData.timestamp,
-        }
-      }
-
-      await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), 'utf-8')
-    }
-    catch (error) {
-      if (options.debug) {
-        logger.warn(`Failed to augment builds/meta/${buildId}.json:`, error)
-      }
-    }
-
-    // Patch Nitro's static asset manifest to fix Content-Length
-    // Nitro pre-calculates file sizes during rollup, but we modify files after
-    if (serverDir && newLatestContent) {
+    if (serverDir)
       await patchNitroManifest(serverDir, `${buildAssetsPath}/builds/latest.json`, newLatestContent)
-    }
   }
 
-  /**
-   * Patch Nitro's static asset manifest to fix Content-Length after we augment files.
-   * Works with both JSON syntax (Node) and JS object syntax (Cloudflare).
-   */
-  async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
+  async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string): Promise<void> {
     const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
-    let nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => {
-      // Some presets do not emit an embedded Nitro asset manifest to patch.
-      return null
+    let nitro = await fs.readFile(nitroPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT')
+        return null
+      throw error
     })
     if (!nitro)
       return
-
-    const assetIdx = nitro.indexOf(`"${assetPath}":`)
-    if (assetIdx === -1)
+    const assetIndex = nitro.indexOf(`"${assetPath}":`)
+    if (assetIndex === -1)
       return
-
-    const size = Buffer.byteLength(newContent, 'utf-8')
-    const hash = createHash('sha1').update(newContent).digest('base64').substring(0, 27)
-    const newEtag = `"${size.toString(16)}-${hash}"`
-
-    // Find the object bounds for this asset entry
-    const start = nitro.indexOf('{', assetIdx)
+    const start = nitro.indexOf('{', assetIndex)
     if (start === -1)
-      return
+      throw new Error(`Could not locate Nitro asset metadata for ${assetPath}.`)
 
-    // Find matching closing brace, accounting for strings (both " and ')
     let depth = 0
     let stringChar: string | null = null
     let end = -1
-    for (let i = start; i < nitro.length; i++) {
-      const char = nitro[i]
+    for (let index = start; index < nitro.length; index++) {
+      const char = nitro[index]
       if (stringChar) {
         if (char === '\\')
-          i++ // skip escaped char
+          index++
         else if (char === stringChar)
           stringChar = null
       }
-      else {
-        if (char === '"' || char === '\'') {
-          stringChar = char
-        }
-        else if (char === '{') {
-          depth++
-        }
-        else if (char === '}') {
-          depth--
-          if (depth === 0) {
-            end = i
-            break
-          }
-        }
+      else if (char === '"' || char === '\'') {
+        stringChar = char
+      }
+      else if (char === '{') {
+        depth++
+      }
+      else if (char === '}' && --depth === 0) {
+        end = index
+        break
       }
     }
     if (end === -1)
-      return
+      throw new Error(`Could not parse Nitro asset metadata for ${assetPath}.`)
 
-    // Replace property values in place (handles both JSON and JS syntax)
-    let entryStr = nitro.substring(start, end + 1)
-
-    // Replace size value (number after "size": or size:)
-    entryStr = entryStr.replace(RE_SIZE_PROP, (match) => {
-      const prefix = match.match(RE_SIZE_PREFIX)?.[0] || 'size:'
-      return `${prefix}${size}`
+    const size = Buffer.byteLength(newContent, 'utf8')
+    const hash = createHash('sha1').update(newContent).digest('base64').substring(0, 27)
+    const etag = `"${size.toString(16)}-${hash}"`
+    let entry = nitro.slice(start, end + 1)
+    entry = entry.replace(RE_SIZE_PROP, match => `${match.match(RE_SIZE_PREFIX)?.[0] || 'size:'}${size}`)
+    entry = entry.replace(RE_ETAG_PROP, (match) => {
+      const prefix = match.match(RE_ETAG_KEY_PREFIX)?.[0] || 'etag:'
+      const quote = match.match(RE_ETAG_QUOTE)?.[1] || '"'
+      return `${prefix}${quote}${quote === '\'' ? etag : etag.replace(RE_ESCAPE_DOUBLE_QUOTE, '\\"')}${quote}`
     })
-
-    // Replace etag value (string after "etag": or etag:)
-    // Handles both "\"hash\"" (JSON) and '"hash"' (JS with single quotes)
-    entryStr = entryStr.replace(RE_ETAG_PROP, (match) => {
-      const keyMatch = match.match(RE_ETAG_KEY_PREFIX)
-      const prefix = keyMatch?.[0] || 'etag:'
-      const quoteChar = match.match(RE_ETAG_QUOTE)?.[1] || '"'
-      // For single quotes, don't escape inner quotes; for double quotes, escape them
-      const escapedEtag = quoteChar === '\'' ? newEtag : newEtag.replace(RE_ESCAPE_DOUBLE_QUOTE, '\\"')
-      return `${prefix}${quoteChar}${escapedEtag}${quoteChar}`
-    })
-
-    nitro = nitro.substring(0, start) + entryStr + nitro.substring(end + 1)
-    await fs.writeFile(nitroPath, nitro, 'utf-8')
+    nitro = nitro.slice(0, start) + entry + nitro.slice(end + 1)
+    await fs.writeFile(nitroPath, nitro, 'utf8')
   }
 
   return {
     getAssetsFromBuild,
-    updateVersionsManifest,
+    storeVersion,
     cleanupExpiredVersions,
-    storeAssetsInStorage,
     listExistingVersions,
     restoreOldAssetsToPublic,
     augmentBuildMetadata,
-    getManifest: () => getVersionManifest(storage),
+    getManifest: async (activeBuildId = currentBuildId) => toManifest(await getVersionRecords(storage), activeBuildId),
     dispose: () => storage.dispose(),
   }
 }

@@ -22,7 +22,6 @@ const versions = computed(() => {
       timestamp: new Date(info.timestamp),
       expires: new Date(info.expires),
       assetCount: info.assets?.length || 0,
-      deletedChunks: info.deletedChunks?.length || 0,
       isExpired: currentTime === null ? false : new Date(info.expires).getTime() < currentTime,
     }))
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
@@ -75,7 +74,7 @@ function formatRelative(date: Date): string {
         v-if="!versions.length && !productionError"
         icon="carbon:version"
         title="No Version History"
-        description="No skew protection version data found in the build manifest. Make sure bundleAssets is enabled."
+        description="No skew protection release metadata found in the build manifest. Make sure trackBuildMetadata is enabled."
       />
 
       <!-- Version timeline -->
@@ -107,7 +106,6 @@ function formatRelative(date: Date): string {
             { key: 'Built', value: formatDate(v.timestamp) },
             { key: 'Expires', value: formatDate(v.expires) },
             { key: 'Assets', value: v.assetCount },
-            { key: 'Deleted Chunks', value: v.deletedChunks },
           ]"
           striped
         />
@@ -120,7 +118,7 @@ function formatRelative(date: Date): string {
         <DevtoolsEmptyState
           icon="carbon:version"
           title="Version History"
-          description="Switch to production mode to view your deployment version history, asset tracking, and chunk lifecycle."
+          description="Switch to production mode to view deployment history and retained asset metadata."
         />
       </div>
     </template>

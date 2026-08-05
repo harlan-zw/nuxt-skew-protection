@@ -1,207 +1,106 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock BroadcastChannel
-class MockBroadcastChannel {
-  static instances: MockBroadcastChannel[] = []
-  name: string
-  onmessage: ((event: { data: any }) => void) | null = null
-  postMessage = vi.fn((data: any) => {
-    // BroadcastChannel delivers to all OTHER instances with the same name (not the sender)
-    for (const instance of MockBroadcastChannel.instances) {
-      if (instance !== this && instance.name === this.name && instance.onmessage) {
-        instance.onmessage({ data })
-      }
-    }
-  })
+const mocks = vi.hoisted(() => ({
+  channel: {
+    name: '',
+    data: { value: undefined as any },
+    post: vi.fn(),
+    close: vi.fn(),
+    isSupported: { value: true },
+  },
+  watchers: [] as Array<{ source: any, callback: (value: any) => void }>,
+  reload: vi.fn(),
+}))
 
-  close = vi.fn()
-
-  constructor(name: string) {
-    this.name = name
-    MockBroadcastChannel.instances.push(this)
-  }
-}
-
-vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
-
-const mockHooks = new Map<string, ((...args: any[]) => any)[]>()
-const mockCallHook = vi.fn(async (name: string, ...args: any[]) => {
-  const hooks = mockHooks.get(name) || []
-  for (const hook of hooks) {
+const hooks = new Map<string, Array<(...args: any[]) => any>>()
+const callHook = vi.fn(async (name: string, ...args: any[]) => {
+  for (const hook of hooks.get(name) || [])
     await hook(...args)
-  }
 })
-const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
-  if (!mockHooks.has(name)) {
-    mockHooks.set(name, [])
-  }
-  mockHooks.get(name)!.push(cb)
-  return () => {
-    const hooks = mockHooks.get(name) || []
-    const idx = hooks.indexOf(cb)
-    if (idx >= 0)
-      hooks.splice(idx, 1)
-  }
+const hook = vi.fn((name: string, callback: (...args: any[]) => any) => {
+  hooks.set(name, [...(hooks.get(name) || []), callback])
+  return () => hooks.set(name, (hooks.get(name) || []).filter(item => item !== callback))
 })
+const nuxtApp = { hooks: { hook, callHook }, hook }
 
-function createMockNuxtApp() {
-  return {
-    hooks: {
-      hook: mockHookFn,
-      callHook: mockCallHook,
-    },
-    hook: mockHookFn,
-  }
-}
+vi.mock('@vueuse/core', () => ({
+  useBroadcastChannel: vi.fn(({ name }: { name: string }) => {
+    mocks.channel.name = name
+    return mocks.channel
+  }),
+  useDocumentVisibility: vi.fn(() => ({ value: 'visible' })),
+  useIdle: vi.fn(() => ({ idle: { value: false } })),
+}))
 
-let mockNuxtApp = createMockNuxtApp()
+vi.mock('vue', () => ({
+  ref: vi.fn((value: any) => ({ value })),
+  watch: vi.fn((source: any, callback: (value: any) => void) => {
+    mocks.watchers.push({ source, callback })
+  }),
+}))
 
 vi.mock('nuxt/app', () => ({
-  defineNuxtPlugin: vi.fn((opts: any) => opts),
-  reloadNuxtApp: vi.fn(),
-  useNuxtApp: vi.fn(() => mockNuxtApp),
+  defineNuxtPlugin: vi.fn((plugin: any) => plugin),
+  reloadNuxtApp: mocks.reload,
+  useNuxtApp: vi.fn(() => nuxtApp),
   useRuntimeConfig: vi.fn(() => ({
-    public: {
-      skewProtection: {
-        multiTab: true,
-        reloadStrategy: 'prompt',
-      },
-    },
+    public: { skewProtection: { basePath: '/pro/__skew', multiTab: true, reloadStrategy: 'prompt' } },
   })),
 }))
 
-vi.mock('../../src/runtime/shared/logger', () => ({
-  logger: { debug: vi.fn() },
-}))
+vi.mock('../../src/runtime/shared/logger', () => ({ logger: { debug: vi.fn() } }))
 
 describe('multi-tab plugin', () => {
   beforeEach(() => {
-    mockHooks.clear()
-    mockCallHook.mockClear()
-    mockHookFn.mockClear()
-    MockBroadcastChannel.instances = []
-    mockNuxtApp = createMockNuxtApp()
+    hooks.clear()
+    hook.mockClear()
+    callHook.mockClear()
+    mocks.channel.name = ''
+    mocks.channel.data.value = undefined
+    mocks.channel.post.mockReset()
+    mocks.channel.close.mockReset()
+    mocks.watchers.length = 0
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  async function setupPlugin() {
-    const mod = await import('../../src/runtime/app/plugins/multi-tab.client')
-    const plugin = mod.default
+  async function setup() {
+    const { default: plugin } = await import('../../src/runtime/app/plugins/multi-tab.client')
     plugin.setup()
-    return plugin
   }
 
-  it('broadcasts version update to other tabs when detected locally', async () => {
-    await setupPlugin()
+  function receive(manifest: any) {
+    const watcher = mocks.watchers.find(item => item.source === mocks.channel.data)
+    watcher?.callback(manifest)
+  }
 
-    const channel = MockBroadcastChannel.instances[0]
+  it('namespaces coordination by app mount', async () => {
+    await setup()
+    expect(mocks.channel.name).toBe('nuxt-skew-protection:/pro/__skew')
+  })
+
+  it('broadcasts the complete Nuxt manifest', async () => {
+    await setup()
+    const manifest = { id: 'v2', timestamp: 12345, meta: { test: true } }
+    await callHook('app:manifest:update', manifest)
+    expect(mocks.channel.post).toHaveBeenCalledWith(manifest)
+  })
+
+  it('forwards sibling updates without a broadcast loop', async () => {
+    await setup()
     const manifest = { id: 'v2', timestamp: 12345 }
-
-    // Simulate a locally detected manifest update
-    await mockCallHook('app:manifest:update', manifest)
-
-    expect(channel.postMessage).toHaveBeenCalledWith({
-      type: 'version-update',
-      id: 'v2',
-      timestamp: 12345,
-    })
+    receive(manifest)
+    await vi.waitFor(() => expect(callHook).toHaveBeenCalledWith('app:manifest:update', manifest))
+    expect(mocks.channel.post).not.toHaveBeenCalled()
   })
 
-  it('triggers app:manifest:update when receiving broadcast from another tab', async () => {
-    await setupPlugin()
-
-    const channel = MockBroadcastChannel.instances[0]
-    mockCallHook.mockClear()
-
-    // Simulate receiving a message from another tab
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
-
-    expect(mockCallHook).toHaveBeenCalledWith('app:manifest:update', {
-      type: 'version-update',
-      id: 'v2',
-      timestamp: 12345,
-    })
+  it('ignores malformed sibling updates', async () => {
+    await setup()
+    receive({ timestamp: 12345 })
+    expect(callHook).not.toHaveBeenCalled()
   })
 
-  it('does not re-broadcast updates received from BroadcastChannel (no ping-pong)', async () => {
-    await setupPlugin()
-
-    const channel = MockBroadcastChannel.instances[0]
-    channel.postMessage.mockClear()
-
-    // Simulate receiving a message from another tab
-    // This calls app:manifest:update, which should NOT re-broadcast
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
-
-    expect(channel.postMessage).not.toHaveBeenCalled()
-  })
-
-  it('does not create infinite loop between two tabs', async () => {
-    // Setup two "tabs" - each registers its own hooks and channel instance
-    // Tab A
-    await setupPlugin()
-    const channelA = MockBroadcastChannel.instances[0]
-
-    // Tab B - reset hooks and create a fresh nuxt app to simulate a second tab
-    mockHooks.clear()
-    mockHookFn.mockClear()
-    mockNuxtApp = createMockNuxtApp()
-    await setupPlugin()
-    const channelB = MockBroadcastChannel.instances[1]
-
-    // Reset call counts
-    channelA.postMessage.mockClear()
-    channelB.postMessage.mockClear()
-
-    // Tab A broadcasts → Tab B receives → Tab B should NOT re-broadcast
-
-    // Simulate Tab A broadcasting
-    channelA.postMessage({ type: 'version-update', id: 'v2', timestamp: 12345 })
-
-    // Tab B received it (via MockBroadcastChannel delivery) and called app:manifest:update
-    // Check that Tab B did NOT re-broadcast
-    expect(channelB.postMessage).not.toHaveBeenCalled()
-  })
-
-  it('still broadcasts subsequent local updates after receiving a channel message', async () => {
-    await setupPlugin()
-
-    const channel = MockBroadcastChannel.instances[0]
-
-    // First: receive an update from another tab (should not re-broadcast)
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
-    channel.postMessage.mockClear()
-
-    // Then: a local update happens (should broadcast)
-    await mockCallHook('app:manifest:update', { id: 'v3', timestamp: 99999 })
-
-    expect(channel.postMessage).toHaveBeenCalledWith({
-      type: 'version-update',
-      id: 'v3',
-      timestamp: 99999,
-    })
-  })
-
-  it('ignores broadcast messages without version-update type', async () => {
-    await setupPlugin()
-
-    const channel = MockBroadcastChannel.instances[0]
-    mockCallHook.mockClear()
-
-    channel.onmessage!({ data: { type: 'other-message', id: 'v2' } })
-    expect(mockCallHook).not.toHaveBeenCalled()
-  })
-
-  it('ignores broadcast messages without id', async () => {
-    await setupPlugin()
-
-    const channel = MockBroadcastChannel.instances[0]
-    mockCallHook.mockClear()
-
-    channel.onmessage!({ data: { type: 'version-update' } })
-    expect(mockCallHook).not.toHaveBeenCalled()
+  it('closes coordination when the app errors', async () => {
+    await setup()
+    await callHook('app:error', new Error('test'))
+    expect(mocks.channel.close).toHaveBeenCalledOnce()
   })
 })

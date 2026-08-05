@@ -24,8 +24,8 @@ describe('migrate codemod', () => {
   it('renames hook', () => {
     writeFileSync(join(dir, 'plugin.ts'), `nuxtApp.hooks.hook('skew-protection:chunks-outdated', cb)`)
     const output = run(dir)
-    expect(readFileSync(join(dir, 'plugin.ts'), 'utf-8')).toBe(`nuxtApp.hooks.hook('skew:chunks-outdated', cb)`)
-    expect(output).toContain('skew-protection:chunks-outdated -> skew:chunks-outdated')
+    expect(readFileSync(join(dir, 'plugin.ts'), 'utf-8')).toBe(`nuxtApp.hooks.hook('app:manifest:update', cb)`)
+    expect(output).toContain('chunk hook -> app:manifest:update')
   })
 
   it('renames isOutdated to isAppOutdated', () => {
@@ -65,7 +65,7 @@ describe('migrate codemod', () => {
     const output = run(dir)
     const result = readFileSync(join(dir, 'app.vue'), 'utf-8')
     expect(result).toContain('isAppOutdated')
-    expect(result).toContain('skew:chunks-outdated')
+    expect(result).toContain('app:manifest:update')
     expect(output).toContain('2 change(s) across 1 file(s)')
   })
 

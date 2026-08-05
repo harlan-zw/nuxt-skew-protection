@@ -3,7 +3,7 @@
   "type": "module",
   "version": "1.4.0",
   "packageManager": "pnpm@11.19.0",
-  "description": "Solve Nuxt version skews with persistent assets and instant updates.",
+  "description": "Retain Nuxt build assets and coordinate deployment updates.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -67,7 +67,7 @@
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config sw.build.config.ts && pnpm run build:devtools",
+    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && pnpm run build:devtools",
     "build:devtools": "node -e \"require('fs').cpSync('devtools','dist/devtools',{recursive:true})\"",
     "dev": "nuxi dev playground",
     "dev:build": "nuxi build playground",
@@ -113,7 +113,6 @@
     "ofetch": "catalog:",
     "pathe": "catalog:",
     "pkg-types": "catalog:",
-    "tinyexec": "catalog:",
     "unstorage": "catalog:",
     "zod": "catalog:"
   },
@@ -141,7 +140,6 @@
     "std-env": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "unbuild": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:",

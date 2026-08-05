@@ -1,7 +1,9 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
+import type { PlatformModeOption } from './platform'
+import type { SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
-import { existsSync } from 'node:fs'
+import { promises as fs } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import {
   addComponent,
   addImports,
@@ -19,6 +21,12 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
+import { resolvePlatform } from './platform'
+import {
+  createNetlifyNuxtSkewProtectionConfig,
+  NETLIFY_SKEW_PROTECTION_CONFIG_PATH,
+  serializeNetlifySkewProtectionConfig,
+} from './provider/netlify'
 import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -49,7 +57,13 @@ export interface ModuleOptions {
    * - SkewAdapter: Third-party WebSocket provider (Pusher, Ably)
    * @default Static: 'polling', Node: 'sse', Cloudflare: 'ws'
    */
-  updateStrategy?: 'polling' | 'sse' | 'ws' | SkewAdapter
+  updateStrategy?: false | 'polling' | 'sse' | 'ws' | SkewAdapter
+  /**
+   * Deployment affinity mode. Native mode delegates retention to the platform.
+   * Hybrid mode requires an external, unpinned Nuxt manifest URL.
+   * @default Native on Vercel when enabled, portable elsewhere
+   */
+  mode?: PlatformModeOption
   /**
    * Path prefix for the module's runtime endpoints (`/ws`, `/sse`, `/health`,
    * `/route`, `/subscribe-stats`, `/admin/stats`).
@@ -80,9 +94,14 @@ export interface ModuleOptions {
    * Bundle old deployment assets to support users on previous versions.
    * When enabled, old build assets are stored and served to users who haven't refreshed.
    * @default true
-   * @note Automatically disabled when using CDN URL
    */
   bundleAssets?: boolean
+  /**
+   * Persist release metadata and augment Nuxt build manifests even when asset
+   * bytes are retained by the deployment platform.
+   * @default true
+   */
+  trackBuildMetadata?: boolean
   /**
    * Enable or disable the module
    * @default true
@@ -113,10 +132,10 @@ export interface ModuleOptions {
    */
   ipTracking?: boolean
   /**
-   * How to handle outdated chunks.
+   * How to handle a newly deployed release.
    * - 'prompt': Show notification, let user decide (default)
-   * - 'immediate': Reload immediately when chunks are invalidated
-   * - 'idle': Reload when user is idle (requestIdleCallback + visibility API)
+   * - 'immediate': Reload immediately
+   * - 'idle': Reload after five seconds of inactivity or when hidden
    * - false: Disable automatic handling, use hooks for custom logic
    * @default 'prompt'
    */
@@ -156,6 +175,7 @@ export default defineNuxtModule<ModuleOptions>({
     retentionDays: 30,
     maxNumberOfVersions: 10,
     bundleAssets: true,
+    trackBuildMetadata: true,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
       // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
@@ -179,6 +199,9 @@ export default defineNuxtModule<ModuleOptions>({
     if (options.enabled === false) {
       logger.debug('The module is disabled, skipping setup.')
       return
+    }
+    if (nuxt.options.experimental.appManifest === false) {
+      throw new Error('nuxt-skew-protection requires `experimental.appManifest` because deployment detection uses Nuxt build manifests.')
     }
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
 
@@ -238,11 +261,27 @@ export default defineNuxtModule<ModuleOptions>({
       ipTracking: options.connectionTracking && options.ipTracking,
       reloadStrategy: options.reloadStrategy ?? 'prompt',
       multiTab: options.multiTab ?? true,
+      discoveryURL: undefined,
+      updatesEnabled: true,
+      updateInterval: 60 * 60 * 1000,
       version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
     // Detect Nitro preset
     const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
+    const fragmentedConnectionRuntime = !!nitroPreset && (
+      nitroPreset.includes('vercel')
+      || nitroPreset.includes('netlify')
+      || nitroPreset.includes('aws')
+      || (nitroPreset.includes('cloudflare') && nitroPreset !== 'cloudflare-durable')
+    )
+    if (options.connectionTracking && fragmentedConnectionRuntime) {
+      logger.warn(`Connection tracking is process-local on ${nitroPreset}; disabling misleading aggregate stats.`)
+      options.connectionTracking = false
+      nuxt.options.runtimeConfig.public.skewProtection.connectionTracking = false
+      nuxt.options.runtimeConfig.public.skewProtection.routeTracking = false
+      nuxt.options.runtimeConfig.public.skewProtection.ipTracking = false
+    }
 
     // Detect NuxtHub and guide users on KV configuration
     const isNuxtHub = hasNuxtModule('@nuxthub/core')
@@ -256,11 +295,10 @@ export default defineNuxtModule<ModuleOptions>({
     addTypeTemplate({
       filename: 'types/nuxt-skew-protection.d.ts',
       getContents: () => `// Generated by nuxt-skew-protection
-import type { ChunksOutdatedPayload, SkewAdapterConfig, SkewConnection, SkewSSEConfig, SkewWebSocketConfig } from '#skew-protection/app/types'
+import type { SkewAdapterConfig, SkewConnection, SkewSSEConfig, SkewWebSocketConfig } from '#skew-protection/app/types'
 
 declare module '#app' {
   interface RuntimeNuxtHooks {
-    'skew:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
     'skew:message': (message: { type: string, [key: string]: unknown }) => void | Promise<void>
     'skew:ws:config': (config: SkewWebSocketConfig) => void | Promise<void>
     'skew:sse:config': (config: SkewSSEConfig) => void | Promise<void>
@@ -275,8 +313,6 @@ declare module '#app' {
       versions?: Record<string, {
         timestamp: string
         expires: string
-        assets: string[]
-        deletedChunks?: string[]
       }>
     }
   }
@@ -284,7 +320,6 @@ declare module '#app' {
 
 declare module 'nuxt/app' {
   interface RuntimeNuxtHooks {
-    'skew:chunks-outdated': (payload: ChunksOutdatedPayload) => void | Promise<void>
     'skew:message': (message: { type: string, [key: string]: unknown }) => void | Promise<void>
     'skew:ws:config': (config: SkewWebSocketConfig) => void | Promise<void>
     'skew:sse:config': (config: SkewSSEConfig) => void | Promise<void>
@@ -299,14 +334,12 @@ declare module 'nuxt/app' {
       versions?: Record<string, {
         timestamp: string
         expires: string
-        assets: string[]
-        deletedChunks?: string[]
       }>
     }
   }
 }
 
-export type { ChunksOutdatedPayload, SkewAdapterConfig, SkewConnection, SkewSSEConfig, SkewWebSocketConfig }
+export type { SkewAdapterConfig, SkewConnection, SkewSSEConfig, SkewWebSocketConfig }
 `,
     }, { nuxt: true })
 
@@ -421,37 +454,90 @@ export {}
     // Skip production setup in dev mode
     if (!nuxt.options.dev) {
       // Detect platform at build time (reuse nitroPreset from above)
-      const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
-      const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
 
-      // Determine resolved strategy
       const isAdapter = isSkewAdapter(options.updateStrategy)
-      let resolvedStrategy: 'polling' | 'sse' | 'ws' | 'adapter' = 'polling'
+      const configuredUpdateStrategy = isAdapter
+        ? 'adapter'
+        : typeof options.updateStrategy === 'string' || options.updateStrategy === false
+          ? options.updateStrategy
+          : undefined
+      const platform = resolvePlatform({
+        preset: nitroPreset,
+        isStatic,
+        websocket: !!nuxt.options.nitro?.experimental?.websocket,
+        responseStreaming: !!(nuxt.options.nitro as typeof nuxt.options.nitro & { awsLambda?: { streaming?: boolean } }).awsLambda?.streaming,
+        env: process.env,
+        mode: options.mode,
+        updateStrategy: configuredUpdateStrategy,
+      })
+      if (platform._tag === 'invalid')
+        throw new Error(platform.message)
+      platform.warnings.forEach(warning => logger.warn(warning))
+      if (
+        platform.platform === 'aws'
+        && nitroPreset?.includes('amplify')
+        && options.bundleAssets !== false
+        && options.storage?.driver === 'fs'
+        && String(options.storage.base || '').includes('node_modules/.cache')
+      ) {
+        logger.warn('Amplify does not reliably restore node_modules/.cache. Configure a persistent storage path or set bundleAssets: false when S3 retains old assets.')
+      }
+      const resolvedStrategy = platform.updateStrategy
+      nuxt.options.runtimeConfig.public.skewProtection.discoveryURL = platform.discoveryURL
+      nuxt.options.runtimeConfig.public.skewProtection.updatesEnabled = resolvedStrategy !== false
 
-      if (isAdapter) {
-        resolvedStrategy = 'adapter'
-      }
-      else if (options.updateStrategy === 'ws') {
-        resolvedStrategy = 'ws'
-      }
-      else if (options.updateStrategy === 'sse') {
-        resolvedStrategy = 'sse'
-      }
-      else if (!options.updateStrategy) {
-        // Auto-detect: static = polling, cloudflare = ws, otherwise sse
-        resolvedStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
+      if (resolvedStrategy === false)
+        nuxt.options.experimental.checkOutdatedBuildInterval = false
+
+      if (platform.discoveryURL) {
+        const configuredInterval = nuxt.options.experimental.checkOutdatedBuildInterval
+        nuxt.options.runtimeConfig.public.skewProtection.updateInterval = typeof configuredInterval === 'number'
+          ? configuredInterval
+          : 60 * 60 * 1000
+        nuxt.options.experimental.checkOutdatedBuildInterval = false
       }
 
-      // Validate strategy compatibility with static generation
-      if (isStatic && resolvedStrategy !== 'polling' && resolvedStrategy !== 'adapter') {
-        logger.warn(`Strategy "${resolvedStrategy}" requires a server but static generation detected. Falling back to polling.`)
-        resolvedStrategy = 'polling'
+      if (platform.platform === 'vercel') {
+        const nitro = nuxt.options.nitro as typeof nuxt.options.nitro & { vercel?: { skewProtection?: boolean } }
+        nitro.vercel ||= {}
+        nitro.vercel.skewProtection = false
+
+        if (platform.mode !== 'portable') {
+          nuxt.options.experimental.checkOutdatedBuildInterval = false
+          nuxt.options.runtimeConfig.skewProtection = {
+            ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object' && nuxt.options.runtimeConfig.skewProtection
+              ? nuxt.options.runtimeConfig.skewProtection
+              : {}),
+            vercelCookiePath: nuxt.options.app.baseURL,
+          }
+          addServerHandler({
+            handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
+            middleware: true,
+          })
+        }
       }
 
-      if (isVercel) {
+      if (platform.platform === 'netlify' && platform.mode !== 'portable') {
+        const netlifyConfig = createNetlifyNuxtSkewProtectionConfig({
+          appBaseURL: nuxt.options.app.baseURL,
+          buildAssetsDir: nuxt.options.app.buildAssetsDir,
+          skewBasePath: basePath,
+        })
+        if (netlifyConfig._tag === 'error')
+          throw new Error(`Invalid Netlify skew protection config: ${JSON.stringify(netlifyConfig.error)}`)
+
+        const configPath = resolve(nuxt.options.rootDir, NETLIFY_SKEW_PROTECTION_CONFIG_PATH)
+        await fs.mkdir(dirname(configPath), { recursive: true })
+        await fs.writeFile(configPath, serializeNetlifySkewProtectionConfig(netlifyConfig.value), 'utf8')
+        nuxt.options.runtimeConfig.skewProtection = {
+          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object' && nuxt.options.runtimeConfig.skewProtection
+            ? nuxt.options.runtimeConfig.skewProtection
+            : {}),
+          netlifyCookiePath: nuxt.options.app.baseURL,
+        }
         addServerHandler({
-          handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
+          handler: resolver.resolve('./runtime/server/middleware/netlify-skew'),
           middleware: true,
         })
       }
@@ -481,11 +567,6 @@ export {}
         })
       }
 
-      addPlugin({
-        src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
-        mode: 'client',
-      })
-
       // Multi-tab coordination and auto-reload handling
       if (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt')) {
         addPlugin({
@@ -494,22 +575,11 @@ export {}
         })
       }
 
-      // allow us to use the non-transpiled version of the service worker from the module or root dir
-      let swPath = resolver.resolve('./sw')
-      if (!existsSync(swPath)) {
-        // fallback to root dir
-        swPath = resolver.resolve('../sw')
-      }
-      // Add service worker as public asset
-      nuxt.options.nitro = nuxt.options.nitro || {}
-      nuxt.options.nitro.publicAssets = nuxt.options.nitro.publicAssets || []
-      nuxt.options.nitro.publicAssets.push({
-        dir: swPath,
-        maxAge: 0, // Service workers should not be cached
-      })
+      const shouldBundleAssets = options.bundleAssets !== false && platform.mode === 'portable'
+      const shouldTrackBuildMetadata = options.trackBuildMetadata !== false || shouldBundleAssets
 
-      // Add build hooks for asset versioning (skip if bundling is disabled)
-      if (options.storage && options.bundleAssets) {
+      // Build metadata and asset retention share storage, but remain independent capabilities.
+      if (options.storage && shouldTrackBuildMetadata) {
         nuxt.hook('nitro:init', (nitro) => {
           const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
           let assetManager: ReturnType<typeof createAssetManager>
@@ -520,7 +590,9 @@ export {}
             const publicDir = nitro.options.output.publicDir
 
             assetManager = createAssetManager({
-              ...options,
+              retentionDays: options.retentionDays,
+              maxNumberOfVersions: options.maxNumberOfVersions,
+              debug: options.debug,
               buildAssetsDir: nuxt.options.app.buildAssetsDir,
               driver: await resolveBuildTimeDriver(options.storage!),
             })
@@ -528,8 +600,11 @@ export {}
             // Get list of assets from build
             const assets = await assetManager.getAssetsFromBuild(publicDir)
 
-            // Update versions manifest
-            const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
+            // Persist the release before advertising or restoring it.
+            await assetManager.storeVersion(buildId, publicDir, assets, { bundleAssets: shouldBundleAssets })
+
+            // Expired releases must not be restored or advertised to clients.
+            await assetManager.cleanupExpiredVersions(buildId)
 
             // Get release info for logging
             const manifest = await assetManager.getManifest()
@@ -539,7 +614,7 @@ export {}
             const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
             const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
 
-            // Store assets in configured storage (can be slow with many assets)
+            // Describe configured storage for release logging.
             const storageInfo = options.storage!.base
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
@@ -547,25 +622,18 @@ export {}
               logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
             }
             else {
-              logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
+              logger.log(`${shouldBundleAssets ? 'Storing' : 'Tracking'} ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
             }
-
-            await assetManager.storeAssetsInStorage(buildId, publicDir, assets)
-              .catch((error: unknown) => {
-                logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
-                throw error
-              })
 
             // Count versions (excluding current)
             const existingVersions = await assetManager.listExistingVersions()
             const versionCount = existingVersions.filter(v => v.id !== buildId).length
 
-            logger.success(`Successfully stored ${assets.length} assets for latest release`)
+            logger.success(`Successfully ${shouldBundleAssets ? 'stored' : 'tracked'} ${assets.length} assets for latest release`)
 
             // For static/prerendered builds: restore old versioned assets into public directory
-            if (versionCount > 0) {
-              // Re-read manifest after storeAssetsInStorage to get post-deduplication counts
-              const updatedManifest = await assetManager.getManifest()
+            if (shouldBundleAssets && versionCount > 0) {
+              const updatedManifest = await assetManager.getManifest(buildId)
               let totalAssets = 0
               const versionSizes: string[] = []
 
@@ -579,7 +647,8 @@ export {}
               logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
             }
 
-            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
+            if (shouldBundleAssets)
+              await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets)
 
             // Augment Nuxt build metadata files with skew protection data
             // Pass serverDir so we can patch Nitro's static asset manifest
@@ -587,15 +656,18 @@ export {}
             await assetManager.augmentBuildMetadata(buildId, publicDir, serverDir)
           })
 
-          // Clean up expired versions on close
+          // Release storage resources on close.
           nitro.hooks.hook('close', async () => {
-            if (assetManager) {
-              await assetManager.cleanupExpiredVersions().catch((error) => {
-                logger.debug('Failed to clean up expired skew protection versions:', error)
-              })
+            if (assetManager)
               await assetManager.dispose()
-            }
           })
+        })
+      }
+
+      if (resolvedStrategy === 'polling' && platform.discoveryURL) {
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/check-updates-polling.client'),
+          mode: 'client',
         })
       }
 
@@ -613,35 +685,25 @@ export {}
           throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
         }
 
-        // Check for adapter dependencies at build time
-        if (adapter.name === 'pusher') {
-          if (!await tryResolveModule('pusher-js', nuxt.options.rootDir)) {
-            const msg = `The pusher adapter requires \`pusher-js\`. Install with: npx nypm add pusher-js`
-            if (!nuxt.options.dev && !nuxt.options._prepare) {
-              throw new Error(msg)
-            }
-            else {
-              logger.warn(msg)
-            }
+        for (const dependency of adapter.dependencies) {
+          if (await tryResolveModule(dependency, nuxt.options.rootDir))
+            continue
+
+          const msg = `The ${adapter.name} adapter requires \`${dependency}\`. Install with: npx nypm add ${dependency}`
+          if (!nuxt.options.dev && !nuxt.options._prepare) {
+            throw new Error(msg)
           }
-        }
-        else if (adapter.name === 'ably') {
-          if (!await tryResolveModule('ably', nuxt.options.rootDir)) {
-            const msg = `The ably adapter requires \`ably\`. Install with: npx nypm add ably`
-            if (!nuxt.options.dev && !nuxt.options._prepare) {
-              throw new Error(msg)
-            }
-            else {
-              logger.warn(msg)
-            }
-          }
+          logger.warn(msg)
         }
 
-        // Create template that imports from the actual adapter module (web build for client)
+        const adapterConfig = result.data
+        const publicAdapterConfig = adapter.toPublicConfig(adapterConfig)
+
+        // Only the explicitly public subscribe config is emitted into the client bundle.
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
-          getContents: () => `import { subscribe } from 'nuxt-skew-protection/adapters/${adapter.name}/web'
-export const config = ${JSON.stringify(adapter.config)}
+          getContents: () => `import { subscribe } from ${JSON.stringify(adapter.clientModule)}
+export const config = ${JSON.stringify(publicAdapterConfig)}
 export { subscribe }`,
         })
         nuxt.options.alias['#skew-adapter'] = template.dst
@@ -650,42 +712,12 @@ export { subscribe }`,
           src: resolver.resolve('./runtime/app/plugins/check-updates-adapter.client'),
           mode: 'client',
         })
-
-        // Broadcast version update after build completes (not dev/prepare)
-        if (!nuxt.options.dev && !nuxt.options._prepare) {
-          nuxt.hook('close', async () => {
-            const buildId = nuxt.options.runtimeConfig.app.buildId || nuxt.options.buildId
-            const channel = (adapter.config as { channel?: string }).channel || 'skew-protection'
-            logger.log(`Broadcasting update ${colors.cyan(buildId.slice(0, 8))} via ${colors.green(adapter.name)} (channel: ${colors.gray(channel)})`)
-
-            let broadcastFn: BroadcastFn<any>
-            switch (adapter.name) {
-              case 'pusher': {
-                const { broadcast } = await import('./runtime/adapters/pusher/node')
-                broadcastFn = broadcast
-                break
-              }
-              case 'ably': {
-                const { broadcast } = await import('./runtime/adapters/ably/node')
-                broadcastFn = broadcast
-                break
-              }
-              default:
-                logger.warn(`No broadcast implementation for adapter: ${adapter.name}`)
-                return
-            }
-
-            await broadcastFn(adapter.config, buildId)
-              .then(() => logger.success(`Broadcast complete`))
-              .catch((err: Error) => logger.error(`Broadcast failed: ${err.message}`))
-          })
-        }
       }
       else if (resolvedStrategy === 'ws') {
         if (!nuxt.options.nitro?.experimental?.websocket) {
           logger.warn('You need to enable `experimental.websocket` in your Nitro config to use WebSockets. Falling back to polling.')
         }
-        else if (isCloudflareRuntime && nitroPreset !== 'cloudflare-durable') {
+        else if (platform.platform === 'cloudflare' && nitroPreset !== 'cloudflare-durable') {
           logger.warn('Websockets are only supported in Cloudflare using `cloudflare-durable` preset. Falling back to polling.')
         }
         else {
@@ -697,36 +729,31 @@ export { subscribe }`,
         }
       }
       else if (resolvedStrategy === 'sse') {
-        if (isCloudflareRuntime) {
-          logger.warn('SSE not supported on Cloudflare Workers (no persistent connections). Falling back to polling.')
-        }
-        else {
+        addServerHandler({
+          route: `${basePath}/sse`,
+          handler: resolver.resolve('./runtime/server/routes/__skew/sse'),
+        })
+        // SSE is unidirectional so we need POST endpoints
+        if (options.connectionTracking) {
+          // Stats subscription endpoint
           addServerHandler({
-            route: `${basePath}/sse`,
-            handler: resolver.resolve('./runtime/server/routes/__skew/sse'),
+            route: `${basePath}/subscribe-stats`,
+            method: 'post',
+            handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
           })
-          // SSE is unidirectional so we need POST endpoints
-          if (options.connectionTracking) {
-            // Stats subscription endpoint
+          // Route update endpoint
+          if (options.routeTracking) {
             addServerHandler({
-              route: `${basePath}/subscribe-stats`,
+              route: `${basePath}/route`,
               method: 'post',
-              handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
+              handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
             })
-            // Route update endpoint
-            if (options.routeTracking) {
-              addServerHandler({
-                route: `${basePath}/route`,
-                method: 'post',
-                handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
-              })
-            }
           }
-          addPlugin({
-            src: resolver.resolve('./runtime/app/plugins/check-updates-sse.client'),
-            mode: 'client',
-          })
         }
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/check-updates-sse.client'),
+          mode: 'client',
+        })
       }
     }
   },

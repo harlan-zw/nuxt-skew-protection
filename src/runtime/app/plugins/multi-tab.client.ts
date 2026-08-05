@@ -1,13 +1,11 @@
+import type { NuxtAppManifestMeta } from 'nuxt/app'
+import { useBroadcastChannel, useDocumentVisibility, useIdle } from '@vueuse/core'
 import { defineNuxtPlugin, reloadNuxtApp, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { ref, watch } from 'vue'
 import { logger } from '../../shared/logger'
 
 const CHANNEL_NAME = 'nuxt-skew-protection'
 
-/**
- * Multi-tab coordination via BroadcastChannel.
- * When one tab detects a version update, all tabs are notified.
- * Also handles auto-reload strategies (immediate, idle).
- */
 export default defineNuxtPlugin({
   name: 'skew-protection:multi-tab',
   setup() {
@@ -16,78 +14,64 @@ export default defineNuxtPlugin({
 
     const nuxtApp = useNuxtApp()
     const config = useRuntimeConfig().public.skewProtection as {
+      basePath?: string
       multiTab?: boolean
       reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
     }
-
     const reloadStrategy = config.reloadStrategy ?? 'prompt'
 
-    // Auto-reload handler for 'immediate' and 'idle' strategies
-    if (reloadStrategy === 'immediate' || reloadStrategy === 'idle') {
-      nuxtApp.hooks.hook('skew:chunks-outdated', () => {
-        if (reloadStrategy === 'immediate') {
-          logger.debug('[AutoReload] Chunks outdated, reloading immediately')
-          reloadNuxtApp({ force: true, persistState: true })
-        }
-        else if (reloadStrategy === 'idle') {
-          logger.debug('[AutoReload] Chunks outdated, waiting for idle')
-          const reload = () => {
-            // Only reload if page is hidden (user switched tab) or idle
-            if (document.hidden) {
-              reloadNuxtApp({ force: true, persistState: true })
-            }
-            else {
-              // Wait for page to become hidden, then reload
-              const onVisibilityChange = () => {
-                if (document.hidden) {
-                  document.removeEventListener('visibilitychange', onVisibilityChange)
-                  reloadNuxtApp({ force: true, persistState: true })
-                }
-              }
-              document.addEventListener('visibilitychange', onVisibilityChange)
-            }
-          }
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(reload, { timeout: 10000 })
-          }
-          else {
-            setTimeout(reload, 5000)
-          }
-        }
+    if (reloadStrategy === 'immediate') {
+      nuxtApp.hooks.hook('app:manifest:update', () => {
+        logger.debug('[AutoReload] New deployment available, reloading immediately')
+        return reloadNuxtApp({ force: true })
+      })
+    }
+    else if (reloadStrategy === 'idle') {
+      const pendingUpdate = ref(false)
+      const { idle } = useIdle(5000)
+      const visibility = useDocumentVisibility()
+      const reloadWhenSafe = () => {
+        if (!pendingUpdate.value || (!idle.value && visibility.value !== 'hidden'))
+          return
+        pendingUpdate.value = false
+        logger.debug('[AutoReload] New deployment available, reloading while idle')
+        return reloadNuxtApp({ force: true })
+      }
+
+      watch([idle, visibility], reloadWhenSafe)
+      nuxtApp.hooks.hook('app:manifest:update', () => {
+        pendingUpdate.value = true
+        return reloadWhenSafe()
       })
     }
 
-    // Multi-tab coordination via BroadcastChannel
-    if (config.multiTab === false || typeof BroadcastChannel === 'undefined')
+    if (config.multiTab === false)
       return
 
-    const channel = new BroadcastChannel(CHANNEL_NAME)
+    const receivedIds = new Set<string>()
+    const channelName = `${CHANNEL_NAME}:${config.basePath || '/__skew'}`
+    const { data, post, close, isSupported } = useBroadcastChannel<NuxtAppManifestMeta | undefined, NuxtAppManifestMeta>({ name: channelName })
 
-    // Guard to prevent re-broadcasting messages received from other tabs
-    let receivedFromChannel = false
+    if (!isSupported.value)
+      return
 
-    // When this tab detects an update, broadcast to other tabs
     nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
-      if (receivedFromChannel) {
-        receivedFromChannel = false
+      if (!manifest?.id)
         return
-      }
-      logger.debug('[MultiTab] Broadcasting version update to other tabs')
-      channel.postMessage({ type: 'version-update', id: manifest?.id, timestamp: manifest?.timestamp })
+      if (receivedIds.delete(manifest.id))
+        return
+      logger.debug('[MultiTab] Broadcasting deployment update to sibling tabs')
+      post(manifest)
     })
 
-    // When another tab broadcasts an update, trigger hooks locally
-    channel.onmessage = (event) => {
-      if (event.data?.type === 'version-update' && event.data.id) {
-        logger.debug('[MultiTab] Received version update from another tab')
-        receivedFromChannel = true
-        nuxtApp.hooks.callHook('app:manifest:update', event.data)
-      }
-    }
-
-    // Cleanup on app error
-    nuxtApp.hook('app:error', () => {
-      channel.close()
+    watch(data, (manifest) => {
+      if (!manifest?.id)
+        return
+      logger.debug('[MultiTab] Received deployment update from a sibling tab')
+      receivedIds.add(manifest.id)
+      void nuxtApp.hooks.callHook('app:manifest:update', manifest)
     })
+
+    nuxtApp.hook('app:error', close)
   },
 })

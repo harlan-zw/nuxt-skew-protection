@@ -29,8 +29,8 @@ function showToast(reload, dismiss) {
 </script>
 
 <template>
-  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
-    <template v-if="isCurrentChunksOutdated">
+  <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
+    <template v-if="isAppOutdated">
       {{ showToast(reload, dismiss) }}
     </template>
   </SkewNotification>

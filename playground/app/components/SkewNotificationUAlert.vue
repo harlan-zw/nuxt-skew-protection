@@ -1,12 +1,12 @@
 <template>
-  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
+  <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
     <Transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 translate-y-2"
       leave-active-class="transition duration-200 ease-in"
       leave-to-class="opacity-0 translate-y-2"
     >
-      <div v-if="isCurrentChunksOutdated" class="fixed bottom-4 right-4 z-50 max-w-sm">
+      <div v-if="isAppOutdated" class="fixed bottom-4 right-4 z-50 max-w-sm">
         <UAlert
           color="primary"
           variant="soft"

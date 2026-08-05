@@ -1,132 +1,112 @@
-import type { NuxtAppManifestMeta } from 'nuxt/app'
-import type { ChunksOutdatedPayload } from '../../types'
-import { useOnline } from '@vueuse/core'
-import { useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
-import { computed, onMounted, onUnmounted } from 'vue'
+import type { NuxtApp, NuxtAppManifestMeta } from 'nuxt/app'
+import { tryOnScopeDispose, useOnline } from '@vueuse/core'
+import { onNuxtReady, useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
+import { computed } from 'vue'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { logger } from '../../shared/logger'
 import { createBackoffQueue } from '../utils/backoff-queue'
 
-export interface UseSkewProtectionOptions {
-  /**
-   * Lazy connection mode: don't auto-connect on mount.
-   * When false (default), connections are established automatically on mount.
-   * When true, users must call connect() manually.
-   * @default false
-   */
-  lazy?: boolean
+type SkewProtectionEngine = ReturnType<typeof createSkewProtectionEngine>
+type SkewProtectionNuxtApp = NuxtApp & { _skewProtection?: SkewProtectionEngine }
+
+function parseManifest(value: unknown): NuxtAppManifestMeta | null {
+  if (!value || typeof value !== 'object' || !('id' in value) || typeof value.id !== 'string')
+    return null
+  return value as NuxtAppManifestMeta
 }
 
-export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
-  const { lazy = false } = options
-  const nuxtApp = useNuxtApp()
-  const clientVersion = nuxtApp.$skewConnection?.buildId || nuxtApp.$skewConnection?.cookie?.value || useRuntimeConfig().app.buildId
+function createSkewProtectionEngine(nuxtApp: NuxtApp) {
+  const connection = () => nuxtApp.$skewConnection
+  const runtimeConfig = useRuntimeConfig()
+  const clientVersion = connection()?.buildId || connection()?.cookie?.value || runtimeConfig.app.buildId
+  const manifestURL = runtimeConfig.public.skewProtection.discoveryURL || buildAssetsURL('builds/latest.json')
   const isConnected = useState('skew-connected', () => false)
   const serverVersion = useState<string | undefined>('skew-server-version', () => undefined)
   const manifest = useState<NuxtAppManifestMeta | undefined>('skew-manifest', () => undefined)
+  const isOnline = useOnline()
 
-  // Track versions we've already detected/processed to avoid
-  // re-triggering on SSE/WS reconnection or repeated backoff ticks
   let lastDetectedServerVersion: string | undefined
   let lastProcessedManifestId: string | undefined
 
   async function checkForUpdates() {
-    // Don't check for updates when offline
-    if (import.meta.client && !useOnline().value)
+    if (runtimeConfig.public.skewProtection.updatesEnabled === false)
+      return
+    if (import.meta.client && !isOnline.value)
       return
 
-    const meta = await ($fetch(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`) as Promise<NuxtAppManifestMeta>).catch(() => {
-      // A deployment may not have propagated the manifest yet; the backoff queue retries.
-      return null
-    })
-    if (meta && meta.id !== clientVersion && meta.id !== lastProcessedManifestId) {
-      lastProcessedManifestId = meta.id
-      queue.clear()
-      await nuxtApp.hooks.callHook('app:manifest:update', meta)
+    const response = await $fetch(`${manifestURL}${manifestURL.includes('?') ? '&' : '?'}${Date.now()}`)
+      .catch((error: unknown) => {
+        logger.debug('[SkewProtection] Latest manifest is not available yet; retrying.', error)
+        return null
+      })
+    const meta = parseManifest(response)
+    if (!meta) {
+      if (response !== null)
+        logger.debug('[SkewProtection] Ignoring an invalid latest manifest; retrying.')
+      return
     }
+    if (meta.id === clientVersion || meta.id === lastProcessedManifestId)
+      return
+
+    lastProcessedManifestId = meta.id
+    queue.clear()
+    await nuxtApp.hooks.callHook('app:manifest:update', meta)
   }
 
   const queue = createBackoffQueue({
     delays: [0, 5000, 30000, 300000],
+    repeatLast: true,
     onTick: () => nuxtApp.runWithContext(checkForUpdates),
   })
 
-  // Auto-connect on mount unless lazy
-  if (!lazy) {
-    onMounted(() => {
-      nuxtApp.$skewConnection?.connect()
-    })
-  }
-
-  // Listen for version updates from connection
-  nuxtApp.hooks.hook('skew:message', (msg) => {
-    if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
-      return
-    if (msg.version) {
-      serverVersion.value = msg.version as string
-    }
-    if (!msg.version || msg.version === clientVersion)
-      return
-
-    // Skip if we've already started checking for this server version
-    // (e.g., SSE/WS reconnection resends the same CONNECTED message)
-    if (msg.version === lastDetectedServerVersion)
-      return
-
-    lastDetectedServerVersion = msg.version as string
-    logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
-    queue.start()
-  })
-
   function connect() {
-    if (!import.meta.client || isConnected.value)
+    if (isConnected.value || !connection())
       return
+    connection()!.connect()
     isConnected.value = true
-    nuxtApp.$skewConnection?.connect()
   }
 
   function disconnect() {
-    if (!import.meta.client || !isConnected.value)
+    if (!isConnected.value)
       return
-    isConnected.value = false
     queue.clear()
-    nuxtApp.$skewConnection?.disconnect()
+    connection()?.disconnect()
+    isConnected.value = false
   }
 
-  /**
-   * Register a callback for when chunks become outdated.
-   * Returns an unsubscribe function.
-   */
-  function onCurrentChunksOutdated(callback: (payload: ChunksOutdatedPayload) => void | Promise<void>) {
-    const hook = nuxtApp.hooks.hook('skew:chunks-outdated', callback)
+  onNuxtReady(connect)
 
-    onUnmounted(() => {
-      if (typeof hook === 'function') {
-        hook()
-      }
-    })
+  nuxtApp.hooks.hook('app:manifest:update', (nextManifest) => {
+    if (!nextManifest || nextManifest.id === clientVersion)
+      return
+    manifest.value = nextManifest
+    lastProcessedManifestId = nextManifest.id
+    queue.clear()
+  })
 
-    return hook
+  nuxtApp.hooks.hook('skew:message', (message) => {
+    if (message.type !== SKEW_MESSAGE_TYPE.VERSION && message.type !== SKEW_MESSAGE_TYPE.CONNECTED)
+      return
+    if (typeof message.version === 'string')
+      serverVersion.value = message.version
+    if (typeof message.version !== 'string' || message.version === clientVersion)
+      return
+    if (message.version === lastDetectedServerVersion)
+      return
+
+    lastDetectedServerVersion = message.version
+    logger.debug(`[SkewProtection] Version mismatch (${message.version} !== ${clientVersion}), checking for the deployed manifest`)
+    queue.start()
+  })
+
+  function onAppOutdated(callback: (nextManifest?: NuxtAppManifestMeta) => void | Promise<void>) {
+    const remove = nuxtApp.hooks.hook('app:manifest:update', callback)
+    tryOnScopeDispose(remove)
+    return remove
   }
 
-  function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
-    const hook = nuxtApp.hooks.hook('app:manifest:update', (_manifest) => {
-      manifest.value = _manifest
-      callback(_manifest)
-    })
-
-    onUnmounted(() => {
-      if (typeof hook === 'function') {
-        hook()
-      }
-    })
-
-    return hook
-  }
-
-  // Rollback: server version is older than client version (based on manifest timestamps)
   const isRollback = computed(() => {
     if (!manifest.value?.skewProtection?.versions || !serverVersion.value)
       return false
@@ -140,47 +120,33 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     return new Date(serverTs).getTime() < new Date(clientTs).getTime()
   })
 
-  const isAppOutdated = computed(() => !!(manifest.value && clientVersion !== manifest.value.id))
-
-  const result = {
+  return {
     manifest,
     clientVersion,
     serverVersion: computed(() => serverVersion.value),
     isConnected: computed(() => isConnected.value),
-    isOnline: useOnline(),
-    isAppOutdated,
+    isOnline,
+    isAppOutdated: computed(() => !!(manifest.value && clientVersion !== manifest.value.id)),
     isRollback,
     connect,
     disconnect,
-    onCurrentChunksOutdated,
     onAppOutdated,
     checkForUpdates,
     async simulateUpdate() {
-      if (!import.meta.dev) {
+      if (!import.meta.dev)
         return
-      }
-      await nuxtApp.hooks.callHook('skew:chunks-outdated', {
-        deletedChunks: [],
-        invalidatedModules: [],
-        passedReleases: [],
+      await nuxtApp.hooks.callHook('app:manifest:update', {
+        id: `simulated-${Date.now()}`,
+        timestamp: Date.now(),
       })
     },
   }
+}
 
-  // v1 migration: deprecated `isOutdated` alias
-  if (import.meta.dev) {
-    let warned = false
-    Object.defineProperty(result, 'isOutdated', {
-      get() {
-        if (!warned) {
-          console.warn('[nuxt-skew-protection] `isOutdated` is deprecated, use `isAppOutdated` instead. See https://nuxtseo.com/docs/skew-protection/releases/v1')
-          warned = true
-        }
-        return isAppOutdated
-      },
-      enumerable: false,
-    })
-  }
-
-  return result
+// Reactive state is created once inside createSkewProtectionEngine.
+// eslint-disable-next-line harlanzw/vue-no-faux-composables
+export function useSkewProtection() {
+  const nuxtApp = useNuxtApp() as SkewProtectionNuxtApp
+  nuxtApp._skewProtection ||= createSkewProtectionEngine(nuxtApp)
+  return nuxtApp._skewProtection
 }

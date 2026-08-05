@@ -17,7 +17,6 @@ export interface VersionInfo {
   timestamp: string
   expires: string
   assets: string[]
-  deletedChunks?: string[]
 }
 
 export interface SkewProtectionManifest {

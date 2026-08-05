@@ -1,103 +1,131 @@
 import type { Driver } from 'unstorage'
 import type { ModuleOptions } from '../module'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { useNuxt } from '@nuxt/kit'
 import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
 
-const RE_KV_SKEW_PROTECTION = /\[\[kv_namespaces\]\][^[]*?binding\s*=\s*"SKEW_PROTECTION"[^[]*?id\s*=\s*"([^"]+)"/
-const RE_KV_NAMESPACE = /\[\[kv_namespaces\]\][^[]*?id\s*=\s*"([^"]+)"/
+export interface WranglerKVNamespace {
+  binding: string
+  id: string
+}
 
-/**
- * Detect Cloudflare KV namespace from nitro config or wrangler.toml
- */
-async function detectCloudflareKVNamespace(): Promise<string | null> {
-  const nuxt = useNuxt()
+function parseWranglerKVNamespaces(value: unknown, source: string): WranglerKVNamespace[] {
+  if (value === undefined)
+    return []
+  if (!Array.isArray(value))
+    throw new TypeError(`[nuxt-skew-protection] ${source} has an invalid kv_namespaces value.`)
 
-  // Check nitro config first
-  const kvNamespaces = nuxt.options.nitro?.cloudflare?.wrangler?.kv_namespaces
-  if (kvNamespaces?.length) {
-    // Prefer SKEW_PROTECTION binding if it exists
-    const skewNamespace = kvNamespaces.find(ns => ns?.binding === 'SKEW_PROTECTION')
-    if (skewNamespace?.id) {
-      return skewNamespace.id
-    }
-    // Otherwise use the first namespace
-    if (kvNamespaces[0]?.id) {
-      return kvNamespaces[0].id
-    }
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object')
+      throw new TypeError(`[nuxt-skew-protection] ${source} has an invalid kv_namespaces entry at index ${index}.`)
+
+    const binding = 'binding' in entry ? entry.binding : undefined
+    const id = 'id' in entry ? entry.id : undefined
+    if (typeof binding !== 'string' || typeof id !== 'string')
+      throw new TypeError(`[nuxt-skew-protection] ${source} requires string binding and id values for kv_namespaces entry ${index}.`)
+
+    return { binding, id }
+  })
+}
+
+export function selectCloudflareKVNamespace(
+  namespaces: readonly WranglerKVNamespace[],
+  binding: string,
+): string | null {
+  if (namespaces.length === 0)
+    return null
+
+  const matches = namespaces.filter(namespace => namespace.binding === binding)
+  if (matches.length === 0) {
+    const available = namespaces.map(namespace => namespace.binding).join(', ')
+    throw new Error(`[nuxt-skew-protection] Cloudflare KV binding ${binding} was not found. Available bindings: ${available}.`)
   }
+  if (matches.length > 1)
+    throw new Error(`[nuxt-skew-protection] Found multiple Cloudflare KV bindings named ${binding}.`)
+
+  const match = matches[0]
+  if (!match)
+    throw new Error(`[nuxt-skew-protection] Unable to select Cloudflare KV binding ${binding}.`)
+  return match.id
+}
+
+export async function readWranglerKVNamespaces(path: string): Promise<WranglerKVNamespace[]> {
+  // Wrangler is platform-specific and intentionally loaded only for Cloudflare KV builds.
+  const wranglerModule = 'wrangler'
+  const { unstable_readConfig } = await import(wranglerModule)
+  const config = unstable_readConfig({ config: path }, { hideWarnings: true })
+  return parseWranglerKVNamespaces(config.kv_namespaces, path)
+}
+
+/** Detect a named Cloudflare KV binding from Nitro or Wrangler configuration. */
+async function detectCloudflareKVNamespace(binding: string): Promise<string | null> {
+  const nuxt = useNuxt()
+  const nitroNamespaces = parseWranglerKVNamespaces(
+    nuxt.options.nitro?.cloudflare?.wrangler?.kv_namespaces,
+    'nitro.cloudflare.wrangler.kv_namespaces',
+  )
+  const nitroNamespaceId = selectCloudflareKVNamespace(nitroNamespaces, binding)
+  if (nitroNamespaceId)
+    return nitroNamespaceId
 
   const rootDir = nuxt.options.rootDir || process.cwd()
+  const configNames = ['wrangler.json', 'wrangler.jsonc', 'wrangler.toml']
+  const configDirectories = [rootDir, join(rootDir, 'app')]
 
-  // Check multiple possible locations for wrangler.toml
-  // Priority: root > app subdirectory
-  const possiblePaths = [
-    join(rootDir, 'wrangler.toml'),
-    join(rootDir, 'app', 'wrangler.toml'),
-  ]
+  for (const directory of configDirectories) {
+    for (const configName of configNames) {
+      const path = join(directory, configName)
+      if (!existsSync(path))
+        continue
 
-  for (const wranglerPath of possiblePaths) {
-    if (!existsSync(wranglerPath)) {
-      continue
-    }
-
-    try {
-      const content = readFileSync(wranglerPath, 'utf-8')
-
-      // Look for SKEW_PROTECTION binding first
-      const skewMatch = content.match(RE_KV_SKEW_PROTECTION)
-      if (skewMatch?.[1]) {
-        return skewMatch[1]
-      }
-
-      // Otherwise use first kv_namespace
-      const kvNamespaceMatch = content.match(RE_KV_NAMESPACE)
-      if (kvNamespaceMatch?.[1]) {
-        return kvNamespaceMatch[1]
-      }
-    }
-    catch {
-      // Continue to next path
+      const namespaces = await readWranglerKVNamespaces(path)
+      const namespaceId = selectCloudflareKVNamespace(namespaces, binding)
+      if (namespaceId)
+        return namespaceId
     }
   }
 
   return null
 }
 
-/**
- * Resolves build-time equivalent driver for storage configurations that use native bindings.
- * Returns null if the driver doesn't need a build-time equivalent (e.g., fs driver).
- *
- * This function maps runtime storage drivers (which use native platform bindings)
- * to their CLI-based equivalents for build-time operations.
- */
+/** Resolve a CLI-capable build-time equivalent for a runtime storage driver. */
 export async function resolveBuildTimeDriver(
   storage: Required<ModuleOptions>['storage'],
 ): Promise<Driver> {
-  const { driver, base, ...driverOptions } = storage
-  switch (driver) {
-    case 'cloudflare-kv-binding': {
-      let namespaceId = storage.namespaceId
-      // Auto-detect namespace from wrangler.toml if not provided
-      if (!namespaceId) {
-        namespaceId = await detectCloudflareKVNamespace()
-      }
+  const {
+    driver,
+    base,
+    binding: configuredBinding,
+    namespaceId: configuredNamespaceId,
+    ...driverOptions
+  } = storage
 
-      // Use a simple prefix for KV keys to avoid polluting shared namespaces
-      // Don't use filesystem paths as prefixes - those are for fs driver only
-      const kvBase = base?.includes('/') ? 'skew-protection:' : (base || 'skew-protection:')
+  if (driver === 'cloudflare-kv-binding') {
+    const binding = typeof configuredBinding === 'string' ? configuredBinding : 'SKEW_PROTECTION'
+    const namespaceId = typeof configuredNamespaceId === 'string'
+      ? configuredNamespaceId
+      : await detectCloudflareKVNamespace(binding)
 
-      return cloudflareKVWranglerDriver({
-        namespaceId,
-        base: kvBase,
-        ...driverOptions,
-      })
+    if (!namespaceId) {
+      throw new Error(
+        `[nuxt-skew-protection] Unable to resolve Cloudflare KV binding ${binding}. `
+        + 'Configure storage.namespaceId or add the binding to wrangler.jsonc.',
+      )
     }
+
+    const kvBase = typeof base === 'string' && !base.includes('/')
+      ? base
+      : 'skew-protection:'
+
+    return cloudflareKVWranglerDriver({
+      ...driverOptions,
+      namespaceId,
+      base: kvBase,
+    })
   }
-  // For other drivers (fs, redis, etc.), keep the base prefix
-  // need to do an dynamic import for the driver to avoid loading native bindings
-  const lazyDriver = await import(`unstorage/drivers/${storage.driver}`)
-    .then(m => m.default)
+
+  const lazyDriver = await import(`unstorage/drivers/${driver}`)
+    .then(module => module.default)
   return lazyDriver({ base, ...driverOptions })
 }

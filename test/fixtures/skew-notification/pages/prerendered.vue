@@ -10,9 +10,9 @@ const version = ref('v1')
       Prerendered {{ version }}
     </h1>
 
-    <SkewNotification v-slot="{ isCurrentChunksOutdated, isAppOutdated, isPrerendered, reload, dismiss, timeAgo }">
+    <SkewNotification v-slot="{ isAppOutdated, reload, dismiss, timeAgo }">
       <div
-        v-if="isCurrentChunksOutdated || isAppOutdated"
+        v-if="isAppOutdated"
         data-testid="skew-notification"
         class="notification"
       >
@@ -26,7 +26,6 @@ const version = ref('v1')
           Dismiss
         </button>
       </div>
-      <div data-testid="prerender-status" :data-prerendered="isPrerendered" />
     </SkewNotification>
   </div>
 </template>

@@ -1,6 +1,7 @@
 export interface BackoffQueueOptions {
   delays: number[]
-  onTick: (index: number) => void
+  repeatLast?: boolean
+  onTick: (index: number) => void | Promise<void>
 }
 
 export interface BackoffQueue {
@@ -11,21 +12,46 @@ export interface BackoffQueue {
 
 export function createBackoffQueue(options: BackoffQueueOptions): BackoffQueue {
   const { delays, onTick } = options
-  let timers: ReturnType<typeof setTimeout>[] = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let running = false
+  let generation = 0
 
   const clear = () => {
-    timers.forEach(clearTimeout)
-    timers = []
+    generation++
+    running = false
+    clearTimeout(timer)
+    timer = undefined
   }
 
   const start = () => {
     clear()
-    delays.forEach((delay, i) => {
-      timers.push(setTimeout(onTick, delay, i))
-    })
+    if (delays.length === 0)
+      return
+
+    running = true
+    const currentGeneration = generation
+    const schedule = (index: number, delay: number) => {
+      timer = setTimeout(async () => {
+        await onTick(index)
+        if (!running || currentGeneration !== generation)
+          return
+        const hasNext = index < delays.length - 1
+        if (hasNext) {
+          const nextDelay = delays[index + 1]! - delays[index]!
+          schedule(index + 1, nextDelay)
+        }
+        else if (options.repeatLast) {
+          schedule(index + 1, delays[delays.length - 1]!)
+        }
+        else {
+          running = false
+        }
+      }, delay)
+    }
+    schedule(0, delays[0]!)
   }
 
-  const isRunning = () => timers.length > 0
+  const isRunning = () => running
 
   return { start, clear, isRunning }
 }

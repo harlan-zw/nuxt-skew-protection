@@ -15,9 +15,9 @@ const IGNORE_DIRS = new Set(['node_modules', '.nuxt', '.output', 'dist', '.git']
 
 const replacements = [
   {
-    name: 'hook: skew-protection:chunks-outdated -> skew:chunks-outdated',
-    pattern: /skew-protection:chunks-outdated/g,
-    replacement: 'skew:chunks-outdated',
+    name: 'chunk hook -> app:manifest:update',
+    pattern: /(?:skew-protection|skew):chunks-outdated/g,
+    replacement: 'app:manifest:update',
   },
   {
     name: 'composable: isOutdated -> isAppOutdated',

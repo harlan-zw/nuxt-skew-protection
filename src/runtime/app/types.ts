@@ -16,12 +16,6 @@ export interface SkewAdapterConfig {
   adapterConfig: Record<string, unknown>
 }
 
-export interface ChunksOutdatedPayload {
-  deletedChunks: string[]
-  invalidatedModules: string[]
-  passedReleases: string[]
-}
-
 export interface SkewConnection {
   connect: () => void
   disconnect: () => void
@@ -29,5 +23,5 @@ export interface SkewConnection {
   sendRoute: (route: string) => void
   subscribeStats: () => void
   buildId: string
-  cookie: Ref<string | null | undefined>
+  cookie?: Ref<string | null | undefined>
 }
