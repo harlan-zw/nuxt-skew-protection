@@ -28,6 +28,24 @@ vi.mock('ably', () => ({
 
 // Mock window for browser-side adapter tests
 const mockWindow = {} as any
+function createLargeUpdate(size: number) {
+  return {
+    version: 'test-version-123',
+    manifest: {
+      id: 'test-version-123',
+      timestamp: 123,
+      skewProtection: {
+        versions: {
+          'test-version-123': {
+            timestamp: '2026-08-05T00:00:00.000Z',
+            deletedChunks: [`/_nuxt/${'x'.repeat(size)}.js`],
+          },
+        },
+      },
+    },
+  }
+}
+
 beforeEach(() => {
   ;(globalThis as any).window = mockWindow
   mockPublish.mockReset()
@@ -132,11 +150,30 @@ describe('adapters', () => {
         manifest: { id: 'test-version-123', timestamp: 123 },
       }
 
-      await broadcast(config, update)
+      const result = await broadcast(config, update)
 
       const request = mockFetch.mock.calls[0]?.[1] as RequestInit
       const body = JSON.parse(request.body as string)
       expect(JSON.parse(body.data)).toEqual(update)
+      expect(result._tag).toBe('complete')
+    })
+
+    it('falls back to notification metadata below Pusher event limits', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true })
+      vi.stubGlobal('fetch', mockFetch)
+      const { broadcast } = await import('../../src/runtime/adapters/pusher/node')
+
+      const result = await broadcast(config, createLargeUpdate(12_000))
+
+      const request = mockFetch.mock.calls[0]?.[1] as RequestInit
+      const body = JSON.parse(request.body as string)
+      const published = JSON.parse(body.data)
+      expect(result._tag).toBe('notification-only')
+      expect(published).toEqual({
+        version: 'test-version-123',
+        manifest: { id: 'test-version-123', timestamp: 123 },
+      })
+      expect(new TextEncoder().encode(body.data).byteLength).toBeLessThan(10_000)
     })
   })
 
@@ -163,9 +200,22 @@ describe('adapters', () => {
         version: 'test-version-123',
         manifest: { id: 'test-version-123', timestamp: 123 },
       }
-      await ablyBroadcast(config, update)
+      const result = await ablyBroadcast(config, update)
 
       expect(mockPublish).toHaveBeenCalledWith('version', update)
+      expect(result._tag).toBe('complete')
+    })
+
+    it('falls back to notification metadata below Ably message limits', async () => {
+      const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
+
+      const result = await ablyBroadcast(config, createLargeUpdate(70_000))
+
+      expect(result._tag).toBe('notification-only')
+      expect(mockPublish).toHaveBeenCalledWith('version', {
+        version: 'test-version-123',
+        manifest: { id: 'test-version-123', timestamp: 123 },
+      })
     })
 
     it('broadcast should throw on SDK error', async () => {

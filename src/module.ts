@@ -712,7 +712,12 @@ export { subscribe }`,
               manifest: buildManifest || { id: buildId, timestamp: Date.now() },
             }
             await broadcastFn(adapter.config, update)
-              .then(() => logger.success(`Broadcast complete`))
+              .then((result) => {
+                if (result._tag === 'notification-only') {
+                  logger.warn(`Build manifest exceeds the ${result.maxBytes}-byte ${adapter.name} payload limit. Sent a notification-only update.`)
+                }
+                logger.success(`Broadcast complete`)
+              })
               .catch((err: Error) => logger.error(`Broadcast failed: ${err.message}`))
           })
         }

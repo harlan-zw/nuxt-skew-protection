@@ -1,16 +1,18 @@
 import type { PusherAdapterConfig } from './types'
 import { createHash, createHmac } from 'node:crypto'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
+import { prepareSkewUpdate } from '../payload'
 import { defineNodeBroadcast } from '../types'
 
 export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config, update) => {
   const channelName = config.channel || SKEW_DEFAULT_CHANNEL
   const eventName = config.event || SKEW_MESSAGE_TYPE.VERSION
+  const prepared = prepareSkewUpdate('pusher', update)
 
   const body = JSON.stringify({
     name: eventName,
     channel: channelName,
-    data: JSON.stringify(update),
+    data: JSON.stringify(prepared.update),
   })
 
   const timestamp = Math.floor(Date.now() / 1000)
@@ -29,4 +31,6 @@ export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config,
   if (!response.ok) {
     throw new Error(`Pusher broadcast failed: ${response.status} ${await response.text()}`)
   }
+
+  return prepared.result
 })

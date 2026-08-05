@@ -6,6 +6,19 @@ export interface SkewUpdateMessage {
   manifest: NuxtAppManifestMeta
 }
 
+export type SkewBroadcastResult
+  = | {
+    _tag: 'complete'
+    byteLength: number
+    maxBytes: number
+  }
+  | {
+    _tag: 'notification-only'
+    originalByteLength: number
+    byteLength: number
+    maxBytes: number
+  }
+
 export interface SkewAdapter<TConfig = unknown> {
   name: string
   config: TConfig
@@ -21,7 +34,7 @@ export interface DefineAdapterOptions<T> {
   schema: z.ZodType<T>
 }
 
-export type BroadcastFn<T> = (config: T, update: SkewUpdateMessage) => Promise<void>
+export type BroadcastFn<T> = (config: T, update: SkewUpdateMessage) => Promise<SkewBroadcastResult>
 
 export type SubscribeFn<T> = (config: T, onMessage: (msg: SkewUpdateMessage) => void) => () => void
 
