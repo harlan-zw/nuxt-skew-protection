@@ -1,7 +1,7 @@
 <template>
-  <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
+  <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
     <Transition name="slide-up">
-      <div v-if="isCurrentChunksOutdated" class="skew-native">
+      <div v-if="isAppOutdated" class="skew-native">
         <span class="skew-native-icon">✨</span>
         <span class="skew-native-text">Update available</span>
         <button class="skew-native-btn skew-native-btn-primary" @click="reload">

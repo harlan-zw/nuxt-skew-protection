@@ -10,9 +10,9 @@ const version = ref('v1')
       App {{ version }}
     </h1>
 
-    <SkewNotification v-slot="{ isCurrentChunksOutdated, isAppOutdated, reload, dismiss, timeAgo }">
+    <SkewNotification v-slot="{ isAppOutdated, reload, dismiss, timeAgo }">
       <div
-        v-if="isCurrentChunksOutdated || isAppOutdated"
+        v-if="isAppOutdated"
         data-testid="skew-notification"
         class="notification"
       >

@@ -1,26 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { publishSkewUpdate } from '../../src/runtime/adapters'
 import { ablyAdapter } from '../../src/runtime/adapters/ably'
 import { pusherAdapter } from '../../src/runtime/adapters/pusher'
 import { isSkewAdapter } from '../../src/utils'
 
-// Mock Ably SDK
-const mockPublish = vi.fn()
-class MockRest {
-  channels = {
-    get: () => ({ publish: mockPublish }),
+const { mockPublish, MockRest, MockRealtime } = vi.hoisted(() => {
+  const mockPublish = vi.fn()
+  class MockRest {
+    channels = {
+      get: () => ({ publish: mockPublish }),
+    }
   }
-}
-class MockRealtime {
-  channels = {
-    get: () => ({
-      subscribe: vi.fn(),
-      unsubscribe: vi.fn(),
-    }),
-  }
+  class MockRealtime {
+    channels = {
+      get: () => ({
+        subscribe: vi.fn(),
+        unsubscribe: vi.fn(),
+      }),
+    }
 
-  connection = { on: vi.fn() }
-  close = vi.fn()
-}
+    connection = { on: vi.fn() }
+    close = vi.fn()
+  }
+  return { mockPublish, MockRest, MockRealtime }
+})
 vi.mock('ably', () => ({
   Rest: MockRest,
   Realtime: MockRealtime,
@@ -37,14 +40,27 @@ afterEach(() => {
 })
 
 describe('adapters', () => {
+  describe('post-deploy publishing', () => {
+    it('publishes only after an explicit call with valid config', async () => {
+      const adapter = pusherAdapter({ key: 'key', appId: 'app', secret: 'secret', cluster: 'us2' })
+      const broadcast = vi.spyOn(adapter, 'broadcast').mockResolvedValue()
+
+      await expect(publishSkewUpdate(adapter, 'build-123')).resolves.toEqual({ _tag: 'ok' })
+      expect(broadcast).toHaveBeenCalledWith(adapter.config, 'build-123')
+    })
+
+    it('returns a config error without broadcasting', async () => {
+      const adapter = pusherAdapter({ key: '', appId: '', secret: '', cluster: '' })
+      const broadcast = vi.spyOn(adapter, 'broadcast').mockResolvedValue()
+
+      await expect(publishSkewUpdate(adapter, 'build-123')).resolves.toMatchObject({ _tag: 'invalid-config' })
+      expect(broadcast).not.toHaveBeenCalled()
+    })
+  })
+
   describe('isSkewAdapter', () => {
     it('should return true for valid adapter', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(true)
+      expect(isSkewAdapter(pusherAdapter({ key: 'key', appId: 'app', secret: 'secret' }))).toBe(true)
     })
 
     it('should return false for null', () => {
@@ -59,46 +75,8 @@ describe('adapters', () => {
       expect(isSkewAdapter('polling')).toBe(false)
     })
 
-    it('should return false for object missing name', () => {
-      const adapter = {
-        subscribe: () => () => {},
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object missing subscribe', () => {
-      const adapter = {
-        name: 'test',
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object missing broadcast', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object with non-function subscribe', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: 'not a function',
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object with non-function broadcast', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-        broadcast: 'not a function',
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
+    it('should return false for an object without the adapter contract', () => {
+      expect(isSkewAdapter({ _tag: 'SkewAdapter', name: 'test' })).toBe(false)
     })
   })
 
@@ -121,11 +99,23 @@ describe('adapters', () => {
       const adapter = pusherAdapter(customConfig)
       expect(adapter.name).toBe('pusher')
     })
+
+    it('only exposes subscribe credentials to the client', () => {
+      const adapter = pusherAdapter(config)
+
+      expect(adapter.toPublicConfig(config)).toEqual({
+        key: 'test-key',
+        cluster: 'us2',
+      })
+      expect(adapter.toPublicConfig(config)).not.toHaveProperty('appId')
+      expect(adapter.toPublicConfig(config)).not.toHaveProperty('secret')
+    })
   })
 
   describe('ablyAdapter', () => {
     const config = {
       key: 'appId.keyId:keySecret',
+      authUrl: '/api/ably-token',
     }
 
     it('should create valid adapter', () => {
@@ -138,6 +128,15 @@ describe('adapters', () => {
       const customConfig = { ...config, channel: 'my-channel' }
       const adapter = ablyAdapter(customConfig)
       expect(adapter.name).toBe('ably')
+    })
+
+    it('never exposes the API key to the client', () => {
+      const adapter = ablyAdapter(config)
+
+      expect(adapter.toPublicConfig(config)).toEqual({
+        authUrl: '/api/ably-token',
+      })
+      expect(adapter.toPublicConfig(config)).not.toHaveProperty('key')
     })
 
     it('broadcast should call Ably SDK', async () => {

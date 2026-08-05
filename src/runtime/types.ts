@@ -8,7 +8,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
    * that only owns part of the host, so the endpoints resolve to this app.
    */
   basePath: string
-  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+  cookie: false | Omit<CookieSerializeOptions, 'encode'> & {
     name?: string
   }
   debug: boolean
@@ -17,11 +17,14 @@ export interface NuxtSkewProtectionRuntimeConfig {
   ipTracking?: boolean
   reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
   multiTab?: boolean
+  discoveryURL?: string
+  updatesEnabled?: boolean
+  updateInterval?: number
 }
 
 export interface SkewProtectionRuntimeConfig {
   basePath: string
-  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+  cookie: false | Omit<CookieSerializeOptions, 'encode'> & {
     name: string
   }
   debug: boolean
@@ -30,10 +33,7 @@ export interface SkewProtectionRuntimeConfig {
   ipTracking?: boolean
   reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
   multiTab?: boolean
-}
-
-export interface ChunksOutdatedPayload {
-  deletedChunks: string[]
-  invalidatedModules: string[]
-  passedReleases: string[]
+  discoveryURL?: string
+  updatesEnabled?: boolean
+  updateInterval?: number
 }

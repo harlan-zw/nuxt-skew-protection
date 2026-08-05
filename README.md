@@ -4,28 +4,30 @@
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-> Solve Nuxt version skew with persistent assets and instant updates.
+> Keep old Nuxt build assets available, detect new deployments, and move active sessions onto the new client.
 
 ## Why Nuxt Skew Protection?
 
-**Version skew** is a mismatch between your deployed build and the chunks running in user browsers and crawler sessions. It can lead to several issues:
+**Version skew** exists when a browser is still running one release after the deployment target has moved to another. The old client may request a lazy chunk that disappeared, or call a server endpoint whose contract changed.
 
-- 🕷️ **Crawlers 404 on stale chunks** - Googlebot requests `_nuxt/builds/abc123.js` which no longer exists post-deploy, logging 500s and potentially impacting indexing
-- 💥 **ChunkLoadError in production** - Users mid-session get `Failed to fetch dynamically imported module` when navigating to routes with invalidated chunks
-- 🔄 **Delayed rollout** - Your latest release sits unloaded until users hard refresh, sometimes hours or days later
+- 🕷️ **Stale asset requests**: crawlers and browsers request an old content-hashed file after deployment.
+- 💥 **Lazy import failures**: an active session navigates to code that it has not loaded yet.
+- 🔄 **Old clients**: open tabs keep running old code until they reload.
+- 🔌 **Server contract skew**: an old client calls the new server API.
 
 Nuxt's built-in behavior (hard-reload when it detects a new deployment) helps, but in many cases it's [not enough](https://github.com/nuxt/nuxt/issues/29624).
 
-Nuxt Skew Protection solves this with proactive update prompts and persistent build assets across deploys.
+The module retains immutable build assets and reacts to Nuxt's deployment manifest updates. Polling, SSE, [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket), and external adapters differ only in how quickly the client learns about a release.
+
+The portable mode does not retain old server endpoints. If an API contract changes, use a compatible rollout or platform deployment affinity. Reload prompts reduce that exposure window but cannot remove it.
 
 ## Features
 
-- 🕷️ **Persistent Build Assets** - Previous build artifacts remain accessible, so crawlers and stale sessions never hit dead ends.
-- ⚡ **Instant Update Prompts** - Zero-config real-time notifications on deploy. Users adopt your latest build immediately.
-- 🎯 **Chunk-Aware Targeting** - Notifications fire only when the user's loaded chunks are invalidated. No noise for unrelated updates.
-- 🎨 **Headless UI** - Drop-in notification component with first-class Nuxt UI support.
-- 📊 **Live Connection Monitoring** - Track active users and version distribution in real-time for admin dashboards and rollout progress.
-- 🔌 **Third-Party Adapters** - Real-time updates on any platform (including static sites) via [Pusher](https://pusher.com) or [Ably](https://ably.com).
+- 🕷️ **Retained build assets**: old content-hashed assets are restored into each deployment output.
+- ⚡ **Deployment updates**: use Nuxt polling, SSE, WebSocket, Pusher, or Ably.
+- 🎨 **Update UI**: prompt, reload immediately, wait for idle, or handle the Nuxt hook yourself.
+- 📊 **Connection monitoring**: inspect active versions when using SSE or WebSocket.
+- 🔒 **Safe adapter config**: server secrets stay out of the generated client bundle.
 
 ## Installation
 

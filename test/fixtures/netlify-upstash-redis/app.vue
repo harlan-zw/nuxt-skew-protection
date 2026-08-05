@@ -6,8 +6,8 @@ const skew = useSkewProtection()
   <div>
     <h1>Netlify + Upstash Redis Test</h1>
     <p>Build ID: {{ skew.clientVersion }}</p>
-    <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
-      <div v-if="isCurrentChunksOutdated" class="notification">
+    <SkewNotification v-slot="{ isAppOutdated, dismiss, reload }">
+      <div v-if="isAppOutdated" class="notification">
         <p>New version deployed!</p>
         <button @click="reload">
           Reload

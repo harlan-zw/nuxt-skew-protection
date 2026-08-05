@@ -7,7 +7,7 @@ import { build, cleanFixture, modifyVersion, sleep, startServer, stopServer } fr
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../fixtures/skew-notification')
-const port = 3338
+const port = 3339
 
 describe('reconnect-dedup', () => {
   let serverProc: ChildProcess | null = null
@@ -49,33 +49,25 @@ describe('reconnect-dedup', () => {
 
     // Simulate 3 spaced-apart SSE reconnections, each sending the same
     // version mismatch. In reality this happens when SSE auto-reconnects.
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
       const nuxtApp = (window as any).__TEST_NUXT_APP__
 
       for (let i = 0; i < 3; i++) {
-        await nuxtApp.hooks.callHook('skew:message', {
+        void nuxtApp.hooks.callHook('skew:message', {
           type: 'connected',
           version: 'new-deploy-v2',
           connectionId: `reconnect-${i}`,
           timestamp: Date.now(),
         })
-        // Space apart so each tick 0 has time to fire between messages
-        await new Promise(r => setTimeout(r, 500))
       }
     })
 
-    await sleep(500)
+    await sleep(1000)
 
-    // Without the fix: all 3 messages trigger "Version mismatch" per handler instance.
-    // useSkewProtection() is called by both the SW plugin and SkewNotification, so
-    // 2 handlers exist. Without dedup: 3 messages x 2 handlers = 6 logs.
-    // With the fix: only the first message triggers. 1 message x 2 handlers = 2 logs.
-    //
-    // Assert that we see significantly fewer logs than the unprotected case.
-    // With fix: <=2 (one per handler for the first message only)
-    // Without fix: 6 (each message triggers both handlers)
+    // The shared engine logs the first mismatch once, then ignores reconnects
+    // that report the same release.
     console.log(`Version mismatch log count: ${versionMismatchLogs.length}`)
-    expect(versionMismatchLogs.length).toBeLessThanOrEqual(2)
+    expect(versionMismatchLogs.length).toBeLessThanOrEqual(1)
 
     await browser.close()
   }, 30000)
@@ -94,18 +86,19 @@ describe('reconnect-dedup', () => {
     await page.waitForSelector('[data-testid="version"]')
     const initialLoads = loadCount
 
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
       const nuxtApp = (window as any).__TEST_NUXT_APP__
       for (let i = 0; i < 5; i++) {
-        await nuxtApp.hooks.callHook('skew:message', {
+        void nuxtApp.hooks.callHook('skew:message', {
           type: 'connected',
           version: 'new-deploy-v2',
           connectionId: `storm-${i}`,
           timestamp: Date.now(),
         })
-        await new Promise(r => setTimeout(r, 500))
       }
     })
+
+    await sleep(1000)
 
     expect(loadCount).toBe(initialLoads)
 

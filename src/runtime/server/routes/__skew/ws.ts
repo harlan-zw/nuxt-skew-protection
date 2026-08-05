@@ -18,7 +18,7 @@ export default defineWebSocketHandler({
 
     const cookieHeader = peer.request?.headers?.get('cookie') || ''
     const cookies = parseCookie(cookieHeader)
-    const clientVersion = cookies[cookieName] || serverVersion
+    const clientVersion = (cookieName ? cookies[cookieName] : undefined) || serverVersion
 
     // Extract initial route from URL query param
     const url = new URL(peer.request?.url || '', 'http://localhost')

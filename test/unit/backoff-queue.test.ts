@@ -10,7 +10,7 @@ describe('createBackoffQueue', () => {
     vi.restoreAllMocks()
   })
 
-  it('calls onTick for each delay', () => {
+  it('calls onTick for each delay', async () => {
     const onTick = vi.fn()
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
@@ -19,20 +19,20 @@ describe('createBackoffQueue', () => {
 
     queue.start()
 
-    vi.advanceTimersByTime(0)
+    await vi.advanceTimersByTimeAsync(0)
     expect(onTick).toHaveBeenCalledTimes(1)
     expect(onTick).toHaveBeenCalledWith(0)
 
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(onTick).toHaveBeenCalledTimes(2)
     expect(onTick).toHaveBeenCalledWith(1)
 
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(onTick).toHaveBeenCalledTimes(3)
     expect(onTick).toHaveBeenCalledWith(2)
   })
 
-  it('clear cancels pending timers', () => {
+  it('clear cancels pending timers', async () => {
     const onTick = vi.fn()
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
@@ -40,16 +40,16 @@ describe('createBackoffQueue', () => {
     })
 
     queue.start()
-    vi.advanceTimersByTime(0)
+    await vi.advanceTimersByTimeAsync(0)
     expect(onTick).toHaveBeenCalledTimes(1)
 
     queue.clear()
 
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     expect(onTick).toHaveBeenCalledTimes(1)
   })
 
-  it('start resets the queue if already running', () => {
+  it('start resets the queue if already running', async () => {
     const onTick = vi.fn()
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
@@ -57,20 +57,20 @@ describe('createBackoffQueue', () => {
     })
 
     queue.start()
-    vi.advanceTimersByTime(0)
+    await vi.advanceTimersByTimeAsync(0)
     expect(onTick).toHaveBeenCalledTimes(1)
 
-    vi.advanceTimersByTime(50)
+    await vi.advanceTimersByTimeAsync(50)
 
     // restart before 100ms timer fires
     queue.start()
-    vi.advanceTimersByTime(0)
+    await vi.advanceTimersByTimeAsync(0)
     expect(onTick).toHaveBeenCalledTimes(2) // second immediate call
 
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(onTick).toHaveBeenCalledTimes(3) // new 100ms timer
 
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(onTick).toHaveBeenCalledTimes(4) // new 200ms timer
   })
 

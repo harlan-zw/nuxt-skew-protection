@@ -21,44 +21,49 @@ const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
 })
 
 const mockRunWithContext = vi.fn((fn: () => any) => fn())
+const mockStates = new Map<string, { value: any }>()
+const mockConnection = {
+  buildId: 'client-v1',
+  cookie: { value: 'client-v1' },
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+}
+const mockSkewConfig: Record<string, unknown> = {
+  cookie: { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 },
+}
+const mockNuxtApp = {
+  $skewConnection: mockConnection,
+  hooks: {
+    hook: mockHookFn,
+    callHook: mockCallHook,
+  },
+  hook: mockHookFn,
+  runWithContext: mockRunWithContext,
+} as Record<string, any>
 
 vi.mock('nuxt/app', () => ({
-  useNuxtApp: vi.fn(() => ({
-    $skewConnection: {
-      buildId: 'client-v1',
-      cookie: { value: 'client-v1' },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    },
-    hooks: {
-      hook: mockHookFn,
-      callHook: mockCallHook,
-    },
-    hook: mockHookFn,
-    runWithContext: mockRunWithContext,
-  })),
+  onNuxtReady: vi.fn((cb: () => void) => cb()),
+  useNuxtApp: vi.fn(() => mockNuxtApp),
   useRuntimeConfig: vi.fn(() => ({
     app: { buildId: 'client-v1' },
     public: {
-      skewProtection: {
-        cookie: { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 },
-      },
+      skewProtection: mockSkewConfig,
     },
   })),
-  useState: vi.fn((_key: string, init: () => any) => {
-    const state = { value: init() }
+  useState: vi.fn((key: string, init: () => any) => {
+    const state = mockStates.get(key) || { value: init() }
+    mockStates.set(key, state)
     return state
   }),
 }))
 
 vi.mock('@vueuse/core', () => ({
+  tryOnScopeDispose: vi.fn(),
   useOnline: vi.fn(() => ({ value: true })),
 }))
 
 vi.mock('vue', () => ({
   computed: vi.fn((fn: () => any) => ({ value: fn() })),
-  onMounted: vi.fn((cb: () => void) => cb()),
-  onUnmounted: vi.fn(),
 }))
 
 vi.mock('#internal/nuxt/paths', () => ({
@@ -80,6 +85,12 @@ describe('useSkewProtection', () => {
     mockCallHook.mockClear()
     mockHookFn.mockClear()
     mockFetch.mockReset()
+    mockStates.clear()
+    mockConnection.connect.mockClear()
+    mockConnection.disconnect.mockClear()
+    delete mockSkewConfig.discoveryURL
+    delete mockSkewConfig.updatesEnabled
+    delete mockNuxtApp._skewProtection
   })
 
   afterEach(() => {
@@ -105,6 +116,48 @@ describe('useSkewProtection', () => {
       hook(msg)
     }
   }
+
+  it('reports the default auto-connection as connected', async () => {
+    const { result } = await setup()
+
+    expect(mockConnection.connect).toHaveBeenCalledOnce()
+    expect(result.isConnected.value).toBe(true)
+  })
+
+  it('creates one update engine per Nuxt app', async () => {
+    await setup()
+    await setup()
+
+    expect(mockHooks.get('skew:message')).toHaveLength(1)
+  })
+
+  it('owns manifest state without requiring an onAppOutdated subscriber', async () => {
+    const { result } = await setup()
+    const manifest = { id: 'server-v2', timestamp: Date.now() }
+
+    await mockCallHook('app:manifest:update', manifest)
+
+    expect(result.manifest.value).toEqual(manifest)
+  })
+
+  it('fetches an unpinned discovery manifest in hybrid mode', async () => {
+    mockSkewConfig.discoveryURL = 'https://updates.example.com/latest.json'
+    mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+    const { result } = await setup()
+
+    await result.checkForUpdates()
+
+    expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/updates\.example\.com\/latest\.json\?/))
+  })
+
+  it('skips manual discovery when native mode disables updates', async () => {
+    mockSkewConfig.updatesEnabled = false
+    const { result } = await setup()
+
+    await result.checkForUpdates()
+
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
 
   describe('queue restart prevention on reconnection', () => {
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {
