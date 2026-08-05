@@ -1,7 +1,7 @@
 import type { Nuxt } from '@nuxt/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import skewProtectionModule from '../../src/module'
-import { resolveBundleAssets } from '../../src/provider-defaults'
+import { resolveBundleAssets, resolveVercelMiddleware } from '../../src/provider-defaults'
 
 describe('provider defaults', () => {
   beforeEach(() => {
@@ -43,6 +43,18 @@ describe('provider defaults', () => {
       _tag: 'module-default',
       bundleAssets: true,
     })
+  })
+
+  it('lets Nitro own the Vercel deployment pin when native support is enabled', () => {
+    expect(resolveVercelMiddleware(undefined, {
+      VERCEL_SKEW_PROTECTION_ENABLED: '1',
+    })).toEqual({ _tag: 'nitro-native' })
+  })
+
+  it('keeps the compatibility middleware when Nitro native support is disabled', () => {
+    expect(resolveVercelMiddleware(false, {
+      VERCEL_SKEW_PROTECTION_ENABLED: '1',
+    })).toEqual({ _tag: 'module-compatibility' })
   })
 
   it('applies the Vercel default through Nuxt module option resolution', async () => {

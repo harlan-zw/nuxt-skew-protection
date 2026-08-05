@@ -185,6 +185,34 @@ describe('version Manager', () => {
   })
 
   describe('deleted Chunks Calculation', () => {
+    it('tracks deleted chunks without persisting build assets', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        debug: false,
+        persistAssets: false,
+      })
+
+      await manager.updateVersionsManifest('v1', [
+        '_nuxt/entry.ABC123.js',
+        '_nuxt/chunk-a.DEF456.js',
+      ])
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
+      await writeFile(join(buildsDir, 'latest.json'), JSON.stringify({ id: 'v2' }))
+      await writeFile(join(buildsDir, 'meta', 'v2.json'), JSON.stringify({ id: 'v2' }))
+      await manager.updateVersionsManifest('v2', [
+        '_nuxt/entry.ABC123.js',
+      ])
+      await manager.augmentBuildMetadata('v2', join(outputDir, 'public'))
+
+      const manifest = await manager.getManifest()
+      const latest = JSON.parse(await readFile(join(buildsDir, 'latest.json'), 'utf-8'))
+
+      expect(manifest.versions.v1?.assets).toEqual([])
+      expect(manifest.versions.v2?.deletedChunks).toEqual(['_nuxt/chunk-a.DEF456.js'])
+      expect(latest.skewProtection.versions.v2.deletedChunks).toEqual(['_nuxt/chunk-a.DEF456.js'])
+    })
+
     it('should calculate deleted chunks between versions', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),

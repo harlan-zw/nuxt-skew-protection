@@ -206,6 +206,7 @@ export function createAssetManager(options: {
   maxNumberOfVersions?: number
   buildAssetsDir?: string
   debug?: boolean
+  persistAssets?: boolean
 }) {
   // Create storage with proper driver
   const storage: Storage = createStorage({
@@ -215,6 +216,7 @@ export function createAssetManager(options: {
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
   const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
   const buildAssetsPath = `/${buildAssetsDir}`
+  const persistAssets = options.persistAssets ?? true
 
   async function getAssetsFromBuild(publicDir: string) {
     const startTime = Date.now()
@@ -247,16 +249,21 @@ export function createAssetManager(options: {
 
     // Check if this version already exists (for skipping restoration later)
     const isExistingVersion = !!manifest.versions[buildId]
+    const previousVersionId = isExistingVersion
+      ? getPreviousVersion(manifest, buildId)
+      : manifest.current || null
+    const previousVersion = previousVersionId ? manifest.versions[previousVersionId] : undefined
+    const previousAssets = previousVersion?.originalAssets || previousVersion?.assets || []
+    const deletedChunks = calculateDeletedChunks(assets, previousAssets)
 
     manifest.current = buildId
     manifest.versions[buildId] = {
       timestamp: now.toISOString(),
       expires: expires.toISOString(),
-      assets,
+      assets: persistAssets ? [...assets] : [],
       // Store original assets for deletedChunks calculation (assets array gets modified by deduplication)
       originalAssets: [...assets],
-      // deletedChunks will be calculated in storeAssetsInStorage
-      deletedChunks: [],
+      deletedChunks,
     }
 
     const saveStart = Date.now()
@@ -371,17 +378,6 @@ export function createAssetManager(options: {
     const fileIdToVersion = manifest.fileIdToVersion
     const existingFileIds = Object.keys(fileIdToVersion).length
     logger.debug(`storeAssetsInStorage: fileIdToVersion has ${existingFileIds} entries`)
-
-    // Calculate deletedChunks using originalAssets (not deduplicated assets array)
-    const currentVersion = manifest.versions[buildId]
-    if (currentVersion) {
-      const previousVersionId = getPreviousVersion(manifest, buildId)
-      // Use originalAssets for accurate diff (falls back to assets for older manifests)
-      const previousVersion = previousVersionId ? manifest.versions[previousVersionId] : null
-      const previousAssets = previousVersion?.originalAssets || previousVersion?.assets || []
-      currentVersion.deletedChunks = calculateDeletedChunks(assets, previousAssets)
-      logger.debug(`storeAssetsInStorage: calculated ${currentVersion.deletedChunks.length} deleted chunks vs ${previousVersionId || 'none'}`)
-    }
 
     // Stats for logging
     let storedCount = 0

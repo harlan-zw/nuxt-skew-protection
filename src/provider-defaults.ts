@@ -8,6 +8,10 @@ export type BundleAssetsResolution
     | { _tag: 'provider-default', provider: 'vercel', bundleAssets: false }
     | { _tag: 'module-default', bundleAssets: boolean }
 
+export type VercelMiddlewareResolution
+  = | { _tag: 'nitro-native' }
+    | { _tag: 'module-compatibility' }
+
 export function resolveBundleAssets(
   configuredOptions: AssetHandlingOptions,
   moduleDefault: boolean,
@@ -34,4 +38,16 @@ export function resolveBundleAssets(
     _tag: 'module-default',
     bundleAssets: moduleDefault,
   }
+}
+
+export function resolveVercelMiddleware(
+  nitroSkewProtection: boolean | undefined,
+  env: Record<string, string | undefined> = process.env,
+): VercelMiddlewareResolution {
+  const isNitroNative = nitroSkewProtection
+    ?? env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+
+  return isNitroNative
+    ? { _tag: 'nitro-native' }
+    : { _tag: 'module-compatibility' }
 }
