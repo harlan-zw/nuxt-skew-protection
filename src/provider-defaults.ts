@@ -10,7 +10,16 @@ export type BundleAssetsResolution
 
 export type VercelMiddlewareResolution
   = | { _tag: 'nitro-native' }
-    | { _tag: 'module-compatibility' }
+    | {
+      _tag: 'module-compatibility'
+      reason: 'disabled' | 'missing-deployment-id' | 'unsupported-nitro'
+    }
+
+export interface VercelMiddlewareContext {
+  nitroSkewProtection: boolean | undefined
+  nitroVersion: string
+  deploymentId: string | undefined
+}
 
 export function resolveBundleAssets(
   configuredOptions: AssetHandlingOptions,
@@ -26,7 +35,7 @@ export function resolveBundleAssets(
     }
   }
 
-  if (env.VERCEL_SKEW_PROTECTION_ENABLED === '1') {
+  if (env.VERCEL_SKEW_PROTECTION_ENABLED === '1' && env.VERCEL_DEPLOYMENT_ID) {
     return {
       _tag: 'provider-default',
       provider: 'vercel',
@@ -40,14 +49,32 @@ export function resolveBundleAssets(
   }
 }
 
-export function resolveVercelMiddleware(
-  nitroSkewProtection: boolean | undefined,
-  env: Record<string, string | undefined> = process.env,
-): VercelMiddlewareResolution {
-  const isNitroNative = nitroSkewProtection
-    ?? env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+export function resolveBuildMetadataTracking(
+  resolution: BundleAssetsResolution,
+  configured: boolean | undefined = undefined,
+): boolean {
+  return configured ?? (resolution.bundleAssets || resolution._tag === 'provider-default')
+}
 
-  return isNitroNative
-    ? { _tag: 'nitro-native' }
-    : { _tag: 'module-compatibility' }
+function supportsNativeVercelSkewProtection(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.\d+/.exec(version)
+  if (!match)
+    return false
+
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  return major > 2 || (major === 2 && minor >= 13)
+}
+
+export function resolveVercelMiddleware(context: VercelMiddlewareContext): VercelMiddlewareResolution {
+  if (!context.nitroSkewProtection)
+    return { _tag: 'module-compatibility', reason: 'disabled' }
+
+  if (!context.deploymentId)
+    return { _tag: 'module-compatibility', reason: 'missing-deployment-id' }
+
+  if (!supportsNativeVercelSkewProtection(context.nitroVersion))
+    return { _tag: 'module-compatibility', reason: 'unsupported-nitro' }
+
+  return { _tag: 'nitro-native' }
 }

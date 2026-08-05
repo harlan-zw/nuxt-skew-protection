@@ -32,6 +32,16 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   let lastDetectedServerVersion: string | undefined
   let lastProcessedManifestId: string | undefined
 
+  async function applyManifest(meta: NuxtAppManifestMeta) {
+    if (meta.id === clientVersion || meta.id === lastProcessedManifestId)
+      return
+
+    lastProcessedManifestId = meta.id
+    manifest.value = meta
+    queue.clear()
+    await nuxtApp.hooks.callHook('app:manifest:update', meta)
+  }
+
   async function checkForUpdates() {
     // Don't check for updates when offline
     if (import.meta.client && !useOnline().value)
@@ -41,11 +51,8 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       // A deployment may not have propagated the manifest yet; the backoff queue retries.
       return null
     })
-    if (meta && meta.id !== clientVersion && meta.id !== lastProcessedManifestId) {
-      lastProcessedManifestId = meta.id
-      queue.clear()
-      await nuxtApp.hooks.callHook('app:manifest:update', meta)
-    }
+    if (meta)
+      await applyManifest(meta)
   }
 
   const queue = createBackoffQueue({
@@ -77,6 +84,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
 
     lastDetectedServerVersion = msg.version as string
     logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
+    const adapterManifest = msg.manifest as NuxtAppManifestMeta | undefined
+    if (adapterManifest?.id === msg.version)
+      return nuxtApp.runWithContext(() => applyManifest(adapterManifest))
+
     queue.start()
   })
 

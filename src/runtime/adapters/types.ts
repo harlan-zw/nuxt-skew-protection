@@ -1,11 +1,17 @@
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { z } from 'zod'
+
+export interface SkewUpdateMessage {
+  version: string
+  manifest: NuxtAppManifestMeta
+}
 
 export interface SkewAdapter<TConfig = unknown> {
   name: string
   config: TConfig
   schema: z.ZodType<TConfig>
-  subscribe: (onMessage: (msg: { version: string }) => void) => () => void
-  broadcast: (version: string) => Promise<void>
+  subscribe: (onMessage: (msg: SkewUpdateMessage) => void) => () => void
+  broadcast: (update: SkewUpdateMessage) => Promise<void>
 }
 
 export type SkewAdapterFactory<T> = (config: T) => SkewAdapter<T>
@@ -15,9 +21,9 @@ export interface DefineAdapterOptions<T> {
   schema: z.ZodType<T>
 }
 
-export type BroadcastFn<T> = (config: T, version: string) => Promise<void>
+export type BroadcastFn<T> = (config: T, update: SkewUpdateMessage) => Promise<void>
 
-export type SubscribeFn<T> = (config: T, onMessage: (msg: { version: string }) => void) => () => void
+export type SubscribeFn<T> = (config: T, onMessage: (msg: SkewUpdateMessage) => void) => () => void
 
 export function defineAdapter<T>(options: DefineAdapterOptions<T>): SkewAdapterFactory<T> {
   return config => ({

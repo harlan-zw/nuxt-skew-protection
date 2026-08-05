@@ -1,3 +1,4 @@
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { Driver, Storage } from 'unstorage'
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
@@ -633,6 +634,7 @@ export function createAssetManager(options: {
 
   async function augmentBuildMetadata(buildId: string, publicDir: string, serverDir?: string) {
     const manifest = await getVersionManifest(storage)
+    let buildManifest: NuxtAppManifestMeta | undefined
 
     // Augment builds/latest.json
     const latestPath = join(publicDir, buildAssetsDir, 'builds', 'latest.json')
@@ -653,6 +655,7 @@ export function createAssetManager(options: {
       latestJson.skewProtection = {
         versions: clientVersions,
       }
+      buildManifest = latestJson as NuxtAppManifestMeta
 
       newLatestContent = JSON.stringify(latestJson, null, 2)
       await fs.writeFile(latestPath, newLatestContent, 'utf-8')
@@ -690,6 +693,8 @@ export function createAssetManager(options: {
     if (serverDir && newLatestContent) {
       await patchNitroManifest(serverDir, `${buildAssetsPath}/builds/latest.json`, newLatestContent)
     }
+
+    return buildManifest
   }
 
   /**

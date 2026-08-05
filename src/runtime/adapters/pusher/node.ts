@@ -3,14 +3,14 @@ import { createHash, createHmac } from 'node:crypto'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
 import { defineNodeBroadcast } from '../types'
 
-export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config, version) => {
+export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config, update) => {
   const channelName = config.channel || SKEW_DEFAULT_CHANNEL
   const eventName = config.event || SKEW_MESSAGE_TYPE.VERSION
 
   const body = JSON.stringify({
     name: eventName,
     channel: channelName,
-    data: JSON.stringify({ version }),
+    data: JSON.stringify(update),
   })
 
   const timestamp = Math.floor(Date.now() / 1000)

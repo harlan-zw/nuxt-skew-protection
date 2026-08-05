@@ -13,11 +13,17 @@ describe.skipIf(!process.env.PUSHER_KEY)('pusher Adapter Integration', () => {
 
   it('should broadcast to Pusher API', async () => {
     const version = `test-${Date.now()}`
-    await broadcast(config, version)
+    await broadcast(config, {
+      version,
+      manifest: { id: version, timestamp: Date.now() },
+    })
   })
 
   it('should fail with invalid credentials', async () => {
     const invalidConfig = { ...config, secret: 'invalid-secret' }
-    await expect(broadcast(invalidConfig, 'test')).rejects.toThrow('Pusher broadcast failed')
+    await expect(broadcast(invalidConfig, {
+      version: 'test',
+      manifest: { id: 'test', timestamp: Date.now() },
+    })).rejects.toThrow('Pusher broadcast failed')
   })
 })

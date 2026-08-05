@@ -1,4 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
+import type { NuxtAppManifestMeta } from 'nuxt/app'
+import type { AssetHandlingOptions } from './provider-defaults'
 import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
@@ -19,7 +21,7 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
-import { resolveBundleAssets, resolveVercelMiddleware } from './provider-defaults'
+import { resolveBuildMetadataTracking, resolveBundleAssets, resolveVercelMiddleware } from './provider-defaults'
 import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -81,9 +83,15 @@ export interface ModuleOptions {
    * Bundle old deployment assets to support users on previous versions.
    * When enabled, old build assets are stored and served to users who haven't refreshed.
    * @default true
-   * @note Defaults to false when Vercel Skew Protection is enabled
+   * @note Defaults to false when Vercel Skew Protection and a deployment ID are available
    */
   bundleAssets?: boolean
+  /**
+   * Persist build version and deleted-chunk metadata without storing asset payloads.
+   * Defaults to the resolved bundleAssets value. The automatic Vercel provider default
+   * keeps this enabled while disabling asset persistence.
+   */
+  trackBuildMetadata?: boolean
   /**
    * Enable or disable the module
    * @default true
@@ -156,7 +164,6 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: () => ({
     retentionDays: 30,
     maxNumberOfVersions: 10,
-    bundleAssets: resolveBundleAssets({}, true).bundleAssets,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
       // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
@@ -182,6 +189,19 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
+    const assetHandlingOptions = options as ModuleOptions & AssetHandlingOptions
+
+    if ('bundlePreviousDeploymentChunks' in assetHandlingOptions) {
+      logger.warn('`bundlePreviousDeploymentChunks` is deprecated, use `bundleAssets` instead. See https://nuxtseo.com/docs/skew-protection/releases/v1')
+      if (!('bundleAssets' in assetHandlingOptions))
+        assetHandlingOptions.bundleAssets = assetHandlingOptions.bundlePreviousDeploymentChunks
+    }
+
+    const bundleAssetsResolution = resolveBundleAssets(assetHandlingOptions, true)
+    options.bundleAssets = bundleAssetsResolution.bundleAssets
+    const trackBuildMetadata = resolveBuildMetadataTracking(bundleAssetsResolution, options.trackBuildMetadata)
+    options.trackBuildMetadata = trackBuildMetadata
+    let buildManifest: NuxtAppManifestMeta | undefined
 
     // Resolve the endpoint prefix. When `basePath` isn't set explicitly it's
     // auto-detected from the app mount point (absolute `buildAssetsDir` parent,
@@ -199,16 +219,7 @@ export default defineNuxtModule<ModuleOptions>({
       options.cookie.name = resolveCookieName(options.cookie.name, basePath)
     }
 
-    // v1 migration: accept old config names with deprecation warnings
-    const rawOptions = (nuxt.options as any).skewProtection || {}
-    if ('bundlePreviousDeploymentChunks' in rawOptions) {
-      logger.warn('`bundlePreviousDeploymentChunks` is deprecated, use `bundleAssets` instead. See https://nuxtseo.com/docs/skew-protection/releases/v1')
-      if (!('bundleAssets' in rawOptions)) {
-        options.bundleAssets = rawOptions.bundlePreviousDeploymentChunks
-      }
-    }
-
-    if (process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1' && !options.bundleAssets) {
+    if (bundleAssetsResolution._tag === 'provider-default') {
       logger.info('Vercel Skew Protection detected. Asset persistence is disabled; build metadata remains enabled. Set `bundleAssets: true` to override.')
     }
 
@@ -429,10 +440,6 @@ export {}
       const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
-      const nitroVercelOptions = (nuxt.options.nitro as typeof nuxt.options.nitro & {
-        vercel?: { skewProtection?: boolean }
-      }).vercel
-      const vercelMiddleware = resolveVercelMiddleware(nitroVercelOptions?.skewProtection)
 
       // Determine resolved strategy
       const isAdapter = isSkewAdapter(options.updateStrategy)
@@ -458,10 +465,20 @@ export {}
         resolvedStrategy = 'polling'
       }
 
-      if (isVercel && vercelMiddleware._tag === 'module-compatibility') {
-        addServerHandler({
-          handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
-          middleware: true,
+      if (isVercel) {
+        nuxt.hook('nitro:init', (nitro) => {
+          const resolution = resolveVercelMiddleware({
+            nitroSkewProtection: nitro.options.vercel?.skewProtection,
+            nitroVersion: nitro.meta.version,
+            deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
+          })
+          if (resolution._tag === 'module-compatibility') {
+            nitro.options.handlers ||= []
+            nitro.options.handlers.push({
+              handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
+              middleware: true,
+            })
+          }
         })
       }
 
@@ -518,7 +535,7 @@ export {}
       })
 
       // Track build metadata for chunk-aware notifications. Asset persistence is optional.
-      if (options.storage) {
+      if (options.storage && trackBuildMetadata) {
         nuxt.hook('nitro:init', (nitro) => {
           const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
           let assetManager: ReturnType<typeof createAssetManager>
@@ -599,7 +616,7 @@ export {}
             // Augment Nuxt build metadata files with skew protection data
             // Pass serverDir so we can patch Nitro's static asset manifest
             const serverDir = nitro.options.output.serverDir
-            await assetManager.augmentBuildMetadata(buildId, publicDir, serverDir)
+            buildManifest = await assetManager.augmentBuildMetadata(buildId, publicDir, serverDir)
           })
 
           // Clean up expired versions on close
@@ -690,7 +707,11 @@ export { subscribe }`,
                 return
             }
 
-            await broadcastFn(adapter.config, buildId)
+            const update = {
+              version: buildId,
+              manifest: buildManifest || { id: buildId, timestamp: Date.now() },
+            }
+            await broadcastFn(adapter.config, update)
               .then(() => logger.success(`Broadcast complete`))
               .catch((err: Error) => logger.error(`Broadcast failed: ${err.message}`))
           })

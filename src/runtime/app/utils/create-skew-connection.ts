@@ -1,4 +1,4 @@
-import type { CookieOptions } from 'nuxt/app'
+import type { CookieOptions, NuxtAppManifestMeta } from 'nuxt/app'
 import type { SkewConnection } from '../types'
 import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { useBotDetection } from '#imports'
@@ -8,6 +8,7 @@ import { init, logger } from '../../shared/logger'
 export interface SkewMessage {
   type: string
   version?: string
+  manifest?: NuxtAppManifestMeta
   connectionId?: string
   [key: string]: unknown
 }

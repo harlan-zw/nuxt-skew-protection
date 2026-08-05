@@ -1,3 +1,4 @@
+import type { SkewUpdateMessage } from '../types'
 import type { PusherAdapterConfig } from './types'
 import { onNuxtReady } from 'nuxt/app'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
@@ -16,8 +17,8 @@ export const subscribe = defineWebSubscribe<PusherAdapterConfig>((config, onMess
     const eventName = config.event || SKEW_MESSAGE_TYPE.VERSION
 
     const channel = pusher.subscribe(channelName)
-    channel.bind(eventName, (data: { version: string }) => {
-      onMessage({ version: data.version })
+    channel.bind(eventName, (data: SkewUpdateMessage) => {
+      onMessage(data)
     })
 
     cleanup = () => {

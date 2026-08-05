@@ -731,7 +731,7 @@ const assets = {
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest('build-123', assets)
-      await manager.augmentBuildMetadata('build-123', join(outputDir, 'public'))
+      const buildManifest = await manager.augmentBuildMetadata('build-123', join(outputDir, 'public'))
 
       const augmentedData = await readFile(latestPath, 'utf-8')
       const augmented = JSON.parse(augmentedData)
@@ -739,6 +739,7 @@ const assets = {
       expect(augmented.skewProtection).toBeDefined()
       expect(augmented.skewProtection.versions).toBeDefined()
       expect(augmented.skewProtection.versions['build-123']).toBeDefined()
+      expect(buildManifest).toEqual(augmented)
     })
 
     it('should patch Nitro manifest with correct Content-Length and ETag', async () => {

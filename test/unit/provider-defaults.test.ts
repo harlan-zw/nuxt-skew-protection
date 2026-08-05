@@ -1,7 +1,7 @@
 import type { Nuxt } from '@nuxt/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import skewProtectionModule from '../../src/module'
-import { resolveBundleAssets, resolveVercelMiddleware } from '../../src/provider-defaults'
+import { resolveBuildMetadataTracking, resolveBundleAssets, resolveVercelMiddleware } from '../../src/provider-defaults'
 
 describe('provider defaults', () => {
   beforeEach(() => {
@@ -11,6 +11,7 @@ describe('provider defaults', () => {
   it('disables asset bundling when Vercel Skew Protection is enabled', () => {
     expect(resolveBundleAssets({}, true, {
       VERCEL_SKEW_PROTECTION_ENABLED: '1',
+      VERCEL_DEPLOYMENT_ID: 'dpl_native',
     })).toEqual({
       _tag: 'provider-default',
       provider: 'vercel',
@@ -21,6 +22,7 @@ describe('provider defaults', () => {
   it.each([true, false])('preserves explicit bundleAssets: %s', (bundleAssets) => {
     expect(resolveBundleAssets({ bundleAssets }, true, {
       VERCEL_SKEW_PROTECTION_ENABLED: '1',
+      VERCEL_DEPLOYMENT_ID: 'dpl_native',
     })).toEqual({
       _tag: 'configured',
       bundleAssets,
@@ -30,6 +32,7 @@ describe('provider defaults', () => {
   it('preserves the deprecated explicit asset handling option', () => {
     expect(resolveBundleAssets({ bundlePreviousDeploymentChunks: true }, true, {
       VERCEL_SKEW_PROTECTION_ENABLED: '1',
+      VERCEL_DEPLOYMENT_ID: 'dpl_native',
     })).toEqual({
       _tag: 'configured',
       bundleAssets: true,
@@ -45,30 +48,68 @@ describe('provider defaults', () => {
     })
   })
 
-  it('lets Nitro own the Vercel deployment pin when native support is enabled', () => {
-    expect(resolveVercelMiddleware(undefined, {
+  it('keeps asset bundling when the Vercel deployment ID is unavailable', () => {
+    expect(resolveBundleAssets({}, true, {
       VERCEL_SKEW_PROTECTION_ENABLED: '1',
+    })).toEqual({
+      _tag: 'module-default',
+      bundleAssets: true,
+    })
+  })
+
+  it('lets supported Nitro own the Vercel deployment pin', () => {
+    expect(resolveVercelMiddleware({
+      nitroSkewProtection: true,
+      nitroVersion: '2.13.0',
+      deploymentId: 'dpl_native',
     })).toEqual({ _tag: 'nitro-native' })
   })
 
-  it('keeps the compatibility middleware when Nitro native support is disabled', () => {
-    expect(resolveVercelMiddleware(false, {
-      VERCEL_SKEW_PROTECTION_ENABLED: '1',
-    })).toEqual({ _tag: 'module-compatibility' })
+  it('keeps compatibility middleware for Nitro without native support', () => {
+    expect(resolveVercelMiddleware({
+      nitroSkewProtection: true,
+      nitroVersion: '2.12.9',
+      deploymentId: 'dpl_native',
+    })).toEqual({ _tag: 'module-compatibility', reason: 'unsupported-nitro' })
   })
 
-  it('applies the Vercel default through Nuxt module option resolution', async () => {
+  it('keeps compatibility middleware without a deployment ID', () => {
+    expect(resolveVercelMiddleware({
+      nitroSkewProtection: true,
+      nitroVersion: '2.13.0',
+    })).toEqual({ _tag: 'module-compatibility', reason: 'missing-deployment-id' })
+  })
+
+  it('tracks metadata only for provider-managed asset opt out', () => {
+    const providerDefault = resolveBundleAssets({}, true, {
+      VERCEL_SKEW_PROTECTION_ENABLED: '1',
+      VERCEL_DEPLOYMENT_ID: 'dpl_native',
+    })
+    const configuredFalse = resolveBundleAssets({ bundleAssets: false }, true, {
+      VERCEL_SKEW_PROTECTION_ENABLED: '1',
+      VERCEL_DEPLOYMENT_ID: 'dpl_native',
+    })
+
+    expect(resolveBuildMetadataTracking(providerDefault)).toBe(true)
+    expect(resolveBuildMetadataTracking(configuredFalse)).toBe(false)
+    expect(resolveBuildMetadataTracking(providerDefault, false)).toBe(false)
+    expect(resolveBuildMetadataTracking(configuredFalse, true)).toBe(true)
+  })
+
+  it('defers provider defaults until setup so their source remains observable', async () => {
     vi.stubEnv('VERCEL_SKEW_PROTECTION_ENABLED', '1')
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', 'dpl_native')
 
     const options = await skewProtectionModule.getOptions?.(undefined, {
       options: {},
     } as Nuxt)
 
-    expect(options?.bundleAssets).toBe(false)
+    expect(options?.bundleAssets).toBeUndefined()
   })
 
   it('gives inline module configuration precedence over the Vercel default', async () => {
     vi.stubEnv('VERCEL_SKEW_PROTECTION_ENABLED', '1')
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', 'dpl_native')
 
     const options = await skewProtectionModule.getOptions?.({ bundleAssets: true }, {
       options: {},

@@ -1,12 +1,12 @@
-import type { SkewAdapter } from '../../../src/runtime/adapters/types'
+import type { SkewAdapter, SkewUpdateMessage } from '../../../src/runtime/adapters/types'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Mock adapter for testing - stores messages in memory
-const messages: Array<{ version: string }> = []
-const subscribers: Array<(msg: { version: string }) => void> = []
+const messages: SkewUpdateMessage[] = []
+const subscribers: Array<(msg: SkewUpdateMessage) => void> = []
 
 export const mockAdapter: SkewAdapter = {
   name: 'mock',
@@ -20,10 +20,9 @@ export const mockAdapter: SkewAdapter = {
         subscribers.splice(idx, 1)
     }
   },
-  async broadcast(version) {
-    const msg = { version }
-    messages.push(msg)
-    subscribers.forEach(sub => sub(msg))
+  async broadcast(update) {
+    messages.push(update)
+    subscribers.forEach(sub => sub(update))
   },
 }
 

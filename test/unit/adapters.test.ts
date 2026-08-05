@@ -34,6 +34,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   delete (globalThis as any).window
+  vi.unstubAllGlobals()
 })
 
 describe('adapters', () => {
@@ -121,6 +122,22 @@ describe('adapters', () => {
       const adapter = pusherAdapter(customConfig)
       expect(adapter.name).toBe('pusher')
     })
+
+    it('broadcasts complete manifest metadata', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true })
+      vi.stubGlobal('fetch', mockFetch)
+      const { broadcast } = await import('../../src/runtime/adapters/pusher/node')
+      const update = {
+        version: 'test-version-123',
+        manifest: { id: 'test-version-123', timestamp: 123 },
+      }
+
+      await broadcast(config, update)
+
+      const request = mockFetch.mock.calls[0]?.[1] as RequestInit
+      const body = JSON.parse(request.body as string)
+      expect(JSON.parse(body.data)).toEqual(update)
+    })
   })
 
   describe('ablyAdapter', () => {
@@ -142,16 +159,23 @@ describe('adapters', () => {
 
     it('broadcast should call Ably SDK', async () => {
       const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
-      await ablyBroadcast(config, 'test-version-123')
+      const update = {
+        version: 'test-version-123',
+        manifest: { id: 'test-version-123', timestamp: 123 },
+      }
+      await ablyBroadcast(config, update)
 
-      expect(mockPublish).toHaveBeenCalledWith('version', { version: 'test-version-123' })
+      expect(mockPublish).toHaveBeenCalledWith('version', update)
     })
 
     it('broadcast should throw on SDK error', async () => {
       mockPublish.mockRejectedValueOnce(new Error('SDK error'))
       const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
 
-      await expect(ablyBroadcast(config, 'test-version')).rejects.toThrow('SDK error')
+      await expect(ablyBroadcast(config, {
+        version: 'test-version',
+        manifest: { id: 'test-version', timestamp: 123 },
+      })).rejects.toThrow('SDK error')
     })
   })
 })

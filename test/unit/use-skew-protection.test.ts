@@ -99,10 +99,10 @@ describe('useSkewProtection', () => {
     return { result, getHookHandler }
   }
 
-  function simulateMessage(msg: Record<string, unknown>) {
+  async function simulateMessage(msg: Record<string, unknown>) {
     const hooks = mockHooks.get('skew:message') || []
     for (const hook of hooks) {
-      hook(msg)
+      await hook(msg)
     }
   }
 
@@ -112,7 +112,7 @@ describe('useSkewProtection', () => {
       await setup()
 
       // First CONNECTED message: should start the queue
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
 
       // Queue fires checkForUpdates at t=0, then clears itself
       await vi.advanceTimersByTimeAsync(0)
@@ -120,7 +120,7 @@ describe('useSkewProtection', () => {
 
       // Simulate SSE reconnection sending another CONNECTED message with SAME version
       mockFetch.mockClear()
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
 
       // Should be skipped entirely since we already processed this server version
       await vi.advanceTimersByTimeAsync(0)
@@ -131,7 +131,7 @@ describe('useSkewProtection', () => {
       mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
       await setup()
 
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
 
       await vi.advanceTimersByTimeAsync(0)
       expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -140,7 +140,7 @@ describe('useSkewProtection', () => {
     it('ignores messages with matching client version', async () => {
       await setup()
 
-      simulateMessage({ type: 'connected', version: 'client-v1' })
+      await simulateMessage({ type: 'connected', version: 'client-v1' })
 
       await vi.advanceTimersByTimeAsync(0)
       expect(mockFetch).not.toHaveBeenCalled()
@@ -154,7 +154,7 @@ describe('useSkewProtection', () => {
       await setup()
 
       // Trigger version mismatch
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
 
       // First tick (t=0): fetches manifest and fires hook
       await vi.advanceTimersByTimeAsync(0)
@@ -179,7 +179,7 @@ describe('useSkewProtection', () => {
       mockFetch.mockResolvedValue(manifest)
       await setup()
 
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
 
       // First tick fires and clears queue
       await vi.advanceTimersByTimeAsync(0)
@@ -199,7 +199,7 @@ describe('useSkewProtection', () => {
       await setup()
 
       // First version mismatch
-      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await simulateMessage({ type: 'connected', version: 'server-v2' })
       await vi.advanceTimersByTimeAsync(0)
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
@@ -208,11 +208,30 @@ describe('useSkewProtection', () => {
       mockFetch.mockResolvedValue(manifest2)
       mockFetch.mockClear()
 
-      simulateMessage({ type: 'version', version: 'server-v3' })
+      await simulateMessage({ type: 'version', version: 'server-v3' })
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have fetched again for the new version
       expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses manifest metadata from an external adapter without a same-origin fetch', async () => {
+      const manifest = {
+        id: 'server-v2',
+        timestamp: Date.now(),
+        skewProtection: { versions: {} },
+      }
+      const { result } = await setup()
+
+      await simulateMessage({
+        type: 'version',
+        version: manifest.id,
+        manifest,
+      })
+
+      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockCallHook).toHaveBeenCalledWith('app:manifest:update', manifest)
+      expect(result.manifest.value).toEqual(manifest)
     })
   })
 })

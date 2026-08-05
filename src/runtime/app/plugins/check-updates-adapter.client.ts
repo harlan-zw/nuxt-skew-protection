@@ -1,3 +1,4 @@
+import type { SkewUpdateMessage } from '../../adapters/types'
 import type { SkewAdapterConfig } from '../types'
 import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 // @ts-expect-error virtual module
@@ -27,7 +28,7 @@ export default defineNuxtPlugin({
     const skewConnection = createSkewConnection({
       name: `Adapter:${adapterName}`,
       setup(onMessage) {
-        return subscribe(config.adapterConfig, (msg: { version?: string }) => {
+        return subscribe(config.adapterConfig, (msg: SkewUpdateMessage) => {
           onMessage({ type: SKEW_MESSAGE_TYPE.VERSION, channel: config.channel, ...msg })
         })
       },
