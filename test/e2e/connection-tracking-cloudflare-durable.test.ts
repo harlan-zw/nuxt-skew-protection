@@ -16,6 +16,7 @@ const port = 3337
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 function cleanFixture() {
+  rmSync(resolve(fixtureDir, '.skew-storage'), { recursive: true, force: true })
   rmSync(resolve(fixtureDir, '.output'), { recursive: true, force: true })
   rmSync(resolve(fixtureDir, '.nuxt'), { recursive: true, force: true })
   rmSync(resolve(fixtureDir, '.wrangler'), { recursive: true, force: true })

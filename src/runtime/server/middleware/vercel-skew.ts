@@ -1,4 +1,5 @@
 import { defineEventHandler, getHeader, setCookie } from '#nuxtseo/h3'
+import { useRuntimeConfig } from '#nuxtseo/nitro'
 
 export default defineEventHandler(async (event) => {
   // Only handle document requests (not assets/API)
@@ -12,9 +13,13 @@ export default defineEventHandler(async (event) => {
     return
   }
 
+  const runtimeConfig = useRuntimeConfig(event) as {
+    skewProtection?: { vercelCookiePath?: string }
+  }
+
   // Set Vercel's __vdpl cookie for document requests using h3's setCookie
   setCookie(event, '__vdpl', deploymentId, {
-    path: '/',
+    path: runtimeConfig.skewProtection?.vercelCookiePath || '/',
     sameSite: 'lax',
     secure: true,
     httpOnly: true,

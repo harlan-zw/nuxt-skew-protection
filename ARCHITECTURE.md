@@ -87,9 +87,19 @@ Reloads use `reloadNuxtApp({ force: true })` without persisting Nuxt state. Stat
 
 Idle reload waits until the tab has been inactive for five seconds or becomes hidden. Multi tab messages use a channel name derived from `basePath`, which prevents path mounted Nuxt apps on one origin from sharing deployment events.
 
+## Platform modes
+
+Portable mode uses retained build assets and one update strategy. Persistent Node servers default to SSE. Serverless and static presets default to polling. Cloudflare Durable Objects can use WebSocket when Nitro WebSocket support is enabled.
+
+Native mode delegates the complete affinity contract to a provider. The module selects it only when Vercel skew protection or a Netlify skew protection token is available. Native mode disables module asset bundling and client update transport because the provider keeps the client on its deployment.
+
+Hybrid mode combines provider affinity with an external, unpinned Nuxt manifest. The client polls `discoveryURL` to learn about the latest release while application requests remain pinned. The discovery origin must return a valid manifest and allow the browser request.
+
 ## Cookies
 
 The portable version cookie records the client release for server observability and connection setup. Path mounted apps derive separate cookie names. `cookie: false` disables it; the client build ID remains available.
+
+Provider affinity cookies have a separate contract. Vercel uses `__vdpl`; Netlify uses its generated skew protection cookie. They must not be confused with the module's `__nkpv` cookie.
 
 ## Adapter boundary
 
