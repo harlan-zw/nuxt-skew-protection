@@ -1,6 +1,28 @@
 # Changelog
 
 
+## v1.3.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.1...main)
+
+### 🚀 Enhancements
+
+- Support Nitro 3 runtime compatibility ([#21](https://github.com/harlan-zw/nuxt-skew-protection/pull/21))
+
+### 🩹 Fixes
+
+- Support nested build asset directories ([#22](https://github.com/harlan-zw/nuxt-skew-protection/pull/22))
+
+### 🏡 Chore
+
+- Code cleanup sweep ([#18](https://github.com/harlan-zw/nuxt-skew-protection/pull/18))
+- Adopt nuxtseo-shared 5.3.4 APIs ([#19](https://github.com/harlan-zw/nuxt-skew-protection/pull/19))
+- Bump ([9993ff2](https://github.com/harlan-zw/nuxt-skew-protection/commit/9993ff2))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.3.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.0...main)
