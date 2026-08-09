@@ -15,7 +15,7 @@ export type TransformCloudflareModuleAdapterResult
   }
   | {
     _tag: 'IncompatibleCloudflareModuleAdapter'
-    reason: 'PublicAssetImportNotFound' | 'AssetFetchBranchNotFound'
+    reason: 'PublicAssetImportNotFound' | 'AssetFetchBranchNotFound' | 'LegacyCloudflareAdapter'
   }
 
 interface RollupPluginContext {
@@ -45,17 +45,30 @@ const cloudflareAssetAdapterSuffixes = [
   '/nitropack/dist/presets/cloudflare/runtime/cloudflare-durable.mjs',
 ]
 
+const legacyCloudflareAdapterSuffixes = [
+  '/nitropack/dist/runtime/entries/cloudflare-module.mjs',
+  '/nitropack/dist/runtime/entries/cloudflare.mjs',
+  '/nitropack/dist/runtime/entries/cloudflare-pages.mjs',
+]
+
 const publicAssetImportPattern
   = /import\s*\{\s*isPublicAssetURL\s*\}\s*from\s*["']#nitro-internal-virtual\/public-assets["'];?/
 
 const assetFetchBranchPattern
   = /return\s+env\.ASSETS\.fetch\(\s*request\s*\)\s*;/
 
-function isCloudflareModuleAdapter(id: string) {
-  const normalizedId = id
+function normalizeAdapterId(id: string) {
+  return id
     .split('?', 1)[0]!
     .replaceAll('\\', '/')
-  return cloudflareAssetAdapterSuffixes.some(suffix => normalizedId.endsWith(suffix))
+}
+
+function isCloudflareModuleAdapter(id: string) {
+  return cloudflareAssetAdapterSuffixes.some(suffix => normalizeAdapterId(id).endsWith(suffix))
+}
+
+function isLegacyCloudflareModuleAdapter(id: string) {
+  return legacyCloudflareAdapterSuffixes.some(suffix => normalizeAdapterId(id).endsWith(suffix))
 }
 
 function normalizeBuildAssetsDir(value: string) {
@@ -67,6 +80,12 @@ export function transformCloudflareModuleAdapter(
   options: TransformCloudflareModuleAdapterOptions,
 ): TransformCloudflareModuleAdapterResult {
   if (!isCloudflareModuleAdapter(options.id)) {
+    if (isLegacyCloudflareModuleAdapter(options.id)) {
+      return {
+        _tag: 'IncompatibleCloudflareModuleAdapter',
+        reason: 'LegacyCloudflareAdapter',
+      }
+    }
     return {
       _tag: 'NotCloudflareModuleAdapter',
     }
@@ -128,9 +147,10 @@ export function createCloudflareAssetProtectionPlugin(
       }
 
       if (result._tag === 'IncompatibleCloudflareModuleAdapter') {
-        this.error(
-          `[nuxt-skew-protection] Nitro's cloudflare-module adapter is incompatible with asset 404 protection (${result.reason}).`,
-        )
+        const message = result.reason === 'LegacyCloudflareAdapter'
+          ? `[nuxt-skew-protection] Asset 404 protection requires nitropack >= 2.10.0. Your project uses an older nitropack whose cloudflare-module adapter serves assets via getAssetFromKV, which cannot be protected. Upgrade nitropack (or nuxt) to enable asset 404 protection.`
+          : `[nuxt-skew-protection] Nitro's cloudflare-module adapter is incompatible with asset 404 protection (${result.reason}).`
+        this.error(message)
       }
 
       adapterTransformed = true

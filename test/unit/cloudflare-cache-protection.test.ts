@@ -1,3 +1,8 @@
+import { execFile } from 'node:child_process'
+import { rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { fetchCloudflareAsset } from '../../src/runtime/server/utils/cloudflare-asset-fetch'
 import {
@@ -169,6 +174,71 @@ describe('cloudflare asset cache protection', () => {
     })).toEqual({
       _tag: 'NotCloudflareModuleAdapter',
     })
+  })
+
+  it('flags the legacy getAssetFromKV adapter with an upgrade hint', () => {
+    const legacyAdapter = `import "#internal/nitro/virtual/polyfill";
+import {
+  getAssetFromKV,
+  mapRequestToAsset
+} from "@cloudflare/kv-asset-handler";
+import manifest from "__STATIC_CONTENT_MANIFEST";
+export default {
+  async fetch(request, env, context) {
+    return await getAssetFromKV({ request }, {
+      ASSET_NAMESPACE: env.__STATIC_CONTENT,
+      ASSET_MANIFEST: JSON.parse(manifest)
+    });
+  }
+};`
+
+    const result = transformCloudflareModuleAdapter({
+      buildAssetsDir: '/_nuxt/',
+      code: legacyAdapter,
+      id: '/app/node_modules/nitropack/dist/runtime/entries/cloudflare-module.mjs',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+
+    expect(result).toEqual({
+      _tag: 'IncompatibleCloudflareModuleAdapter',
+      reason: 'LegacyCloudflareAdapter',
+    })
+
+    const plugin = createCloudflareAssetProtectionPlugin({
+      buildAssetsDir: '/_nuxt/',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+    const context = {
+      error(message: string): never {
+        throw new Error(message)
+      },
+    }
+    expect(() => plugin.transform.call(
+      context,
+      legacyAdapter,
+      '/app/node_modules/nitropack/dist/runtime/entries/cloudflare-module.mjs',
+    )).toThrow('requires nitropack >= 2.10.0')
+  })
+
+  it('emits syntactically valid JavaScript when transformed', async () => {
+    const result = transformCloudflareModuleAdapter({
+      buildAssetsDir: '/_nuxt/',
+      code: cloudflareModuleAdapter,
+      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+
+    expect(result._tag).toBe('Transformed')
+    if (result._tag === 'Transformed') {
+      const tmpFile = join(tmpdir(), `skew-transformed-${Date.now()}.mjs`)
+      try {
+        await writeFile(tmpFile, result.code, 'utf-8')
+        await expect(promisify(execFile)('node', ['--check', tmpFile])).resolves.toMatchObject({ stdout: '' })
+      }
+      finally {
+        await rm(tmpFile, { force: true })
+      }
+    }
   })
 
   it('fails the build when Nitro bypasses the adapter transform', () => {
