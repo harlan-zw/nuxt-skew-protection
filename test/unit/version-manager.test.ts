@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'pathe'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveBuildTimeDriver } from '../../src/unstorage/utils'
 import { createAssetManager, extractFileId } from '../../src/utils/version-manager'
 
@@ -218,6 +218,43 @@ describe('version Manager', () => {
       expect(updatedManifest.versions.v2.deletedChunks).toContain('_nuxt/chunk-a.DEF456.js')
       expect(updatedManifest.versions.v2.deletedChunks).not.toContain('_nuxt/entry.ABC123.js')
       expect(updatedManifest.versions.v2.deletedChunks).not.toContain('_nuxt/chunk-b.GHI789.js')
+    })
+
+    it('should calculate deleted chunks when versions share the same timestamp', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      try {
+        const manager = createAssetManager({
+          driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+          debug: false,
+        })
+
+        const nuxtDir = join(outputDir, 'public', '_nuxt')
+        await mkdir(nuxtDir, { recursive: true })
+
+        const v1Assets = ['_nuxt/entry.ABC123.js', '_nuxt/chunk-a.DEF456.js', '_nuxt/chunk-b.GHI789.js']
+        for (const asset of v1Assets) {
+          await writeFile(join(outputDir, 'public', asset), 'content')
+        }
+        await manager.updateVersionsManifest('v1', v1Assets)
+        await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), v1Assets)
+
+        const v2Assets = ['_nuxt/entry.ABC123.js', '_nuxt/chunk-b.GHI789.js']
+        for (const asset of v2Assets) {
+          await writeFile(join(outputDir, 'public', asset), 'content')
+        }
+        await manager.updateVersionsManifest('v2', v2Assets)
+        await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), v2Assets)
+
+        const manifestPath = join(storageDir, 'version-manifest.json')
+        const manifestData = await readFile(manifestPath, 'utf-8')
+        const updatedManifest = JSON.parse(manifestData)
+
+        expect(updatedManifest.versions.v2.deletedChunks).toContain('_nuxt/chunk-a.DEF456.js')
+      }
+      finally {
+        vi.useRealTimers()
+      }
     })
 
     it('should have empty deletedChunks for first version', async () => {
