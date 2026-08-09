@@ -113,8 +113,8 @@ function calculateDeletedChunks(currentAssets: string[], previousAssets: string[
  */
 function getPreviousVersion(manifest: VersionManifest, currentVersionId: string): string | null {
   const sortedVersions = Object.entries(manifest.versions)
-    .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
-    .sort((a, b) => b.timestamp - a.timestamp)
+    .map(([id, data], index) => ({ id, timestamp: new Date(data.timestamp).getTime(), index }))
+    .sort((a, b) => b.timestamp - a.timestamp || b.index - a.index)
 
   const currentIndex = sortedVersions.findIndex(v => v.id === currentVersionId)
   if (currentIndex === -1 || currentIndex === sortedVersions.length - 1) {
