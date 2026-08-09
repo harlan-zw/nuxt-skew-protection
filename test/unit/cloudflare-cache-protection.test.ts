@@ -31,18 +31,15 @@ describe('cloudflare asset cache protection', () => {
       .mockResolvedValueOnce(asset)
     const request = new Request('https://example.com/_nuxt/entry.ABC123.js')
 
-    const response = await fetchCloudflareAsset(request, { fetch }, () => 'retry-id')
+    const response = await fetchCloudflareAsset(request, { fetch })
 
     expect(response).toBe(asset)
     expect(await response.text()).toBe('chunk')
     expect(fetch).toHaveBeenCalledTimes(2)
 
     const retryRequest = fetch.mock.calls[1]![0] as Request
-    expect(retryRequest.url).toBe(
-      'https://example.com/_nuxt/entry.ABC123.js?__nuxt_skew_protection_retry=retry-id',
-    )
-    expect(retryRequest.headers.get('cache-control')).toBe('no-cache')
-    expect(retryRequest.headers.get('pragma')).toBe('no-cache')
+    expect(retryRequest.url).toBe(request.url)
+    expect(retryRequest.cache).toBe('no-cache')
   })
 
   it('prevents a repeated asset failure from entering browser or edge caches', async () => {
@@ -65,7 +62,6 @@ describe('cloudflare asset cache protection', () => {
     const response = await fetchCloudflareAsset(
       new Request('https://example.com/_nuxt/entry.ABC123.js'),
       { fetch },
-      () => 'retry-id',
     )
 
     expect(response.status).toBe(404)
@@ -82,7 +78,6 @@ describe('cloudflare asset cache protection', () => {
     const response = await fetchCloudflareAsset(
       new Request('https://example.com/_nuxt/entry.ABC123.js'),
       { fetch },
-      () => 'unused',
     )
 
     expect(response).toBe(asset)
@@ -209,16 +204,24 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps non-build requests and missing asset bindings untouched', () => {
+  it('keeps non-build requests untouched', () => {
     expect(fetchCloudflareBuildAsset(
       new Request('https://example.com/favicon.ico'),
       { fetch: vi.fn() },
       '/_nuxt/',
     )).toBeUndefined()
-    expect(fetchCloudflareBuildAsset(
+  })
+
+  it('returns a non-cacheable miss when the asset binding is unavailable', async () => {
+    const response = await fetchCloudflareBuildAsset(
       new Request('https://example.com/_nuxt/entry.js'),
       undefined,
       '/_nuxt/',
-    )).toBeUndefined()
+    )
+
+    expect(response?.status).toBe(404)
+    expect(response?.headers.get('cache-control')).toBe('no-store')
+    expect(response?.headers.get('cdn-cache-control')).toBe('no-store')
+    expect(response?.headers.get('cloudflare-cdn-cache-control')).toBe('no-store')
   })
 })

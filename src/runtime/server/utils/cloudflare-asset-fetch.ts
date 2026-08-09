@@ -2,10 +2,6 @@ interface CloudflareAssetBinding {
   fetch: (request: Request) => Promise<Response>
 }
 
-type CreateRetryId = () => string
-
-const retryQuery = '__nuxt_skew_protection_retry'
-
 function disableCaching(response: Response) {
   const headers = new Headers(response.headers)
   headers.set('cache-control', 'no-store')
@@ -19,20 +15,13 @@ function disableCaching(response: Response) {
   })
 }
 
-function createRetryRequest(request: Request, retryId: string) {
-  const url = new URL(request.url)
-  url.searchParams.set(retryQuery, retryId)
-
-  const retryRequest = new Request(url, request)
-  retryRequest.headers.set('cache-control', 'no-cache')
-  retryRequest.headers.set('pragma', 'no-cache')
-  return retryRequest
+function createRetryRequest(request: Request) {
+  return new Request(request, { cache: 'no-cache' })
 }
 
 export async function fetchCloudflareAsset(
   request: Request,
   assets: CloudflareAssetBinding,
-  createRetryId: CreateRetryId = () => crypto.randomUUID(),
 ) {
   const response = await assets.fetch(request)
 
@@ -44,7 +33,7 @@ export async function fetchCloudflareAsset(
     return disableCaching(response)
   }
 
-  const retryResponse = await assets.fetch(createRetryRequest(request, createRetryId()))
+  const retryResponse = await assets.fetch(createRetryRequest(request))
   return retryResponse.status < 400 ? retryResponse : disableCaching(retryResponse)
 }
 
@@ -53,8 +42,12 @@ export function fetchCloudflareBuildAsset(
   assets: CloudflareAssetBinding | undefined,
   buildAssetsDir: string,
 ): Promise<Response> | undefined {
-  if (!assets || !new URL(request.url).pathname.startsWith(buildAssetsDir)) {
+  if (!new URL(request.url).pathname.startsWith(buildAssetsDir)) {
     return undefined
+  }
+
+  if (!assets) {
+    return Promise.resolve(disableCaching(new Response(null, { status: 404 })))
   }
 
   return fetchCloudflareAsset(request, assets)
