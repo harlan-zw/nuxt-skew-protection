@@ -427,7 +427,8 @@ export {}
       const isStatic = isStaticPreset(nuxt)
 
       if (nitroPreset === 'cloudflare-module' || nitroPreset === 'cloudflare-durable') {
-        // Nitro returns static asset responses before H3 hooks run.
+        // Nitro returns static assets before H3 hooks run. Decorate the Worker
+        // entry so changes to Nitro's private adapter source do not affect us.
         nuxt.hook('nitro:config', (nitroConfig) => {
           nitroConfig.rollupConfig ||= {}
           const existingPlugins = nitroConfig.rollupConfig.plugins

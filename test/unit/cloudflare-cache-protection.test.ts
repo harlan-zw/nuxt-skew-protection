@@ -1,25 +1,16 @@
 import { execFile } from 'node:child_process'
-import { rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
-import { fetchCloudflareAsset } from '../../src/runtime/server/utils/cloudflare-asset-fetch'
+import {
+  fetchCloudflareAsset,
+  fetchCloudflareBuildAsset,
+} from '../../src/runtime/server/utils/cloudflare-asset-fetch'
 import {
   createCloudflareAssetProtectionPlugin,
-  transformCloudflareModuleAdapter,
 } from '../../src/utils/cloudflare-cache-protection'
-
-const cloudflareModuleAdapter = `import "#nitro-internal-pollyfills";
-import { isPublicAssetURL } from "#nitro-internal-virtual/public-assets";
-import { createHandler } from "./_module-handler.mjs";
-export default createHandler({
-  fetch(request, env, context, url) {
-    if (env.ASSETS && isPublicAssetURL(url.pathname)) {
-      return env.ASSETS.fetch(request);
-    }
-  }
-});`
 
 describe('cloudflare asset cache protection', () => {
   it('recovers when Cloudflare initially misses a deployed asset', async () => {
@@ -98,57 +89,63 @@ describe('cloudflare asset cache protection', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('patches Nitro build assets at the ASSETS binding boundary', () => {
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: cloudflareModuleAdapter,
-      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+  it('wraps Nitro entry without depending on its source shape', async () => {
+    const testDir = await mkdtemp(join(tmpdir(), 'skew-entry-'))
+    const nitroEntryPath = join(testDir, 'nitro-entry.mjs')
+    const runtimeHelperPath = join(testDir, 'runtime-helper.mjs')
+    const plugin = createCloudflareAssetProtectionPlugin({
+      buildAssetsDir: '/pro/_nuxt',
+      runtimeHelperId: runtimeHelperPath,
     })
-
-    expect(result._tag).toBe('Transformed')
-    if (result._tag !== 'Transformed') {
-      return
+    const context = {
+      error(message: string): never {
+        throw new Error(message)
+      },
     }
-    expect(result.code).toContain(
-      'url.pathname.startsWith("/_nuxt/") ? fetchCloudflareAsset(request, env.ASSETS) : env.ASSETS.fetch(request)',
-    )
-    expect(result.code).toContain(
-      'from "/module/runtime/cloudflare-asset-fetch.js";',
-    )
+    const options = plugin.options.call(context, {
+      input: nitroEntryPath,
+    })
+    const virtualId = options.input as string
+    const resolvedId = plugin.resolveId(virtualId)
+    const code = plugin.load(resolvedId!)
+
+    expect(code).toContain(`import nitroEntry from ${JSON.stringify(nitroEntryPath)}`)
+    expect(code).toContain(`export * from ${JSON.stringify(nitroEntryPath)}`)
+    expect(code).toContain('...nitroEntry')
+    expect(code).toContain('fetchCloudflareBuildAsset(request, env.ASSETS, "/pro/_nuxt/")')
+    expect(code).toContain('assetResponse ?? nitroEntry.fetch(request, env, context)')
+
+    try {
+      await Promise.all([
+        writeFile(nitroEntryPath, `
+const handler = Object.fromEntries(
+  ['fetch', 'scheduled', 'email', 'queue', 'tail', 'trace'].map(name => [name, () => name]),
+)
+export class $DurableObject {}
+export default handler
+`, 'utf-8'),
+        writeFile(runtimeHelperPath, 'export const fetchCloudflareBuildAsset = () => undefined\n', 'utf-8'),
+        writeFile(join(testDir, 'protected-entry.mjs'), code!, 'utf-8'),
+        writeFile(join(testDir, 'verify.mjs'), `
+import assert from 'node:assert/strict'
+import handler, { $DurableObject } from './protected-entry.mjs'
+assert.equal(typeof $DurableObject, 'function')
+for (const name of ['scheduled', 'email', 'queue', 'tail', 'trace']) {
+  assert.equal(typeof handler[name], 'function')
+}
+assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch')
+`, 'utf-8'),
+      ])
+      await expect(promisify(execFile)('node', [join(testDir, 'verify.mjs')])).resolves.toMatchObject({ stdout: '' })
+    }
+    finally {
+      await rm(testDir, { force: true, recursive: true })
+    }
+
+    expect(() => plugin.buildEnd.call(context)).not.toThrow()
   })
 
-  it('patches the Cloudflare Durable adapter used by stateful Nuxt apps', () => {
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: cloudflareModuleAdapter,
-      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-durable.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })
-
-    expect(result._tag).toBe('Transformed')
-    if (result._tag === 'Transformed') {
-      expect(result.code).toContain('fetchCloudflareAsset(request, env.ASSETS)')
-    }
-  })
-
-  it('returns a tagged incompatibility when Nitro changes its asset branch', () => {
-    const incompatibleAdapter = cloudflareModuleAdapter.replace(
-      'return env.ASSETS.fetch(request);',
-      'return fetch(request);',
-    )
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: incompatibleAdapter,
-      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })
-
-    expect(result).toEqual({
-      _tag: 'IncompatibleCloudflareModuleAdapter',
-      reason: 'AssetFetchBranchNotFound',
-    })
-
+  it('fails the build when Nitro does not use one string entry', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
       buildAssetsDir: '/_nuxt/',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
@@ -158,52 +155,13 @@ describe('cloudflare asset cache protection', () => {
         throw new Error(message)
       },
     }
-    expect(() => plugin.transform.call(
-      context,
-      incompatibleAdapter,
-      '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
-    )).toThrow('incompatible with asset 404 protection (AssetFetchBranchNotFound)')
+
+    expect(() => plugin.options.call(context, {
+      input: ['/nitro/cloudflare-module.mjs'],
+    })).toThrow('requires one Nitro entry')
   })
 
-  it('ignores adapters outside Nitro cloudflare-module', () => {
-    expect(transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: cloudflareModuleAdapter,
-      id: '/app/server/entry.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })).toEqual({
-      _tag: 'NotCloudflareModuleAdapter',
-    })
-  })
-
-  it('flags the legacy getAssetFromKV adapter with an upgrade hint', () => {
-    const legacyAdapter = `import "#internal/nitro/virtual/polyfill";
-import {
-  getAssetFromKV,
-  mapRequestToAsset
-} from "@cloudflare/kv-asset-handler";
-import manifest from "__STATIC_CONTENT_MANIFEST";
-export default {
-  async fetch(request, env, context) {
-    return await getAssetFromKV({ request }, {
-      ASSET_NAMESPACE: env.__STATIC_CONTENT,
-      ASSET_MANIFEST: JSON.parse(manifest)
-    });
-  }
-};`
-
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: legacyAdapter,
-      id: '/app/node_modules/nitropack/dist/runtime/entries/cloudflare-module.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })
-
-    expect(result).toEqual({
-      _tag: 'IncompatibleCloudflareModuleAdapter',
-      reason: 'LegacyCloudflareAdapter',
-    })
-
+  it('rejects legacy Cloudflare adapters without an ASSETS binding', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
       buildAssetsDir: '/_nuxt/',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
@@ -213,35 +171,13 @@ export default {
         throw new Error(message)
       },
     }
-    expect(() => plugin.transform.call(
-      context,
-      legacyAdapter,
-      '/app/node_modules/nitropack/dist/runtime/entries/cloudflare-module.mjs',
-    )).toThrow('requires nitropack >= 2.10.0')
+
+    expect(() => plugin.options.call(context, {
+      input: '/app/node_modules/nitropack/dist/runtime/entries/cloudflare-module.mjs',
+    })).toThrow('requires nitropack >= 2.10.0')
   })
 
-  it('emits syntactically valid JavaScript when transformed', async () => {
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/_nuxt/',
-      code: cloudflareModuleAdapter,
-      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })
-
-    expect(result._tag).toBe('Transformed')
-    if (result._tag === 'Transformed') {
-      const tmpFile = join(tmpdir(), `skew-transformed-${Date.now()}.mjs`)
-      try {
-        await writeFile(tmpFile, result.code, 'utf-8')
-        await expect(promisify(execFile)('node', ['--check', tmpFile])).resolves.toMatchObject({ stdout: '' })
-      }
-      finally {
-        await rm(tmpFile, { force: true })
-      }
-    }
-  })
-
-  it('fails the build when Nitro bypasses the adapter transform', () => {
+  it('fails the build when the protected entry is not bundled', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
       buildAssetsDir: '/_nuxt/',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
@@ -257,17 +193,32 @@ export default {
     )
   })
 
-  it('supports path-routed build asset directories', () => {
-    const result = transformCloudflareModuleAdapter({
-      buildAssetsDir: '/pro/_nuxt',
-      code: cloudflareModuleAdapter,
-      id: '/app/node_modules/nitropack/dist/presets/cloudflare/runtime/cloudflare-module.mjs',
-      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
-    })
+  it('fetches build asset requests at the Worker entry', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response('missing', { status: 404 }))
+      .mockResolvedValueOnce(new Response('chunk'))
+    const assetRequest = new Request('https://example.com/pro/_nuxt/entry.js')
 
-    expect(result._tag).toBe('Transformed')
-    if (result._tag === 'Transformed') {
-      expect(result.code).toContain('url.pathname.startsWith("/pro/_nuxt/")')
-    }
+    const response = await fetchCloudflareBuildAsset(
+      assetRequest,
+      { fetch },
+      '/pro/_nuxt/',
+    )
+
+    expect(await response?.text()).toBe('chunk')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps non-build requests and missing asset bindings untouched', () => {
+    expect(fetchCloudflareBuildAsset(
+      new Request('https://example.com/favicon.ico'),
+      { fetch: vi.fn() },
+      '/_nuxt/',
+    )).toBeUndefined()
+    expect(fetchCloudflareBuildAsset(
+      new Request('https://example.com/_nuxt/entry.js'),
+      undefined,
+      '/_nuxt/',
+    )).toBeUndefined()
   })
 })

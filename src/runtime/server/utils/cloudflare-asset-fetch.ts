@@ -47,3 +47,15 @@ export async function fetchCloudflareAsset(
   const retryResponse = await assets.fetch(createRetryRequest(request, createRetryId()))
   return retryResponse.status < 400 ? retryResponse : disableCaching(retryResponse)
 }
+
+export function fetchCloudflareBuildAsset(
+  request: Request,
+  assets: CloudflareAssetBinding | undefined,
+  buildAssetsDir: string,
+): Promise<Response> | undefined {
+  if (!assets || !new URL(request.url).pathname.startsWith(buildAssetsDir)) {
+    return undefined
+  }
+
+  return fetchCloudflareAsset(request, assets)
+}
