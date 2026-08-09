@@ -22,6 +22,7 @@ import { logger } from './logger'
 import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
+import { createCloudflareAssetProtectionPlugin } from './utils/cloudflare-cache-protection'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {
@@ -424,6 +425,22 @@ export {}
       const isCloudflareRuntime = nitroPreset?.includes('cloudflare')
       const isVercel = nitroPreset?.includes('vercel') || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
       const isStatic = isStaticPreset(nuxt)
+
+      if (nitroPreset === 'cloudflare-module' || nitroPreset === 'cloudflare-durable') {
+        // Nitro returns static assets before H3 hooks run. Decorate the Worker
+        // entry so changes to Nitro's private adapter source do not affect us.
+        nuxt.hook('nitro:config', (nitroConfig) => {
+          nitroConfig.rollupConfig ||= {}
+          const existingPlugins = nitroConfig.rollupConfig.plugins
+          nitroConfig.rollupConfig.plugins = [
+            ...(Array.isArray(existingPlugins) ? existingPlugins : existingPlugins ? [existingPlugins] : []),
+            createCloudflareAssetProtectionPlugin({
+              buildAssetsDir: nuxt.options.app.buildAssetsDir,
+              runtimeHelperId: resolver.resolve('./runtime/server/utils/cloudflare-asset-fetch'),
+            }),
+          ]
+        })
+      }
 
       // Determine resolved strategy
       const isAdapter = isSkewAdapter(options.updateStrategy)
