@@ -22,6 +22,7 @@ interface CloudflareAssetProtectionPlugin {
 
 const virtualEntryId = 'virtual:nuxt-skew-protection/cloudflare-entry'
 const resolvedVirtualEntryId = `\0${virtualEntryId}`
+const nitroPrerendererSuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
 const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare-module.mjs',
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
@@ -33,6 +34,13 @@ function isLegacyCloudflareEntry(id: string) {
     .split('?', 1)[0]!
     .replaceAll('\\', '/')
   return legacyCloudflareAdapterSuffixes.some(suffix => normalizedId.endsWith(suffix))
+}
+
+function isNitroPrerendererEntry(id: string) {
+  const normalizedId = id
+    .split('?', 1)[0]!
+    .replaceAll('\\', '/')
+  return normalizedId.endsWith(nitroPrerendererSuffix)
 }
 
 function normalizeBuildAssetsDir(value: string) {
@@ -73,15 +81,24 @@ export function createCloudflareAssetProtectionPlugin(
   },
 ): CloudflareAssetProtectionPlugin {
   let nitroEntryId: string | undefined
+  let prerendererBuild = false
   let wrapperLoaded = false
 
   return {
     name: 'nuxt-skew-protection:cloudflare-asset-fetch',
     options(inputOptions) {
+      nitroEntryId = undefined
+      prerendererBuild = false
+      wrapperLoaded = false
+
       if (typeof inputOptions.input !== 'string') {
         this.error(
           '[nuxt-skew-protection] Asset 404 protection requires one Nitro entry.',
         )
+      }
+      if (isNitroPrerendererEntry(inputOptions.input)) {
+        prerendererBuild = true
+        return inputOptions
       }
       if (isLegacyCloudflareEntry(inputOptions.input)) {
         this.error(
@@ -110,7 +127,7 @@ export function createCloudflareAssetProtectionPlugin(
       })
     },
     buildEnd(error) {
-      if (!error && !wrapperLoaded) {
+      if (!error && !wrapperLoaded && !prerendererBuild) {
         this.error(
           '[nuxt-skew-protection] Nitro\'s Cloudflare entry was not bundled. Refusing to build without asset 404 protection.',
         )
