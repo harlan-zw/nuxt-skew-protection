@@ -27,6 +27,13 @@ const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
   '/nitropack/dist/runtime/entries/cloudflare-pages.mjs',
 ]
+const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+
+function isNitroPrerenderEntry(id: string) {
+  return id
+    .split('?', 1)[0]!
+    .endsWith(nitroPrerenderEntrySuffix)
+}
 
 function isLegacyCloudflareEntry(id: string) {
   const normalizedId = id
@@ -74,14 +81,22 @@ export function createCloudflareAssetProtectionPlugin(
 ): CloudflareAssetProtectionPlugin {
   let nitroEntryId: string | undefined
   let wrapperLoaded = false
+  let shouldWrapEntry = true
 
   return {
     name: 'nuxt-skew-protection:cloudflare-asset-fetch',
     options(inputOptions) {
+      nitroEntryId = undefined
+      wrapperLoaded = false
+      shouldWrapEntry = false
+
       if (typeof inputOptions.input !== 'string') {
         this.error(
           '[nuxt-skew-protection] Asset 404 protection requires one Nitro entry.',
         )
+      }
+      if (isNitroPrerenderEntry(inputOptions.input)) {
+        return inputOptions
       }
       if (isLegacyCloudflareEntry(inputOptions.input)) {
         this.error(
@@ -90,6 +105,7 @@ export function createCloudflareAssetProtectionPlugin(
       }
 
       nitroEntryId = inputOptions.input
+      shouldWrapEntry = true
       return {
         ...inputOptions,
         input: virtualEntryId,
@@ -110,7 +126,7 @@ export function createCloudflareAssetProtectionPlugin(
       })
     },
     buildEnd(error) {
-      if (!error && !wrapperLoaded) {
+      if (shouldWrapEntry && !error && !wrapperLoaded) {
         this.error(
           '[nuxt-skew-protection] Nitro\'s Cloudflare entry was not bundled. Refusing to build without asset 404 protection.',
         )

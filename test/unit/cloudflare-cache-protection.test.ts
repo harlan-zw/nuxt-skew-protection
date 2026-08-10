@@ -172,6 +172,22 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
     })).toThrow('requires nitropack >= 2.10.0')
   })
 
+  it('leaves Nitro prerender builds untouched', () => {
+    const plugin = createCloudflareAssetProtectionPlugin({
+      buildAssetsDir: '/_nuxt/',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+    const context = {
+      error(message: string): never {
+        throw new Error(message)
+      },
+    }
+    const input = '/app/node_modules/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+
+    expect(plugin.options.call(context, { input })).toEqual({ input })
+    expect(() => plugin.buildEnd.call(context)).not.toThrow()
+  })
+
   it('fails the build when the protected entry is not bundled', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
       buildAssetsDir: '/_nuxt/',
