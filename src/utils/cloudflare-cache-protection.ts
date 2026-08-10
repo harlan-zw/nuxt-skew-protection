@@ -28,12 +28,14 @@ const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
   '/nitropack/dist/runtime/entries/cloudflare-pages.mjs',
 ]
-const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 
 function isNitroPrerenderEntry(id: string) {
-  return id
+  const normalizedId = id
     .split('?', 1)[0]!
-    .endsWith(nitroPrerenderEntrySuffix)
+    .replaceAll('\\', '/')
+  return normalizedId.endsWith(nitroPrerenderEntrySuffix)
+    || normalizedId.endsWith(`${nitroPrerenderEntrySuffix}.mjs`)
 }
 
 function isLegacyCloudflareEntry(id: string) {

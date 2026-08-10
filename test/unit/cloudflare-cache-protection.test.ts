@@ -187,7 +187,7 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
         throw new Error(message)
       },
     }
-    const input = '/app/node_modules/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+    const input = '/app/node_modules/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 
     expect(plugin.options.call(context, { input })).toEqual({ input })
     expect(() => plugin.buildEnd.call(context)).not.toThrow()
