@@ -22,7 +22,7 @@ interface CloudflareAssetProtectionPlugin {
 
 const virtualEntryId = 'virtual:nuxt-skew-protection/cloudflare-entry'
 const resolvedVirtualEntryId = `\0${virtualEntryId}`
-const nitroPrerendererSuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+const nitroPrerendererSuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare-module.mjs',
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
@@ -41,6 +41,7 @@ function isNitroPrerendererEntry(id: string) {
     .split('?', 1)[0]!
     .replaceAll('\\', '/')
   return normalizedId.endsWith(nitroPrerendererSuffix)
+    || normalizedId.endsWith(`${nitroPrerendererSuffix}.mjs`)
 }
 
 function normalizeBuildAssetsDir(value: string) {
