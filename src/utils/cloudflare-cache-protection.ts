@@ -22,26 +22,26 @@ interface CloudflareAssetProtectionPlugin {
 
 const virtualEntryId = 'virtual:nuxt-skew-protection/cloudflare-entry'
 const resolvedVirtualEntryId = `\0${virtualEntryId}`
-const nitroPrerendererSuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare-module.mjs',
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
   '/nitropack/dist/runtime/entries/cloudflare-pages.mjs',
 ]
+const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
+
+function isNitroPrerenderEntry(id: string) {
+  const normalizedId = id
+    .split('?', 1)[0]!
+    .replaceAll('\\', '/')
+  return normalizedId.endsWith(nitroPrerenderEntrySuffix)
+    || normalizedId.endsWith(`${nitroPrerenderEntrySuffix}.mjs`)
+}
 
 function isLegacyCloudflareEntry(id: string) {
   const normalizedId = id
     .split('?', 1)[0]!
     .replaceAll('\\', '/')
   return legacyCloudflareAdapterSuffixes.some(suffix => normalizedId.endsWith(suffix))
-}
-
-function isNitroPrerendererEntry(id: string) {
-  const normalizedId = id
-    .split('?', 1)[0]!
-    .replaceAll('\\', '/')
-  return normalizedId.endsWith(nitroPrerendererSuffix)
-    || normalizedId.endsWith(`${nitroPrerendererSuffix}.mjs`)
 }
 
 function normalizeBuildAssetsDir(value: string) {
@@ -82,23 +82,22 @@ export function createCloudflareAssetProtectionPlugin(
   },
 ): CloudflareAssetProtectionPlugin {
   let nitroEntryId: string | undefined
-  let prerendererBuild = false
   let wrapperLoaded = false
+  let shouldWrapEntry = true
 
   return {
     name: 'nuxt-skew-protection:cloudflare-asset-fetch',
     options(inputOptions) {
       nitroEntryId = undefined
-      prerendererBuild = false
       wrapperLoaded = false
+      shouldWrapEntry = false
 
       if (typeof inputOptions.input !== 'string') {
         this.error(
           '[nuxt-skew-protection] Asset 404 protection requires one Nitro entry.',
         )
       }
-      if (isNitroPrerendererEntry(inputOptions.input)) {
-        prerendererBuild = true
+      if (isNitroPrerenderEntry(inputOptions.input)) {
         return inputOptions
       }
       if (isLegacyCloudflareEntry(inputOptions.input)) {
@@ -108,6 +107,7 @@ export function createCloudflareAssetProtectionPlugin(
       }
 
       nitroEntryId = inputOptions.input
+      shouldWrapEntry = true
       return {
         ...inputOptions,
         input: virtualEntryId,
@@ -128,7 +128,7 @@ export function createCloudflareAssetProtectionPlugin(
       })
     },
     buildEnd(error) {
-      if (!error && !wrapperLoaded && !prerendererBuild) {
+      if (shouldWrapEntry && !error && !wrapperLoaded) {
         this.error(
           '[nuxt-skew-protection] Nitro\'s Cloudflare entry was not bundled. Refusing to build without asset 404 protection.',
         )
