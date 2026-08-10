@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveBasePath, resolveCookieName } from '../../src/resolve-base-path'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from '../../src/resolve-base-path'
 
 describe('resolveBasePath', () => {
   it('defaults to /__skew for a standard single-app at the root', () => {
@@ -36,6 +36,18 @@ describe('resolveBasePath', () => {
 
   it('falls back to root when no app config is present', () => {
     expect(resolveBasePath({ app: {} })).toBe('/__skew')
+  })
+})
+
+describe('resolveBuildAssetsPath', () => {
+  it('includes the Nuxt app base URL', () => {
+    expect(resolveBuildAssetsPath({ baseURL: '/pro/', buildAssetsDir: '/_nuxt/' }))
+      .toBe('/pro/_nuxt/')
+  })
+
+  it('normalizes a root-mounted asset directory', () => {
+    expect(resolveBuildAssetsPath({ baseURL: '/', buildAssetsDir: '/pro/_nuxt/' }))
+      .toBe('/pro/_nuxt/')
   })
 })
 

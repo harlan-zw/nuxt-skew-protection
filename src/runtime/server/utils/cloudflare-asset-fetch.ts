@@ -19,6 +19,58 @@ function createRetryRequest(request: Request) {
   return new Request(request, { cache: 'no-cache' })
 }
 
+type ParsedBuildAssetRequest
+  = | { _tag: 'asset', request: Request }
+    | { _tag: 'invalid-recovery' }
+    | { _tag: 'unmatched' }
+
+function parseBuildAssetRequest(
+  request: Request,
+  buildAssetsPath: string,
+  recoveryPath: string,
+): ParsedBuildAssetRequest {
+  const requestUrl = new URL(request.url)
+
+  if (requestUrl.pathname.startsWith(buildAssetsPath)) {
+    return { _tag: 'asset', request }
+  }
+
+  if (requestUrl.pathname !== recoveryPath) {
+    return { _tag: 'unmatched' }
+  }
+
+  if (request.method !== 'GET') {
+    return { _tag: 'invalid-recovery' }
+  }
+
+  const target = requestUrl.searchParams.get('url')
+  if (!target) {
+    return { _tag: 'invalid-recovery' }
+  }
+
+  if (!URL.canParse(target, requestUrl)) {
+    return { _tag: 'invalid-recovery' }
+  }
+
+  const targetUrl = new URL(target, requestUrl)
+  if (
+    targetUrl.origin !== requestUrl.origin
+    || !targetUrl.pathname.startsWith(buildAssetsPath)
+    || targetUrl.username
+    || targetUrl.password
+  ) {
+    return { _tag: 'invalid-recovery' }
+  }
+
+  return {
+    _tag: 'asset',
+    request: new Request(targetUrl, {
+      cache: 'no-cache',
+      headers: request.headers,
+    }),
+  }
+}
+
 export async function fetchCloudflareAsset(
   request: Request,
   assets: CloudflareAssetBinding,
@@ -40,15 +92,22 @@ export async function fetchCloudflareAsset(
 export function fetchCloudflareBuildAsset(
   request: Request,
   assets: CloudflareAssetBinding | undefined,
-  buildAssetsDir: string,
+  buildAssetsPath: string,
+  recoveryPath: string,
 ): Promise<Response> | undefined {
-  if (!new URL(request.url).pathname.startsWith(buildAssetsDir)) {
-    return undefined
+  const parsed = parseBuildAssetRequest(request, buildAssetsPath, recoveryPath)
+
+  if (parsed._tag === 'unmatched') {
+    return
+  }
+
+  if (parsed._tag === 'invalid-recovery') {
+    return Promise.resolve(disableCaching(new Response(null, { status: 400 })))
   }
 
   if (!assets) {
     return Promise.resolve(disableCaching(new Response(null, { status: 404 })))
   }
 
-  return fetchCloudflareAsset(request, assets)
+  return fetchCloudflareAsset(parsed.request, assets)
 }

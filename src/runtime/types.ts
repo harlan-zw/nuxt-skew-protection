@@ -1,5 +1,13 @@
 import type { CookieSerializeOptions } from 'cookie-es'
 
+export type AssetRecoveryConfig
+  = | { _tag: 'disabled' }
+    | {
+      _tag: 'cloudflare'
+      buildAssetsPath: string
+      recoveryPath: string
+    }
+
 export interface NuxtSkewProtectionRuntimeConfig {
   /**
    * Path prefix for the module's runtime endpoints (`/ws`, `/sse`, `/health`,
@@ -8,6 +16,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
    * that only owns part of the host, so the endpoints resolve to this app.
    */
   basePath: string
+  assetRecovery: AssetRecoveryConfig
   cookie: Omit<CookieSerializeOptions, 'encode'> & {
     name?: string
   }
@@ -21,6 +30,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
 
 export interface SkewProtectionRuntimeConfig {
   basePath: string
+  assetRecovery: AssetRecoveryConfig
   cookie: Omit<CookieSerializeOptions, 'encode'> & {
     name: string
   }
