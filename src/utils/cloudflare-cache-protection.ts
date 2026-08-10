@@ -28,12 +28,14 @@ const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare.mjs',
   '/nitropack/dist/runtime/entries/cloudflare-pages.mjs',
 ]
-const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+const nitroPrerenderEntrySuffix = '/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 
 function isNitroPrerenderEntry(id: string) {
-  return id
+  const normalizedId = id
     .split('?', 1)[0]!
-    .endsWith(nitroPrerenderEntrySuffix)
+    .replaceAll('\\', '/')
+  return normalizedId.endsWith(nitroPrerenderEntrySuffix)
+    || normalizedId.endsWith(`${nitroPrerenderEntrySuffix}.mjs`)
 }
 
 function isLegacyCloudflareEntry(id: string) {
@@ -43,7 +45,7 @@ function isLegacyCloudflareEntry(id: string) {
   return legacyCloudflareAdapterSuffixes.some(suffix => normalizedId.endsWith(suffix))
 }
 
-function normalizeBuildAssetsDir(value: string) {
+function normalizeBuildAssetsPath(value: string) {
   const path = value.replace(/^\/+|\/+$/g, '')
   return `/${path}/`
 }
@@ -57,13 +59,15 @@ export function withoutCloudflareAssetProtectionPlugin<T>(plugins: T[]): T[] {
 }
 
 function renderCloudflareEntry(options: {
-  buildAssetsDir: string
+  buildAssetsPath: string
   nitroEntryId: string
+  recoveryPath: string
   runtimeHelperId: string
 }) {
   const nitroEntryId = JSON.stringify(options.nitroEntryId)
   const runtimeHelperId = JSON.stringify(options.runtimeHelperId)
-  const buildAssetsDir = JSON.stringify(normalizeBuildAssetsDir(options.buildAssetsDir))
+  const buildAssetsPath = JSON.stringify(normalizeBuildAssetsPath(options.buildAssetsPath))
+  const recoveryPath = JSON.stringify(options.recoveryPath)
 
   return `import nitroEntry from ${nitroEntryId};
 import { fetchCloudflareBuildAsset } from ${runtimeHelperId};
@@ -76,7 +80,7 @@ if (!nitroEntry || typeof nitroEntry.fetch !== "function") {
 export default {
   ...nitroEntry,
   fetch(request, env, context) {
-    const assetResponse = fetchCloudflareBuildAsset(request, env.ASSETS, ${buildAssetsDir});
+    const assetResponse = fetchCloudflareBuildAsset(request, env.ASSETS, ${buildAssetsPath}, ${recoveryPath});
     return assetResponse ?? nitroEntry.fetch(request, env, context);
   },
 };`
@@ -84,7 +88,8 @@ export default {
 
 export function createCloudflareAssetProtectionPlugin(
   options: {
-    buildAssetsDir: string
+    buildAssetsPath: string
+    recoveryPath: string
     runtimeHelperId: string
   },
 ): CloudflareAssetProtectionPlugin {

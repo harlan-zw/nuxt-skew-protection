@@ -90,7 +90,8 @@ describe('cloudflare asset cache protection', () => {
     const nitroEntryPath = join(testDir, 'nitro-entry.mjs')
     const runtimeHelperPath = join(testDir, 'runtime-helper.mjs')
     const plugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/pro/_nuxt',
+      buildAssetsPath: '/pro/_nuxt',
+      recoveryPath: '/pro/__skew/asset',
       runtimeHelperId: runtimeHelperPath,
     })
     const context = {
@@ -108,7 +109,7 @@ describe('cloudflare asset cache protection', () => {
     expect(code).toContain(`import nitroEntry from ${JSON.stringify(nitroEntryPath)}`)
     expect(code).toContain(`export * from ${JSON.stringify(nitroEntryPath)}`)
     expect(code).toContain('...nitroEntry')
-    expect(code).toContain('fetchCloudflareBuildAsset(request, env.ASSETS, "/pro/_nuxt/")')
+    expect(code).toContain('fetchCloudflareBuildAsset(request, env.ASSETS, "/pro/_nuxt/", "/pro/__skew/asset")')
     expect(code).toContain('assetResponse ?? nitroEntry.fetch(request, env, context)')
 
     try {
@@ -143,7 +144,8 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
   it('fails the build when Nitro does not use one string entry', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/_nuxt/',
+      buildAssetsPath: '/_nuxt/',
+      recoveryPath: '/__skew/asset',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
     })
     const context = {
@@ -159,7 +161,8 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
   it('rejects legacy Cloudflare adapters without an ASSETS binding', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/_nuxt/',
+      buildAssetsPath: '/_nuxt/',
+      recoveryPath: '/__skew/asset',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
     })
     const context = {
@@ -175,7 +178,8 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
   it('leaves Nitro prerender builds untouched', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/_nuxt/',
+      buildAssetsPath: '/_nuxt/',
+      recoveryPath: '/__skew/asset',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
     })
     const context = {
@@ -183,7 +187,7 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
         throw new Error(message)
       },
     }
-    const input = '/app/node_modules/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer.mjs'
+    const input = '/app/node_modules/nitropack/dist/presets/_nitro/runtime/nitro-prerenderer'
 
     expect(plugin.options.call(context, { input })).toEqual({ input })
     expect(() => plugin.buildEnd.call(context)).not.toThrow()
@@ -191,7 +195,8 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
   it('removes the Worker asset wrapper from Nitro prerender config', () => {
     const protectionPlugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/_nuxt/',
+      buildAssetsPath: '/_nuxt/',
+      recoveryPath: '/__skew/asset',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
     })
     const otherPlugin = { name: 'other' }
@@ -204,7 +209,8 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
   it('fails the build when the protected entry is not bundled', () => {
     const plugin = createCloudflareAssetProtectionPlugin({
-      buildAssetsDir: '/_nuxt/',
+      buildAssetsPath: '/_nuxt/',
+      recoveryPath: '/__skew/asset',
       runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
     })
     const context = {
@@ -228,6 +234,7 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
       assetRequest,
       { fetch },
       '/pro/_nuxt/',
+      '/pro/__skew/asset',
     )
 
     expect(await response?.text()).toBe('chunk')
@@ -239,7 +246,46 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
       new Request('https://example.com/favicon.ico'),
       { fetch: vi.fn() },
       '/_nuxt/',
+      '/__skew/asset',
     )).toBeUndefined()
+  })
+
+  it('recovers a cached browser miss through a dedicated Worker endpoint', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('chunk'))
+    const recoveryRequest = new Request(
+      'https://example.com/pro/__skew/asset?url=https%3A%2F%2Fexample.com%2Fpro%2F_nuxt%2Fentry.js',
+    )
+
+    const response = await fetchCloudflareBuildAsset(
+      recoveryRequest,
+      { fetch },
+      '/pro/_nuxt/',
+      '/pro/__skew/asset',
+    )
+
+    expect(await response?.text()).toBe('chunk')
+    const assetRequest = fetch.mock.calls[0]![0] as Request
+    expect(assetRequest.url).toBe('https://example.com/pro/_nuxt/entry.js')
+    expect(assetRequest.cache).toBe('no-cache')
+  })
+
+  it('rejects recovery requests for assets outside the configured origin and prefix', async () => {
+    const fetch = vi.fn()
+
+    for (const target of ['https://evil.example/_nuxt/entry.js', 'https://%']) {
+      const url = new URL('https://example.com/__skew/asset')
+      url.searchParams.set('url', target)
+      const response = await fetchCloudflareBuildAsset(
+        new Request(url),
+        { fetch },
+        '/_nuxt/',
+        '/__skew/asset',
+      )
+
+      expect(response?.status).toBe(400)
+      expect(response?.headers.get('cache-control')).toBe('no-store')
+    }
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('returns a non-cacheable miss when the asset binding is unavailable', async () => {
@@ -247,6 +293,7 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
       new Request('https://example.com/_nuxt/entry.js'),
       undefined,
       '/_nuxt/',
+      '/__skew/asset',
     )
 
     expect(response?.status).toBe(404)
