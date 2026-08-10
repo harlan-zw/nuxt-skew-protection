@@ -10,6 +10,7 @@ import {
 } from '../../src/runtime/server/utils/cloudflare-asset-fetch'
 import {
   createCloudflareAssetProtectionPlugin,
+  withoutCloudflareAssetProtectionPlugin,
 } from '../../src/utils/cloudflare-cache-protection'
 
 describe('cloudflare asset cache protection', () => {
@@ -186,6 +187,19 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
 
     expect(plugin.options.call(context, { input })).toEqual({ input })
     expect(() => plugin.buildEnd.call(context)).not.toThrow()
+  })
+
+  it('removes the Worker asset wrapper from Nitro prerender config', () => {
+    const protectionPlugin = createCloudflareAssetProtectionPlugin({
+      buildAssetsDir: '/_nuxt/',
+      runtimeHelperId: '/module/runtime/cloudflare-asset-fetch.js',
+    })
+    const otherPlugin = { name: 'other' }
+
+    expect(withoutCloudflareAssetProtectionPlugin([
+      otherPlugin,
+      protectionPlugin,
+    ])).toEqual([otherPlugin])
   })
 
   it('fails the build when the protected entry is not bundled', () => {

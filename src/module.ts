@@ -22,7 +22,10 @@ import { logger } from './logger'
 import { resolveBasePath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
-import { createCloudflareAssetProtectionPlugin } from './utils/cloudflare-cache-protection'
+import {
+  createCloudflareAssetProtectionPlugin,
+  withoutCloudflareAssetProtectionPlugin,
+} from './utils/cloudflare-cache-protection'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {
@@ -439,6 +442,13 @@ export {}
               runtimeHelperId: resolver.resolve('./runtime/server/utils/cloudflare-asset-fetch'),
             }),
           ]
+        })
+        nuxt.hook('nitro:init', (nitro) => {
+          nitro.hooks.hook('prerender:config', (prerenderConfig) => {
+            const plugins = prerenderConfig.rollupConfig?.plugins
+            if (Array.isArray(plugins))
+              prerenderConfig.rollupConfig!.plugins = withoutCloudflareAssetProtectionPlugin(plugins)
+          })
         })
       }
 

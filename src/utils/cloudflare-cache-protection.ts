@@ -21,6 +21,7 @@ interface CloudflareAssetProtectionPlugin {
 }
 
 const virtualEntryId = 'virtual:nuxt-skew-protection/cloudflare-entry'
+export const cloudflareAssetProtectionPluginName = 'nuxt-skew-protection:cloudflare-asset-fetch'
 const resolvedVirtualEntryId = `\0${virtualEntryId}`
 const legacyCloudflareAdapterSuffixes = [
   '/nitropack/dist/runtime/entries/cloudflare-module.mjs',
@@ -45,6 +46,14 @@ function isLegacyCloudflareEntry(id: string) {
 function normalizeBuildAssetsDir(value: string) {
   const path = value.replace(/^\/+|\/+$/g, '')
   return `/${path}/`
+}
+
+export function withoutCloudflareAssetProtectionPlugin<T>(plugins: T[]): T[] {
+  return plugins.filter((plugin) => {
+    if (!plugin || typeof plugin !== 'object' || !('name' in plugin))
+      return true
+    return plugin.name !== cloudflareAssetProtectionPluginName
+  })
 }
 
 function renderCloudflareEntry(options: {
@@ -84,7 +93,7 @@ export function createCloudflareAssetProtectionPlugin(
   let shouldWrapEntry = true
 
   return {
-    name: 'nuxt-skew-protection:cloudflare-asset-fetch',
+    name: cloudflareAssetProtectionPluginName,
     options(inputOptions) {
       nitroEntryId = undefined
       wrapperLoaded = false
