@@ -26,6 +26,7 @@ import {
   createCloudflareAssetProtectionPlugin,
   withoutCloudflareAssetProtectionPlugin,
 } from './utils/cloudflare-cache-protection'
+import { withCloudflareBuildAssetRouting } from './utils/cloudflare-routing'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {
@@ -433,6 +434,13 @@ export {}
         // Nitro returns static assets before H3 hooks run. Decorate the Worker
         // entry so changes to Nitro's private adapter source do not affect us.
         nuxt.hook('nitro:config', (nitroConfig) => {
+          nitroConfig.cloudflare ||= {}
+          nitroConfig.cloudflare.wrangler ||= {}
+          nitroConfig.cloudflare.wrangler.assets ||= {}
+          nitroConfig.cloudflare.wrangler.assets.run_worker_first = withCloudflareBuildAssetRouting(
+            nitroConfig.cloudflare.wrangler.assets.run_worker_first,
+            nuxt.options.app.buildAssetsDir,
+          )
           nitroConfig.rollupConfig ||= {}
           const existingPlugins = nitroConfig.rollupConfig.plugins
           nitroConfig.rollupConfig.plugins = [
