@@ -19,7 +19,7 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
-import { resolveBasePath, resolveCookieName } from './resolve-base-path'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -232,9 +232,22 @@ export default defineNuxtModule<ModuleOptions>({
       logger.warn('`ipTracking` requires `connectionTracking: true`. IP tracking will be disabled.')
     }
 
+    // Detect Nitro preset
+    const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
+    const usesCloudflareAssets = nitroPreset === 'cloudflare-module' || nitroPreset === 'cloudflare-durable'
+    const buildAssetsPath = resolveBuildAssetsPath(nuxt.options.app)
+    const recoveryPath = `${basePath}/asset`
+
     // @ts-expect-error untyped
     nuxt.options.runtimeConfig.public.skewProtection = {
       basePath,
+      assetRecovery: usesCloudflareAssets
+        ? {
+            _tag: 'cloudflare',
+            buildAssetsPath,
+            recoveryPath,
+          }
+        : { _tag: 'disabled' },
       cookie: options.cookie as Required<NuxtSkewProtectionRuntimeConfig['cookie']>,
       debug: options.debug,
       connectionTracking: options.connectionTracking,
@@ -244,9 +257,6 @@ export default defineNuxtModule<ModuleOptions>({
       multiTab: options.multiTab ?? true,
       version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
-
-    // Detect Nitro preset
-    const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
 
     // Detect NuxtHub and guide users on KV configuration
     const isNuxtHub = hasNuxtModule('@nuxthub/core')
@@ -438,7 +448,8 @@ export {}
           nitroConfig.rollupConfig.plugins = [
             ...(Array.isArray(existingPlugins) ? existingPlugins : existingPlugins ? [existingPlugins] : []),
             createCloudflareAssetProtectionPlugin({
-              buildAssetsDir: nuxt.options.app.buildAssetsDir,
+              buildAssetsPath,
+              recoveryPath,
               runtimeHelperId: resolver.resolve('./runtime/server/utils/cloudflare-asset-fetch'),
             }),
           ]

@@ -1,5 +1,6 @@
 import { defineNuxtPlugin } from 'nuxt/app'
 import { logger } from '../../shared/logger'
+import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 /**
@@ -29,11 +30,17 @@ export default defineNuxtPlugin({
       return
     }
 
+    const { assetRecovery } = useRuntimeConfigSkewProtection()
     const { clientVersion, onAppOutdated } = useSkewProtection()
     logger.debug('[SW] Initializing service worker tracking')
 
     // Register service worker and sync already-loaded modules once ready
-    const swRegistration = navigator.serviceWorker.register('/_nuxt-skew-sw.js')
+    const serviceWorkerUrl = new URL('/_nuxt-skew-sw.js', window.location.origin)
+    if (assetRecovery._tag === 'cloudflare') {
+      serviceWorkerUrl.searchParams.set('buildAssetsPath', assetRecovery.buildAssetsPath)
+      serviceWorkerUrl.searchParams.set('recoveryPath', assetRecovery.recoveryPath)
+    }
+    const swRegistration = navigator.serviceWorker.register(serviceWorkerUrl.href)
 
     swRegistration.then((registration) => {
       logger.debug('[SW] Service worker registered successfully')
