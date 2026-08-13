@@ -31,8 +31,6 @@ packages:
   - devtools
   - test/fixtures/*
   - '!test/fixtures/nuxt5'
-overrides:
-  nuxt-site-config: 4.2.2
 catalog:
   '@antfu/eslint-config': ^9.3.0
   '@arethetypeswrong/cli': ^0.18.5
@@ -80,16 +78,6 @@ catalog:
   wrangler: ^4.121.0
   ws: ^8.21.3
   zod: ^4.4.3
-onlyBuiltDependencies:
-  - '@firebase/util'
-  - '@parcel/watcher'
-  - better-sqlite3
-  - esbuild
-  - protobufjs
-  - unrs-resolver
-  - vue-demi
-  - workerd
-
 trustPolicyIgnoreAfter: 262800
 
 allowBuilds:
@@ -99,6 +87,12 @@ allowBuilds:
   sharp: true
   vue-demi: true
   workerd: true
-catalogs:
-  conflicts_nuxt-site-config_4_2_2:
-    nuxt-site-config: 4.2.2
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - '@parcel/watcher'
+  - better-sqlite3
+  - esbuild
+  - protobufjs
+  - unrs-resolver
+  - vue-demi
+  - workerd
