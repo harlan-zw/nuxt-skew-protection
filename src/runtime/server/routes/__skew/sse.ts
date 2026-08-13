@@ -52,13 +52,11 @@ export default defineEventHandler(async (event) => {
       return
     cleanupDone = true
     clearTimeout(keepaliveTimeout)
-    process.off('SIGTERM', close)
     // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:connection:close', { id: connectionId })
     await stream.close()
   }
 
   stream.onClosed(close)
-  process.on('SIGTERM', close)
   return stream.send()
 })
