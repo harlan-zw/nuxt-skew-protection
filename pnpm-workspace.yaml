@@ -32,7 +32,7 @@ packages:
   - test/fixtures/*
   - '!test/fixtures/nuxt5'
 overrides:
-  nuxt-site-config: 4.1.4
+  nuxt-site-config: 4.2.2
 catalog:
   '@antfu/eslint-config': ^9.3.0
   '@arethetypeswrong/cli': ^0.18.5
