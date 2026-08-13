@@ -2,7 +2,7 @@
   "name": "nuxt-skew-protection",
   "type": "module",
   "version": "1.4.4",
-  "packageManager": "pnpm@11.20.0",
+  "packageManager": "pnpm@11.21.0",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
     "name": "Harlan Wilton",
@@ -108,7 +108,7 @@
     "@vueuse/core": "catalog:",
     "consola": "catalog:",
     "cookie-es": "catalog:",
-    "nuxt-site-config": "catalog:",
+    "nuxt-site-config": "4.2.2",
     "nuxtseo-shared": "catalog:",
     "ofetch": "catalog:",
     "pathe": "catalog:",

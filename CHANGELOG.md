@@ -1,6 +1,40 @@
 # Changelog
 
 
+## v1.4.3...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.3...main)
+
+### 🩹 Fixes
+
+- **cloudflare:** Route build assets through Worker ([102c650](https://github.com/harlan-zw/nuxt-skew-protection/commit/102c650))
+- **cloudflare:** Recover cached asset misses on demand ([#33](https://github.com/harlan-zw/nuxt-skew-protection/pull/33))
+
+### 🏡 Chore
+
+- **cloudflare:** Skip prerender entry wrapping edge ([#32](https://github.com/harlan-zw/nuxt-skew-protection/pull/32))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v1.4.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.0...main)
+
+### 🩹 Fixes
+
+- **version-manager:** Deterministic previous version lookup for equal timestamps ([#30](https://github.com/harlan-zw/nuxt-skew-protection/pull/30))
+- **cloudflare:** Avoid caching asset misses during deploys ([#20](https://github.com/harlan-zw/nuxt-skew-protection/pull/20))
+
+### 🏡 Chore
+
+- Bump ([c985d36](https://github.com/harlan-zw/nuxt-skew-protection/commit/c985d36))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.3.1...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.1...main)
