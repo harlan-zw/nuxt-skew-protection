@@ -5,6 +5,7 @@ import { isSkewAdapter } from '../../src/utils'
 
 // Mock Ably SDK
 const mockPublish = vi.fn()
+const mockRealtimeOptions = vi.fn()
 class MockRest {
   channels = {
     get: () => ({ publish: mockPublish }),
@@ -20,10 +21,19 @@ class MockRealtime {
 
   connection = { on: vi.fn() }
   close = vi.fn()
+
+  constructor(options: unknown) {
+    mockRealtimeOptions(options)
+  }
 }
+
 vi.mock('ably', () => ({
   Rest: MockRest,
   Realtime: MockRealtime,
+}))
+
+vi.mock('nuxt/app', () => ({
+  onNuxtReady: (callback: () => void) => callback(),
 }))
 
 // Mock window for browser-side adapter tests
@@ -31,6 +41,7 @@ const mockWindow = {} as any
 beforeEach(() => {
   ;(globalThis as any).window = mockWindow
   mockPublish.mockReset()
+  mockRealtimeOptions.mockReset()
 })
 afterEach(() => {
   delete (globalThis as any).window
@@ -41,6 +52,7 @@ describe('adapters', () => {
     it('should return true for valid adapter', () => {
       const adapter = {
         name: 'test',
+        toPublicConfig: () => ({}),
         subscribe: () => () => {},
         broadcast: async () => {},
       }
@@ -83,6 +95,15 @@ describe('adapters', () => {
       expect(isSkewAdapter(adapter)).toBe(false)
     })
 
+    it('should return false for object missing public config mapping', () => {
+      const adapter = {
+        name: 'test',
+        subscribe: () => () => {},
+        broadcast: async () => {},
+      }
+      expect(isSkewAdapter(adapter)).toBe(false)
+    })
+
     it('should return false for object with non-function subscribe', () => {
       const adapter = {
         name: 'test',
@@ -121,11 +142,23 @@ describe('adapters', () => {
       const adapter = pusherAdapter(customConfig)
       expect(adapter.name).toBe('pusher')
     })
+
+    it('only exposes subscription credentials to the browser', () => {
+      const adapter = pusherAdapter({ ...config, channel: 'updates', event: 'release' })
+
+      expect(adapter.toPublicConfig(adapter.config)).toEqual({
+        key: 'test-key',
+        cluster: 'us2',
+        channel: 'updates',
+        event: 'release',
+      })
+    })
   })
 
   describe('ablyAdapter', () => {
     const config = {
       key: 'appId.keyId:keySecret',
+      authUrl: '/api/ably-token',
     }
 
     it('should create valid adapter', () => {
@@ -138,6 +171,30 @@ describe('adapters', () => {
       const customConfig = { ...config, channel: 'my-channel' }
       const adapter = ablyAdapter(customConfig)
       expect(adapter.name).toBe('ably')
+    })
+
+    it('only exposes token authentication to the browser', () => {
+      const adapter = ablyAdapter({ ...config, clientId: 'browser', channel: 'updates', event: 'release' })
+
+      expect(adapter.toPublicConfig(adapter.config)).toEqual({
+        authUrl: '/api/ably-token',
+        clientId: 'browser',
+        channel: 'updates',
+        event: 'release',
+      })
+    })
+
+    it('uses token authentication for browser subscriptions', async () => {
+      const { subscribe } = await import('../../src/runtime/adapters/ably/web')
+
+      subscribe({ authUrl: '/api/ably-token', clientId: 'browser' }, vi.fn())
+
+      await vi.waitFor(() => {
+        expect(mockRealtimeOptions).toHaveBeenCalledWith({
+          authUrl: '/api/ably-token',
+          clientId: 'browser',
+        })
+      })
     })
 
     it('broadcast should call Ably SDK', async () => {

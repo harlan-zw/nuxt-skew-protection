@@ -184,6 +184,7 @@ export default defineNuxtConfig({
   skewProtection: {
     updateStrategy: ablyAdapter({
       key: 'your-api-key',
+      authUrl: '/api/ably-token',
       channel: 'skew-updates', // optional
       event: 'version' // optional
     })

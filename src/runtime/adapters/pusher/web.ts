@@ -1,9 +1,9 @@
-import type { PusherAdapterConfig } from './types'
+import type { PusherClientConfig } from './types'
 import { onNuxtReady } from 'nuxt/app'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
 import { defineWebSubscribe } from '../types'
 
-export const subscribe = defineWebSubscribe<PusherAdapterConfig>((config, onMessage) => {
+export const subscribe = defineWebSubscribe<PusherClientConfig>((config, onMessage) => {
   let cleanup: (() => void) | undefined
 
   onNuxtReady(async () => {

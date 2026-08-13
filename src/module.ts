@@ -659,6 +659,8 @@ export {}
           throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
         }
 
+        const publicAdapterConfig = adapter.toPublicConfig(result.data)
+
         // Check for adapter dependencies at build time
         if (adapter.name === 'pusher') {
           if (!await tryResolveModule('pusher-js', nuxt.options.rootDir)) {
@@ -687,7 +689,7 @@ export {}
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
           getContents: () => `import { subscribe } from 'nuxt-skew-protection/adapters/${adapter.name}/web'
-export const config = ${JSON.stringify(adapter.config)}
+export const config = ${JSON.stringify(publicAdapterConfig)}
 export { subscribe }`,
         })
         nuxt.options.alias['#skew-adapter'] = template.dst
