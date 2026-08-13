@@ -8,6 +8,10 @@ export type AssetRecoveryConfig
       recoveryPath: string
     }
 
+export interface NuxtSkewProtectionPrivateRuntimeConfig {
+  vercelCookiePath?: string
+}
+
 export interface NuxtSkewProtectionRuntimeConfig {
   /**
    * Path prefix for the module's runtime endpoints (`/ws`, `/sse`, `/health`,
