@@ -19,6 +19,12 @@ function createRetryRequest(request: Request) {
   return new Request(request, { cache: 'no-cache' })
 }
 
+function protectMutableAsset(request: Request, response: Response) {
+  return new URL(request.url).pathname.endsWith('/builds/latest.json')
+    ? disableCaching(response)
+    : response
+}
+
 type ParsedBuildAssetRequest
   = | { _tag: 'asset', request: Request }
     | { _tag: 'invalid-recovery' }
@@ -78,7 +84,7 @@ export async function fetchCloudflareAsset(
   const response = await assets.fetch(request)
 
   if (response.status < 400) {
-    return response
+    return protectMutableAsset(request, response)
   }
 
   if (response.status !== 404) {
@@ -86,7 +92,9 @@ export async function fetchCloudflareAsset(
   }
 
   const retryResponse = await assets.fetch(createRetryRequest(request))
-  return retryResponse.status < 400 ? retryResponse : disableCaching(retryResponse)
+  return retryResponse.status < 400
+    ? protectMutableAsset(request, retryResponse)
+    : disableCaching(retryResponse)
 }
 
 export function fetchCloudflareBuildAsset(
