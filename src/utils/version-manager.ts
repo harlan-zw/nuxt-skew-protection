@@ -416,9 +416,7 @@ export function createAssetManager(options: {
       if (assetData) {
         totalBytes += assetData.byteLength
         const storageKey = `${buildId}/${asset}`
-        await storage.setItemRaw(storageKey, assetData).catch((error) => {
-          logger.error(`Failed to store ${storageKey}:`, error?.message || error)
-        })
+        await storage.setItemRaw(storageKey, assetData)
         storedCount++
 
         // Check if this file ID already exists in a previous version
@@ -555,7 +553,6 @@ export function createAssetManager(options: {
 
     const restoreStart = Date.now()
     let totalBytes = 0
-    let failedCount = 0
     const createdDirs = new Set<string>()
 
     // Process restoration tasks in batches to limit memory
@@ -599,22 +596,20 @@ export function createAssetManager(options: {
               age: formatAge(versionTimestamp, now),
             }
           }
-          return null
+          throw new Error(`Stored asset ${storageKey} is missing.`)
         })
         .catch((error: NodeJS.ErrnoException) => {
-          // EEXIST = file already exists, expected with wx flag - not a failure
-          if (error.code !== 'EEXIST') {
-            failedCount++
-            logger.debug(`Failed to restore asset ${asset} from version ${versionId}: ${error}`)
+          if (error.code === 'EEXIST') {
+            return null
           }
-          return null
+          throw error
         })
     })
 
     // Filter out null results and add to restoredAssets
     restoredAssets.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null))
 
-    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
+    logger.debug(`restoreOldAssetsToPublic: restored ${restoredAssets.length} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - restoreStart)}`)
 
     // Count restored assets per version
     const restoredByVersion = new Map<string, number>()
@@ -666,9 +661,8 @@ export function createAssetManager(options: {
       await fs.writeFile(latestPath, newLatestContent, 'utf-8')
     }
     catch (error) {
-      if (options.debug) {
-        logger.warn('Failed to augment builds/latest.json:', error)
-      }
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to augment builds/latest.json: ${message}`)
     }
 
     // Augment builds/meta/{buildId}.json
@@ -688,9 +682,8 @@ export function createAssetManager(options: {
       await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), 'utf-8')
     }
     catch (error) {
-      if (options.debug) {
-        logger.warn(`Failed to augment builds/meta/${buildId}.json:`, error)
-      }
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to augment builds/meta/${buildId}.json: ${message}`)
     }
 
     // Patch Nitro's static asset manifest to fix Content-Length

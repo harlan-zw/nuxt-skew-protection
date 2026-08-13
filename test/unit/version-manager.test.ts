@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'pathe'
+import { createStorage } from 'unstorage'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveBuildTimeDriver } from '../../src/unstorage/utils'
 import { createAssetManager, extractFileId } from '../../src/utils/version-manager'
@@ -308,6 +309,21 @@ describe('version Manager', () => {
       expect(storedAsset).toBe(assetContent)
     })
 
+    it('rejects asset storage write failures', async () => {
+      const driver = await resolveBuildTimeDriver({ driver: 'memory' })
+      driver.setItemRaw = vi.fn().mockRejectedValue(new Error('quota exceeded'))
+      const manager = createAssetManager({ driver, debug: false })
+      const asset = '_nuxt/entry.ABC123.js'
+
+      await mkdir(join(outputDir, 'public', '_nuxt'), { recursive: true })
+      await writeFile(join(outputDir, 'public', asset), 'content')
+      await manager.updateVersionsManifest('v1', [asset])
+
+      await expect(
+        manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [asset]),
+      ).rejects.toThrow('quota exceeded')
+    })
+
     it('should deduplicate assets across versions', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
@@ -510,6 +526,27 @@ describe('version Manager', () => {
       expect(restoredContent).toBe('old content')
     })
 
+    it('rejects when a retained asset is missing from storage', async () => {
+      const driver = await resolveBuildTimeDriver({ driver: 'memory' })
+      const manager = createAssetManager({ driver, debug: false })
+      const oldAsset = '_nuxt/old-chunk.ABC123.js'
+      const currentAsset = '_nuxt/current-chunk.XYZ789.js'
+
+      await mkdir(join(outputDir, 'public', '_nuxt'), { recursive: true })
+      await writeFile(join(outputDir, 'public', oldAsset), 'old content')
+      await manager.updateVersionsManifest('v1', [oldAsset])
+      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [oldAsset])
+
+      await writeFile(join(outputDir, 'public', currentAsset), 'current content')
+      await manager.updateVersionsManifest('v2', [currentAsset])
+      await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [currentAsset])
+      await createStorage({ driver }).removeItem(`v1/${oldAsset}`)
+
+      await expect(
+        manager.restoreOldAssetsToPublic('v2', join(outputDir, 'public'), [currentAsset]),
+      ).rejects.toThrow(`Stored asset v1/${oldAsset} is missing`)
+    })
+
     it('should skip restoring assets with same file ID', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
@@ -679,6 +716,35 @@ describe('version Manager', () => {
   })
 
   describe('build Metadata Augmentation', () => {
+    it('rejects when the latest build manifest is missing', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'memory' }),
+        debug: false,
+      })
+
+      await manager.updateVersionsManifest('build-123', ['_nuxt/entry.ABC123.js'])
+
+      await expect(
+        manager.augmentBuildMetadata('build-123', join(outputDir, 'public')),
+      ).rejects.toThrow('Failed to augment builds/latest.json')
+    })
+
+    it('rejects when the current build metadata is missing', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'memory' }),
+        debug: false,
+      })
+      const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
+
+      await mkdir(buildsDir, { recursive: true })
+      await writeFile(join(buildsDir, 'latest.json'), JSON.stringify({ id: 'build-123' }), 'utf-8')
+      await manager.updateVersionsManifest('build-123', ['_nuxt/entry.ABC123.js'])
+
+      await expect(
+        manager.augmentBuildMetadata('build-123', join(outputDir, 'public')),
+      ).rejects.toThrow('Failed to augment builds/meta/build-123.json')
+    })
+
     it('augments metadata under a custom build assets directory', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
@@ -732,11 +798,12 @@ const assets = {
       })
 
       const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
-      await mkdir(buildsDir, { recursive: true })
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
 
       // Create initial latest.json
       const latestPath = join(buildsDir, 'latest.json')
       await writeFile(latestPath, JSON.stringify({ id: 'build-123' }), 'utf-8')
+      await writeFile(join(buildsDir, 'meta', 'build-123.json'), JSON.stringify({ id: 'build-123' }), 'utf-8')
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest('build-123', assets)
@@ -759,7 +826,7 @@ const assets = {
       const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
       const serverDir = join(outputDir, 'server')
       const nitroChunksDir = join(serverDir, 'chunks', 'nitro')
-      await mkdir(buildsDir, { recursive: true })
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
       await mkdir(nitroChunksDir, { recursive: true })
 
       // Create initial latest.json (small file)
@@ -767,6 +834,7 @@ const assets = {
       const initialSize = Buffer.byteLength(initialContent, 'utf-8')
       const latestPath = join(buildsDir, 'latest.json')
       await writeFile(latestPath, initialContent, 'utf-8')
+      await writeFile(join(buildsDir, 'meta', 'build-123.json'), initialContent, 'utf-8')
 
       // Create mock nitro.mjs with asset manifest containing original size
       const nitroChunkPath = join(nitroChunksDir, 'nitro.mjs')
@@ -811,11 +879,12 @@ export default assets;
 
       const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
       const serverDir = join(outputDir, 'server')
-      await mkdir(buildsDir, { recursive: true })
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
       // Note: NOT creating nitro chunks dir
 
       const latestPath = join(buildsDir, 'latest.json')
       await writeFile(latestPath, JSON.stringify({ id: 'build-123' }), 'utf-8')
+      await writeFile(join(buildsDir, 'meta', 'build-123.json'), JSON.stringify({ id: 'build-123' }), 'utf-8')
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest('build-123', assets)
@@ -835,11 +904,12 @@ export default assets;
       const buildsDir = join(outputDir, 'public', '_nuxt', 'builds')
       const serverDir = join(outputDir, 'server')
       const nitroChunksDir = join(serverDir, 'chunks', 'nitro')
-      await mkdir(buildsDir, { recursive: true })
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
       await mkdir(nitroChunksDir, { recursive: true })
 
       const latestPath = join(buildsDir, 'latest.json')
       await writeFile(latestPath, JSON.stringify({ id: 'build-123' }), 'utf-8')
+      await writeFile(join(buildsDir, 'meta', 'build-123.json'), JSON.stringify({ id: 'build-123' }), 'utf-8')
 
       // Create nitro.mjs without the latest.json entry
       const nitroChunkPath = join(nitroChunksDir, 'nitro.mjs')
@@ -875,6 +945,7 @@ export default assets;
 
       const buildId = 'build-123'
       const metaPath = join(metaDir, `${buildId}.json`)
+      await writeFile(join(metaDir, '..', 'latest.json'), JSON.stringify({ id: buildId }), 'utf-8')
       await writeFile(metaPath, JSON.stringify({ id: buildId }), 'utf-8')
 
       const assets = ['_nuxt/entry.ABC123.js']
