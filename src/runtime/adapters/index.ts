@@ -5,8 +5,10 @@ export function isSkewAdapter(value: unknown): value is SkewAdapter {
     typeof value === 'object'
     && value !== null
     && 'name' in value
+    && 'toPublicConfig' in value
     && 'subscribe' in value
     && 'broadcast' in value
+    && typeof (value as SkewAdapter).toPublicConfig === 'function'
     && typeof (value as SkewAdapter).subscribe === 'function'
     && typeof (value as SkewAdapter).broadcast === 'function'
   )

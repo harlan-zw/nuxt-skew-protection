@@ -13,3 +13,5 @@ export const pusherConfigSchema = z.object({
 })
 
 export type PusherAdapterConfig = z.infer<typeof pusherConfigSchema>
+
+export type PusherClientConfig = Pick<PusherAdapterConfig, 'key' | 'cluster' | 'channel' | 'event'>
