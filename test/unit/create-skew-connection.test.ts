@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+let cookieConfig: false | Record<string, unknown> = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
+
 // Mock nuxt/app
 vi.mock('nuxt/app', () => ({
   useNuxtApp: vi.fn(() => ({
@@ -9,7 +11,7 @@ vi.mock('nuxt/app', () => ({
     app: { buildId: 'test-build-id' },
     public: {
       skewProtection: {
-        cookie: { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 },
+        cookie: cookieConfig,
       },
     },
   })),
@@ -29,6 +31,8 @@ vi.mock('../../src/runtime/shared/logger', () => ({
 
 describe('createSkewConnection', () => {
   beforeEach(() => {
+    cookieConfig = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
+    vi.clearAllMocks()
     vi.stubGlobal('window', { addEventListener: vi.fn() })
   })
 
@@ -127,5 +131,19 @@ describe('createSkewConnection', () => {
     })
 
     expect(connection.buildId).toBe('test-build-id')
+  })
+
+  it('does not create a version cookie when cookies are disabled', async () => {
+    cookieConfig = false
+    const { useCookie } = await import('nuxt/app')
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+
+    const connection = createSkewConnection({
+      name: 'Test',
+      setup: vi.fn(),
+    })
+
+    expect(connection.cookie).toBeUndefined()
+    expect(useCookie).not.toHaveBeenCalled()
   })
 })
