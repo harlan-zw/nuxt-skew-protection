@@ -253,9 +253,9 @@ export function createAssetManager(options: {
 
     // Check if this version already exists (for skipping restoration later)
     const isExistingVersion = !!manifest.versions[buildId]
-    const previousVersionId = isExistingVersion
-      ? getPreviousVersion(manifest, buildId)
-      : manifest.current || null
+    const previousVersionId = manifest.current && manifest.current !== buildId
+      ? manifest.current
+      : getPreviousVersion(manifest, buildId)
     const previousVersion = previousVersionId ? manifest.versions[previousVersionId] : undefined
     const previousAssets = previousVersion?.originalAssets || previousVersion?.assets || []
 
