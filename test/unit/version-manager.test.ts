@@ -283,6 +283,23 @@ describe('version Manager', () => {
       }
     })
 
+    it('compares a rollback against the currently deployed version', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'memory' }),
+        persistAssets: false,
+        debug: false,
+      })
+      const sharedChunk = '_nuxt/shared.ABC123.js'
+      const firstChunk = '_nuxt/first.DEF456.js'
+      const secondChunk = '_nuxt/second.GHI789.js'
+
+      await manager.updateVersionsManifest('a', [sharedChunk, firstChunk])
+      await manager.updateVersionsManifest('b', [sharedChunk, secondChunk])
+      const rollback = await manager.updateVersionsManifest('a', [sharedChunk, firstChunk])
+
+      expect(rollback.manifest.versions.a.deletedChunks).toEqual([secondChunk])
+    })
+
     it('should have empty deletedChunks for first version', async () => {
       const manager = createAssetManager({
         driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
