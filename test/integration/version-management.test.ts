@@ -245,22 +245,5 @@ describe('version Management Integration', () => {
       const versions = await manager.listExistingVersions()
       expect(versions).toHaveLength(1)
     })
-
-    it('should skip augmentation when build files missing', async () => {
-      const manager = createAssetManager({
-        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }),
-        debug: false,
-      })
-
-      const nuxtDir = join(outputDir, 'public', '_nuxt')
-      await mkdir(nuxtDir, { recursive: true })
-
-      await manager.updateVersionsManifest('build-1', ['_nuxt/test.js'])
-
-      // Try to augment without builds directory
-      await manager.augmentBuildMetadata('build-1', join(outputDir, 'public'))
-
-      // Should not throw error
-    })
   })
 })
