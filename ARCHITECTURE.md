@@ -81,6 +81,8 @@ Nuxt's `app:manifest:update` hook is the canonical update event.
 
 Loaded modules are not used as a safety signal. Once a module has executed, its file can disappear without breaking that module instance. The future risk comes from lazy imports and server requests that the old client has not made yet.
 
+Cloudflare presets register a recovery-only service worker for build asset 404s. It does not track loaded modules or emit update events.
+
 ## Reload behavior
 
 Reloads use `reloadNuxtApp({ force: true })` without persisting Nuxt state. State serialized by release A may be invalid under release B.

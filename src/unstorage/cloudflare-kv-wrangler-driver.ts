@@ -1,132 +1,176 @@
-import { unlinkSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { x } from 'tinyexec'
 import { defineDriver } from 'unstorage'
 
 export interface CloudflareKVWranglerOptions {
   namespaceId: string
-  /** Use local KV storage instead of remote (for wrangler dev) */
+  /** Use local KV storage instead of remote. */
   local?: boolean
-  /** Optional prefix for all keys (e.g., 'skew:') */
+  /** Prefix for all keys. */
   base?: string
 }
 
-/**
- * Cloudflare KV driver that uses wrangler CLI commands for build-time storage.
- * This leverages existing wrangler authentication (no API token needed).
- *
- * Requires: wrangler CLI to be installed and authenticated
- */
-export const cloudflareKVWranglerDriver = defineDriver((opts: CloudflareKVWranglerOptions) => {
-  const { namespaceId, local = false, base = '' } = opts
+export interface WranglerExecution {
+  stdout: Buffer
+  stderr: Buffer
+  exitCode: number
+}
 
-  if (!namespaceId) {
-    throw new Error('[cloudflare-kv-wrangler] namespaceId is required')
+export type ExecuteWrangler = (args: readonly string[]) => Promise<WranglerExecution>
+
+const executeWrangler: ExecuteWrangler = args => new Promise((resolve, reject) => {
+  const child = spawn('wrangler', [...args], {
+    shell: false,
+    windowsHide: true,
+  })
+  const stdout: Buffer[] = []
+  const stderr: Buffer[] = []
+
+  child.stdout.on('data', chunk => stdout.push(Buffer.from(chunk)))
+  child.stderr.on('data', chunk => stderr.push(Buffer.from(chunk)))
+  child.once('error', error => reject(new Error(
+    '[cloudflare-kv-wrangler] Unable to run Wrangler. Install Wrangler v4 in the project and authenticate the build environment.',
+    { cause: error },
+  )))
+  child.once('close', code => resolve({
+    exitCode: code ?? 1,
+    stderr: Buffer.concat(stderr),
+    stdout: Buffer.concat(stdout),
+  }))
+})
+
+function assertSuccess(
+  result: WranglerExecution,
+  args: readonly string[],
+): WranglerExecution {
+  if (result.exitCode === 0)
+    return result
+
+  const stderr = result.stderr.toString('utf8').trim()
+  throw new Error([
+    `[cloudflare-kv-wrangler] Wrangler exited with status ${result.exitCode}.`,
+    `Command: wrangler ${args.map(arg => JSON.stringify(arg)).join(' ')}`,
+    stderr ? `stderr: ${stderr}` : 'Wrangler did not provide an error message.',
+  ].join('\n'))
+}
+
+function parseListedKeys(stdout: Buffer): string[] {
+  const parsed: unknown = JSON.parse(stdout.toString('utf8'))
+  if (!Array.isArray(parsed))
+    throw new TypeError('[cloudflare-kv-wrangler] Wrangler returned an invalid key list.')
+
+  return parsed.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || !('name' in entry) || typeof entry.name !== 'string')
+      throw new TypeError(`[cloudflare-kv-wrangler] Wrangler returned an invalid key at index ${index}.`)
+    return entry.name
+  })
+}
+
+function toRawBuffer(value: unknown): Buffer {
+  if (Buffer.isBuffer(value))
+    return value
+  if (value instanceof Uint8Array)
+    return Buffer.from(value)
+  if (value instanceof ArrayBuffer)
+    return Buffer.from(value)
+  if (typeof value === 'string')
+    return Buffer.from(value)
+  throw new TypeError('[cloudflare-kv-wrangler] Raw values must be a string, Buffer, Uint8Array, or ArrayBuffer.')
+}
+
+async function withTemporaryFile<T>(
+  suffix: string,
+  value: Uint8Array,
+  task: (path: string) => Promise<T>,
+): Promise<T> {
+  const directory = await mkdtemp(join(tmpdir(), 'nuxt-skew-protection-kv-'))
+  const path = join(directory, `value${suffix}`)
+  await writeFile(path, value)
+
+  try {
+    return await task(path)
   }
+  finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
 
-  const locationFlag = local ? '--local' : '--remote'
+/** Build-time Cloudflare KV driver backed by the installed Wrangler CLI. */
+export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeWrangler) {
+  return defineDriver((opts: CloudflareKVWranglerOptions) => {
+    const { namespaceId, local = false, base = '' } = opts
 
-  // Helper to add base prefix to keys
-  const prefixKey = (key: string): string => base ? `${base}${key}` : key
-  // Helper to remove base prefix from keys
-  const unprefixKey = (key: string): string => base && key.startsWith(base) ? key.slice(base.length) : key
+    if (!namespaceId)
+      throw new Error('[cloudflare-kv-wrangler] namespaceId is required')
 
-  async function execWrangler(command: string, throwOnError = true): Promise<{ stdout: string, exitCode: number }> {
-    const result = await x('sh', ['-c', `npx ${command}`])
+    const locationFlag = local ? '--local' : '--remote'
+    const namespaceArgs = ['--namespace-id', namespaceId, locationFlag] as const
+    const prefixKey = (key: string): string => base ? `${base}${key}` : key
+    const unprefixKey = (key: string): string => base && key.startsWith(base) ? key.slice(base.length) : key
+    const command = async (args: readonly string[]): Promise<WranglerExecution> => assertSuccess(await run(args), args)
 
-    if (throwOnError && result.exitCode !== 0) {
-      throw new Error(
-        `[cloudflare-kv-wrangler] Command failed with exit code ${result.exitCode}\n`
-        + `Command: ${command}\n`
-        + `stdout: ${result.stdout}\n`
-        + `stderr: ${result.stderr}`,
-      )
+    const listKeys = async (basePrefix?: string): Promise<string[]> => {
+      const fullPrefix = base ? (basePrefix ? `${base}${basePrefix}` : base) : basePrefix
+      const prefixArgs = fullPrefix ? ['--prefix', fullPrefix] : []
+      const result = await command(['kv', 'key', 'list', ...prefixArgs, ...namespaceArgs])
+      return parseListedKeys(result.stdout).map(unprefixKey)
     }
 
-    return { stdout: result.stdout.trim(), exitCode: result.exitCode || 0 }
-  }
+    const hasItem = async (key: string): Promise<boolean> => {
+      const keys = await listKeys(key)
+      return keys.includes(key)
+    }
 
-  const driver = {
-    name: 'cloudflare-kv-wrangler' as const,
-    options: opts,
+    return {
+      name: 'cloudflare-kv-wrangler' as const,
+      options: opts,
 
-    async hasItem(key: string) {
-      const prefixedKey = prefixKey(key)
-      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
-      return result.exitCode === 0
-    },
+      hasItem,
 
-    async getItem(key: string) {
-      const prefixedKey = prefixKey(key)
-      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`, false)
-      if (result.exitCode !== 0) {
-        return null
-      }
-      // Try to parse as JSON, fallback to string
-      return JSON.parse(result.stdout)
-    },
+      async getItem(key: string) {
+        const result = await command(['kv', 'key', 'get', prefixKey(key), ...namespaceArgs, '--text'])
+        const value = result.stdout.toString('utf8').trim()
+        if (value === 'Value not found')
+          return null
+        return JSON.parse(value)
+      },
 
-    async getItemRaw(key: string) {
-      const prefixedKey = prefixKey(key)
-      const result = await execWrangler(`wrangler kv key get "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`)
-      return Buffer.from(result.stdout, 'utf-8')
-    },
+      async getItemRaw(key: string) {
+        if (!await hasItem(key))
+          return null
+        const result = await command(['kv', 'key', 'get', prefixKey(key), ...namespaceArgs])
+        return result.stdout
+      },
 
-    async setItem(key: string, value: any) {
-      const prefixedKey = prefixKey(key)
-      // Use temp file approach to avoid shell escaping issues with complex JSON
-      const tmpFile = join(tmpdir(), `kv-${Date.now()}-${Math.random().toString(36).substring(7)}.json`)
-      writeFileSync(tmpFile, JSON.stringify(value))
+      async setItem(key: string, value: unknown) {
+        await withTemporaryFile('.json', Buffer.from(JSON.stringify(value)), async (path) => {
+          await command(['kv', 'key', 'put', prefixKey(key), '--path', path, ...namespaceArgs])
+        })
+      },
 
-      try {
-        await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
-      }
-      finally {
-        unlinkSync(tmpFile)
-      }
-    },
+      async setItemRaw(key: string, value: unknown) {
+        await withTemporaryFile('.bin', toRawBuffer(value), async (path) => {
+          await command(['kv', 'key', 'put', prefixKey(key), '--path', path, ...namespaceArgs])
+        })
+      },
 
-    async setItemRaw(key: string, value: any) {
-      const prefixedKey = prefixKey(key)
-      // For binary data, write to temp file and use wrangler path option
-      const tmpFile = join(tmpdir(), `kv-${Date.now()}.bin`)
-      writeFileSync(tmpFile, value)
+      async removeItem(key: string) {
+        await command(['kv', 'key', 'delete', prefixKey(key), ...namespaceArgs])
+      },
 
-      try {
-        await execWrangler(`wrangler kv key put "${prefixedKey}" --path="${tmpFile}" --namespace-id="${namespaceId}" ${locationFlag}`)
-      }
-      finally {
-        unlinkSync(tmpFile)
-      }
-    },
+      getKeys: listKeys,
 
-    async removeItem(key: string) {
-      const prefixedKey = prefixKey(key)
-      await execWrangler(`wrangler kv key delete "${prefixedKey}" --namespace-id="${namespaceId}" ${locationFlag}`)
-    },
+      async clear(basePrefix?: string) {
+        const keys = await listKeys(basePrefix)
+        for (const key of keys)
+          await command(['kv', 'key', 'delete', prefixKey(key), ...namespaceArgs])
+      },
 
-    async getKeys(basePrefix?: string) {
-      // Combine the driver's base prefix with any additional prefix
-      const fullPrefix = base ? (basePrefix ? `${base}${basePrefix}` : base) : basePrefix
-      const prefix = fullPrefix ? `--prefix="${fullPrefix}"` : ''
-      const result = await execWrangler(`wrangler kv key list ${prefix} --namespace-id="${namespaceId}" ${locationFlag}`)
-      const keys = JSON.parse(result.stdout)
-      // Remove base prefix from returned keys to maintain consistency
-      return keys.map((k: any) => unprefixKey(k.name))
-    },
+      async dispose() {},
+    }
+  })
+}
 
-    async clear(basePrefix?: string) {
-      const keys = await driver.getKeys(basePrefix)
-      for (const key of keys) {
-        await driver.removeItem(key)
-      }
-    },
-
-    async dispose() {
-      // No cleanup needed for wrangler CLI driver
-    },
-  }
-
-  return driver
-})
+export const cloudflareKVWranglerDriver = createCloudflareKVWranglerDriver()

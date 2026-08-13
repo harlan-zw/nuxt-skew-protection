@@ -16,7 +16,7 @@ import type { TestResult } from './utils.ts'
 import { rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import EventSource from 'eventsource'
+import { EventSource } from 'eventsource'
 import { execCommand, fetchWithRetry, log, logSection, modifyAppContent, printSummary, runTest, runTestSuite, sleep, startServer, stopServer } from './utils.ts'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))

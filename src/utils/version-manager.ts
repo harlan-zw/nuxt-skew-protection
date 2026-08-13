@@ -155,7 +155,6 @@ function toManifest(records: VersionRecord[], current: string): VersionManifest 
     }])),
   }
 }
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024)
     return `${bytes}B`

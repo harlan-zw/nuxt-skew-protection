@@ -1,6 +1,62 @@
 # Changelog
 
 
+## v1.4.3...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.3...main)
+
+### 🩹 Fixes
+
+- **cloudflare:** Route build assets through Worker ([102c650](https://github.com/harlan-zw/nuxt-skew-protection/commit/102c650))
+- **cloudflare:** Recover cached asset misses on demand ([#33](https://github.com/harlan-zw/nuxt-skew-protection/pull/33))
+
+### 🏡 Chore
+
+- **cloudflare:** Skip prerender entry wrapping edge ([#32](https://github.com/harlan-zw/nuxt-skew-protection/pull/32))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v1.4.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.0...main)
+
+### 🩹 Fixes
+
+- **version-manager:** Deterministic previous version lookup for equal timestamps ([#30](https://github.com/harlan-zw/nuxt-skew-protection/pull/30))
+- **cloudflare:** Avoid caching asset misses during deploys ([#20](https://github.com/harlan-zw/nuxt-skew-protection/pull/20))
+
+### 🏡 Chore
+
+- Bump ([c985d36](https://github.com/harlan-zw/nuxt-skew-protection/commit/c985d36))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v1.3.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.1...main)
+
+### 🚀 Enhancements
+
+- Support Nitro 3 runtime compatibility ([#21](https://github.com/harlan-zw/nuxt-skew-protection/pull/21))
+
+### 🩹 Fixes
+
+- Support nested build asset directories ([#22](https://github.com/harlan-zw/nuxt-skew-protection/pull/22))
+
+### 🏡 Chore
+
+- Code cleanup sweep ([#18](https://github.com/harlan-zw/nuxt-skew-protection/pull/18))
+- Adopt nuxtseo-shared 5.3.4 APIs ([#19](https://github.com/harlan-zw/nuxt-skew-protection/pull/19))
+- Bump ([9993ff2](https://github.com/harlan-zw/nuxt-skew-protection/commit/9993ff2))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.3.0...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.3.0...main)

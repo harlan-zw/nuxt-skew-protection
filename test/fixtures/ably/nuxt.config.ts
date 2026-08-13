@@ -12,6 +12,7 @@ export default defineNuxtConfig({
     debug: true,
     updateStrategy: ablyAdapter({
       key: process.env.ABLY_KEY!,
+      authUrl: '/api/ably-token',
       channel: 'my-channel',
       event: 'my-event',
     }),
