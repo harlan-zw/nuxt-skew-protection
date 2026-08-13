@@ -1,6 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
 import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
-import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
+import type { NuxtSkewProtectionPrivateRuntimeConfig, NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
 import {
   addComponent,
@@ -496,6 +496,12 @@ export {}
       }
 
       if (isVercel) {
+        nuxt.options.runtimeConfig.skewProtection = {
+          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'
+            ? nuxt.options.runtimeConfig.skewProtection
+            : {}),
+          vercelCookiePath: nuxt.options.app.baseURL,
+        } satisfies NuxtSkewProtectionPrivateRuntimeConfig
         addServerHandler({
           handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
           middleware: true,
