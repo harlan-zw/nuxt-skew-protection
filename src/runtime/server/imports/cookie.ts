@@ -7,7 +7,7 @@ import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection
  * Get the skew protection version cookie name from runtime config
  *
  * @param event - H3 event (optional, for better type safety)
- * @returns The configured cookie name
+ * @returns The configured cookie name, or undefined when cookies are disabled
  */
 export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string | undefined {
   const { cookie } = getRuntimeConfigSkewProtection(event)

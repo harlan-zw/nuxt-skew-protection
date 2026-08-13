@@ -7,7 +7,7 @@ import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
 
 export interface WranglerKVNamespace {
   binding: string
-  id: string
+  id?: string
 }
 
 function parseWranglerKVNamespaces(value: unknown, source: string): WranglerKVNamespace[] {
@@ -22,8 +22,8 @@ function parseWranglerKVNamespaces(value: unknown, source: string): WranglerKVNa
 
     const binding = 'binding' in entry ? entry.binding : undefined
     const id = 'id' in entry ? entry.id : undefined
-    if (typeof binding !== 'string' || typeof id !== 'string')
-      throw new TypeError(`[nuxt-skew-protection] ${source} requires string binding and id values for kv_namespaces entry ${index}.`)
+    if (typeof binding !== 'string' || (id !== undefined && typeof id !== 'string'))
+      throw new TypeError(`[nuxt-skew-protection] ${source} has invalid binding or id values for kv_namespaces entry ${index}.`)
 
     return { binding, id }
   })
@@ -45,13 +45,13 @@ export function selectCloudflareKVNamespace(
     throw new Error(`[nuxt-skew-protection] Found multiple Cloudflare KV bindings named ${binding}.`)
 
   const match = matches[0]
-  if (!match)
-    throw new Error(`[nuxt-skew-protection] Unable to select Cloudflare KV binding ${binding}.`)
+  if (!match?.id)
+    throw new Error(`[nuxt-skew-protection] Cloudflare KV binding ${binding} does not have a namespace id.`)
   return match.id
 }
 
 export async function readWranglerKVNamespaces(path: string): Promise<WranglerKVNamespace[]> {
-  // Wrangler is platform-specific and intentionally loaded only for Cloudflare KV builds.
+  // Keep Wrangler out of the runtime bundle. This parser runs only during Cloudflare KV builds.
   const wranglerModule = 'wrangler'
   const { unstable_readConfig } = await import(wranglerModule)
   const config = unstable_readConfig({ config: path }, { hideWarnings: true })

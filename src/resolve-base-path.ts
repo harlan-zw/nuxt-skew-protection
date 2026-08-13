@@ -20,6 +20,16 @@ function trimSlashes(value: string): string {
   return value.replace(/^\/+|\/+$/g, '')
 }
 
+export function resolveBuildAssetsPath(
+  app: { baseURL?: string, buildAssetsDir?: string } = {},
+): string {
+  const path = [app.baseURL, app.buildAssetsDir || '/_nuxt/']
+    .map(value => trimSlashes(value || ''))
+    .filter(Boolean)
+    .join('/')
+  return `/${path}/`
+}
+
 /**
  * Resolve the path prefix for the module's runtime endpoints (`/ws`, `/sse`,
  * `/health`, `/route`, `/subscribe-stats`, `/admin/stats`).

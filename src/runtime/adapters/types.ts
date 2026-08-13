@@ -1,32 +1,32 @@
 import type { z } from 'zod'
 
-export interface SkewAdapter<TConfig = unknown> {
+export interface SkewAdapter<TConfig = unknown, TPublicConfig extends Record<string, unknown> = Record<string, unknown>> {
   _tag: 'SkewAdapter'
   name: string
   config: TConfig
   schema: z.ZodType<TConfig>
   clientModule: string
   dependencies: string[]
-  toPublicConfig: (config: TConfig) => Record<string, unknown>
+  toPublicConfig: (config: TConfig) => TPublicConfig
   broadcast: BroadcastFn<TConfig>
 }
 
-export type SkewAdapterFactory<T> = (config: T) => SkewAdapter<T>
+export type SkewAdapterFactory<TConfig, TPublicConfig extends Record<string, unknown> = Record<string, unknown>> = (config: TConfig) => SkewAdapter<TConfig, TPublicConfig>
 
-export interface DefineAdapterOptions<T> {
+export interface DefineAdapterOptions<TConfig, TPublicConfig extends Record<string, unknown>> {
   name: string
-  schema: z.ZodType<T>
+  schema: z.ZodType<TConfig>
   clientModule: string
   dependencies?: string[]
-  toPublicConfig: (config: T) => Record<string, unknown>
-  broadcast: BroadcastFn<T>
+  toPublicConfig: (config: TConfig) => TPublicConfig
+  broadcast: BroadcastFn<TConfig>
 }
 
 export type BroadcastFn<T> = (config: T, version: string) => Promise<void>
 
 export type SubscribeFn<T> = (config: T, onMessage: (msg: { version: string }) => void) => () => void
 
-export function defineAdapter<T>(options: DefineAdapterOptions<T>): SkewAdapterFactory<T> {
+export function defineAdapter<TConfig, TPublicConfig extends Record<string, unknown>>(options: DefineAdapterOptions<TConfig, TPublicConfig>): SkewAdapterFactory<TConfig, TPublicConfig> {
   return config => ({
     _tag: 'SkewAdapter',
     name: options.name,

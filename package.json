@@ -1,8 +1,8 @@
 {
   "name": "nuxt-skew-protection",
   "type": "module",
-  "version": "1.4.0",
-  "packageManager": "pnpm@11.19.0",
+  "version": "1.5.0",
+  "packageManager": "pnpm@11.21.0",
   "description": "Retain Nuxt build assets and coordinate deployment updates.",
   "author": {
     "name": "Harlan Wilton",
@@ -62,7 +62,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "sw"
   ],
   "scripts": {
     "lint": "eslint .",

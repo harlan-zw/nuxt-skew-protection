@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineDriver } from 'unstorage'
@@ -93,8 +93,7 @@ async function withTemporaryFile<T>(
     return await task(path)
   }
   finally {
-    await unlink(path)
-    await rmdir(directory)
+    await rm(directory, { recursive: true, force: true })
   }
 }
 
@@ -146,8 +145,7 @@ export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeW
       },
 
       async setItem(key: string, value: unknown) {
-        const encoded = Buffer.from(JSON.stringify(value))
-        await withTemporaryFile('.json', encoded, async (path) => {
+        await withTemporaryFile('.json', Buffer.from(JSON.stringify(value)), async (path) => {
           await command(['kv', 'key', 'put', prefixKey(key), '--path', path, ...namespaceArgs])
         })
       },

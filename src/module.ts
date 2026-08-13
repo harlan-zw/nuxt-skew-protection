@@ -1,7 +1,7 @@
 import type { CookieSerializeOptions } from 'cookie-es'
 import type { PlatformModeOption } from './platform'
 import type { SkewAdapter } from './runtime/adapters/types'
-import type { NuxtSkewProtectionRuntimeConfig } from './runtime/types'
+import type { NuxtSkewProtectionPrivateRuntimeConfig, NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { promises as fs } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import {
@@ -27,9 +27,14 @@ import {
   NETLIFY_SKEW_PROTECTION_CONFIG_PATH,
   serializeNetlifySkewProtectionConfig,
 } from './provider/netlify'
-import { resolveBasePath, resolveCookieName } from './resolve-base-path'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
+import {
+  createCloudflareAssetProtectionPlugin,
+  withoutCloudflareAssetProtectionPlugin,
+} from './utils/cloudflare-cache-protection'
+import { withCloudflareBuildAssetRouting } from './utils/cloudflare-routing'
 import { createAssetManager } from './utils/version-manager'
 
 export interface ModuleOptions {
@@ -93,7 +98,8 @@ export interface ModuleOptions {
   /**
    * Bundle old deployment assets to support users on previous versions.
    * When enabled, old build assets are stored and served to users who haven't refreshed.
-   * @default true
+   * Applies to portable mode. Native and hybrid modes disable asset bundling.
+   * @default true in portable mode
    */
   bundleAssets?: boolean
   /**
@@ -174,7 +180,6 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     retentionDays: 30,
     maxNumberOfVersions: 10,
-    bundleAssets: true,
     trackBuildMetadata: true,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
@@ -251,9 +256,21 @@ export default defineNuxtModule<ModuleOptions>({
       logger.warn('`ipTracking` requires `connectionTracking: true`. IP tracking will be disabled.')
     }
 
+    const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
+    const usesCloudflareAssets = nitroPreset === 'cloudflare-module' || nitroPreset === 'cloudflare-durable'
+    const buildAssetsPath = resolveBuildAssetsPath(nuxt.options.app)
+    const recoveryPath = `${basePath}/asset`
+
     // @ts-expect-error untyped
     nuxt.options.runtimeConfig.public.skewProtection = {
       basePath,
+      assetRecovery: usesCloudflareAssets
+        ? {
+            _tag: 'cloudflare',
+            buildAssetsPath,
+            recoveryPath,
+          }
+        : { _tag: 'disabled' },
       cookie: options.cookie as Required<NuxtSkewProtectionRuntimeConfig['cookie']>,
       debug: options.debug,
       connectionTracking: options.connectionTracking,
@@ -267,8 +284,6 @@ export default defineNuxtModule<ModuleOptions>({
       version,
     } as Required<NuxtSkewProtectionRuntimeConfig>
 
-    // Detect Nitro preset
-    const nitroPreset = resolveNitroPreset(nuxt.options.nitro)
     const fragmentedConnectionRuntime = !!nitroPreset && (
       nitroPreset.includes('vercel')
       || nitroPreset.includes('netlify')
@@ -282,7 +297,6 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt.options.runtimeConfig.public.skewProtection.routeTracking = false
       nuxt.options.runtimeConfig.public.skewProtection.ipTracking = false
     }
-
     // Detect NuxtHub and guide users on KV configuration
     const isNuxtHub = hasNuxtModule('@nuxthub/core')
     if (isNuxtHub && options.storage?.driver === 'cloudflare-kv-binding' && !options.storage.namespaceId) {
@@ -456,6 +470,35 @@ export {}
       // Detect platform at build time (reuse nitroPreset from above)
       const isStatic = isStaticPreset(nuxt)
 
+      if (usesCloudflareAssets) {
+        nuxt.hook('nitro:config', (nitroConfig) => {
+          nitroConfig.cloudflare ||= {}
+          nitroConfig.cloudflare.wrangler ||= {}
+          nitroConfig.cloudflare.wrangler.assets ||= {}
+          nitroConfig.cloudflare.wrangler.assets.run_worker_first = withCloudflareBuildAssetRouting(
+            nitroConfig.cloudflare.wrangler.assets.run_worker_first,
+            nuxt.options.app.buildAssetsDir,
+          )
+          nitroConfig.rollupConfig ||= {}
+          const existingPlugins = nitroConfig.rollupConfig.plugins
+          nitroConfig.rollupConfig.plugins = [
+            ...(Array.isArray(existingPlugins) ? existingPlugins : existingPlugins ? [existingPlugins] : []),
+            createCloudflareAssetProtectionPlugin({
+              buildAssetsPath,
+              recoveryPath,
+              runtimeHelperId: resolver.resolve('./runtime/server/utils/cloudflare-asset-fetch'),
+            }),
+          ]
+        })
+        nuxt.hook('nitro:init', (nitro) => {
+          nitro.hooks.hook('prerender:config', (prerenderConfig) => {
+            const plugins = prerenderConfig.rollupConfig?.plugins
+            if (Array.isArray(plugins))
+              prerenderConfig.rollupConfig!.plugins = withoutCloudflareAssetProtectionPlugin(plugins)
+          })
+        })
+      }
+
       const isAdapter = isSkewAdapter(options.updateStrategy)
       const configuredUpdateStrategy = isAdapter
         ? 'adapter'
@@ -504,13 +547,14 @@ export {}
         nitro.vercel.skewProtection = false
 
         if (platform.mode !== 'portable') {
+          logger.info('Vercel Skew Protection detected. Persistent asset storage and same-origin update discovery are disabled. Set `mode: \'portable\'` to use module-managed asset retention.')
           nuxt.options.experimental.checkOutdatedBuildInterval = false
           nuxt.options.runtimeConfig.skewProtection = {
             ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object' && nuxt.options.runtimeConfig.skewProtection
               ? nuxt.options.runtimeConfig.skewProtection
               : {}),
             vercelCookiePath: nuxt.options.app.baseURL,
-          }
+          } satisfies NuxtSkewProtectionPrivateRuntimeConfig
           addServerHandler({
             handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
             middleware: true,
@@ -568,6 +612,19 @@ export {}
       }
 
       // Multi-tab coordination and auto-reload handling
+      if (usesCloudflareAssets) {
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
+          mode: 'client',
+        })
+        nuxt.options.nitro ||= {}
+        nuxt.options.nitro.publicAssets ||= []
+        nuxt.options.nitro.publicAssets.push({
+          dir: resolver.resolve('../sw'),
+          maxAge: 0,
+        })
+      }
+
       if (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt')) {
         addPlugin({
           src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
@@ -576,6 +633,7 @@ export {}
       }
 
       const shouldBundleAssets = options.bundleAssets !== false && platform.mode === 'portable'
+      options.bundleAssets = shouldBundleAssets
       const shouldTrackBuildMetadata = options.trackBuildMetadata !== false || shouldBundleAssets
 
       // Build metadata and asset retention share storage, but remain independent capabilities.

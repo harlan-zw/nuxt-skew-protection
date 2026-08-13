@@ -1,21 +1,16 @@
 import type { WranglerExecution } from '../../src/unstorage/cloudflare-kv-wrangler-driver'
-import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createCloudflareKVWranglerDriver,
-} from '../../src/unstorage/cloudflare-kv-wrangler-driver'
-import {
-  readWranglerKVNamespaces,
-  selectCloudflareKVNamespace,
-} from '../../src/unstorage/utils'
+import { createCloudflareKVWranglerDriver } from '../../src/unstorage/cloudflare-kv-wrangler-driver'
+import { readWranglerKVNamespaces, selectCloudflareKVNamespace } from '../../src/unstorage/utils'
 
 function successfulExecution(stdout: Uint8Array | string = ''): WranglerExecution {
   return {
     exitCode: 0,
     stderr: Buffer.alloc(0),
-    stdout: typeof stdout === 'string' ? Buffer.from(stdout) : Buffer.from(stdout),
+    stdout: Buffer.from(stdout),
   }
 }
 
@@ -30,7 +25,7 @@ describe('cloudflare KV namespace resolution', () => {
   it('rejects an unrelated binding instead of selecting the first namespace', () => {
     expect(() => selectCloudflareKVNamespace([
       { binding: 'CACHE', id: 'cache-id' },
-    ], 'SKEW_PROTECTION')).toThrow(/SKEW_PROTECTION/)
+    ], 'SKEW_PROTECTION')).toThrow(/Available bindings: CACHE/)
   })
 
   it('rejects duplicate requested bindings', () => {
@@ -40,40 +35,31 @@ describe('cloudflare KV namespace resolution', () => {
     ], 'SKEW_PROTECTION')).toThrow(/multiple/i)
   })
 
-  it('reads comments and trailing commas from wrangler.jsonc', async () => {
-    const path = join(tmpdir(), `nuxt-skew-protection-${crypto.randomUUID()}.jsonc`)
-    await writeFile(path, `{
+  it.each([
+    ['json', JSON.stringify({ kv_namespaces: [{ binding: 'SKEW_PROTECTION', id: 'json-id' }] }), 'json-id'],
+    ['jsonc', `{
       // Dedicated storage for retained assets.
       "kv_namespaces": [
         { "binding": "SKEW_PROTECTION", "id": "jsonc-id", },
       ],
-    }`)
-
-    try {
-      await expect(readWranglerKVNamespaces(path)).resolves.toEqual([
-        { binding: 'SKEW_PROTECTION', id: 'jsonc-id' },
-      ])
-    }
-    finally {
-      await unlink(path)
-    }
-  })
-
-  it('reads TOML regardless of property order', async () => {
-    const path = join(tmpdir(), `nuxt-skew-protection-${crypto.randomUUID()}.toml`)
-    await writeFile(path, `
+    }`, 'jsonc-id'],
+    ['toml', `
       [[kv_namespaces]]
       id = "toml-id"
       binding = "SKEW_PROTECTION"
-    `)
+    `, 'toml-id'],
+  ])('reads Wrangler %s configuration', async (extension, contents, id) => {
+    const directory = await mkdtemp(join(tmpdir(), 'nuxt-skew-protection-config-'))
+    const path = join(directory, `wrangler.${extension}`)
+    await writeFile(path, contents)
 
     try {
       await expect(readWranglerKVNamespaces(path)).resolves.toEqual([
-        { binding: 'SKEW_PROTECTION', id: 'toml-id' },
+        { binding: 'SKEW_PROTECTION', id },
       ])
     }
     finally {
-      await unlink(path)
+      await rm(directory, { recursive: true })
     }
   })
 })
@@ -81,11 +67,19 @@ describe('cloudflare KV namespace resolution', () => {
 describe('cloudflare KV Wrangler driver', () => {
   it('returns null for Wrangler v4 missing-value output', async () => {
     const execute = vi.fn(async () => successfulExecution('Value not found\n'))
-    const factory = createCloudflareKVWranglerDriver(execute)
-    const driver = factory({ namespaceId: 'namespace-id' })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
 
     await expect(driver.getItem?.('missing')).resolves.toBeNull()
-    expect(execute).toHaveBeenCalledOnce()
+    expect(execute).toHaveBeenCalledWith([
+      'kv',
+      'key',
+      'get',
+      'missing',
+      '--namespace-id',
+      'namespace-id',
+      '--remote',
+      '--text',
+    ])
   })
 
   it('preserves raw bytes returned by Wrangler', async () => {
@@ -95,8 +89,7 @@ describe('cloudflare KV Wrangler driver', () => {
         return successfulExecution('[{"name":"skew:asset.wasm"}]')
       return successfulExecution(bytes)
     })
-    const factory = createCloudflareKVWranglerDriver(execute)
-    const driver = factory({ namespaceId: 'namespace-id', base: 'skew:' })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id', base: 'skew:' })
 
     await expect(driver.getItemRaw?.('asset.wasm')).resolves.toEqual(Buffer.from(bytes))
     expect(execute).toHaveBeenLastCalledWith([
@@ -110,27 +103,44 @@ describe('cloudflare KV Wrangler driver', () => {
     ])
   })
 
-  it('writes raw bytes through a temporary file', async () => {
+  it('writes raw bytes through a temporary file and removes it', async () => {
     const bytes = Uint8Array.from([0, 255, 128, 10, 13])
+    let temporaryPath = ''
     let written: Buffer | undefined
     const execute = vi.fn(async (args: readonly string[]) => {
-      const pathFlag = args.indexOf('--path')
-      if (pathFlag !== -1)
-        written = await readFile(args[pathFlag + 1])
+      temporaryPath = args[args.indexOf('--path') + 1] || ''
+      written = await readFile(temporaryPath)
       return successfulExecution()
     })
-    const factory = createCloudflareKVWranglerDriver(execute)
-    const driver = factory({ namespaceId: 'namespace-id' })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
 
     await driver.setItemRaw?.('asset.wasm', bytes)
 
     expect(written).toEqual(Buffer.from(bytes))
+    await expect(access(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(access(dirname(temporaryPath))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('passes keys as argv without a shell', async () => {
+  it('cleans temporary files after Wrangler fails', async () => {
+    let temporaryPath = ''
+    const execute = vi.fn(async (args: readonly string[]) => {
+      temporaryPath = args[args.indexOf('--path') + 1] || ''
+      return {
+        exitCode: 1,
+        stderr: Buffer.from('authentication failed'),
+        stdout: Buffer.alloc(0),
+      }
+    })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
+
+    await expect(driver.setItemRaw?.('asset.wasm', Buffer.from('asset'))).rejects.toThrow(/authentication failed/)
+    await expect(access(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(access(dirname(temporaryPath))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('passes keys as argv without shell parsing', async () => {
     const execute = vi.fn(async () => successfulExecution('[]'))
-    const factory = createCloudflareKVWranglerDriver(execute)
-    const driver = factory({ namespaceId: 'namespace-id' })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
     const key = 'asset"; touch /tmp/escaped'
 
     await driver.getKeys?.(key)
@@ -153,8 +163,7 @@ describe('cloudflare KV Wrangler driver', () => {
       stderr: Buffer.from('authentication failed'),
       stdout: Buffer.alloc(0),
     }))
-    const factory = createCloudflareKVWranglerDriver(execute)
-    const driver = factory({ namespaceId: 'namespace-id' })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
 
     await expect(driver.getKeys?.()).rejects.toThrow(/authentication failed/)
   })
