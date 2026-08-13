@@ -108,7 +108,7 @@
     "@vueuse/core": "catalog:",
     "consola": "catalog:",
     "cookie-es": "catalog:",
-    "nuxt-site-config": "4.2.2",
+    "nuxt-site-config": "catalog:",
     "nuxtseo-shared": "catalog:",
     "ofetch": "catalog:",
     "pathe": "catalog:",
