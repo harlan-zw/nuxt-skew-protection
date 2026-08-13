@@ -19,6 +19,7 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
+import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -84,8 +85,8 @@ export interface ModuleOptions {
   /**
    * Bundle old deployment assets to support users on previous versions.
    * When enabled, old build assets are stored and served to users who haven't refreshed.
-   * @default true
-   * @note Automatically disabled when using CDN URL
+   * @default true, or false when native Vercel Skew Protection is active
+   * @note Automatically disabled when using a CDN URL or native Vercel Skew Protection
    */
   bundleAssets?: boolean
   /**
@@ -160,7 +161,6 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     retentionDays: 30,
     maxNumberOfVersions: 10,
-    bundleAssets: true,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
       // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
@@ -210,6 +210,12 @@ export default defineNuxtModule<ModuleOptions>({
       if (!('bundleAssets' in rawOptions)) {
         options.bundleAssets = rawOptions.bundlePreviousDeploymentChunks
       }
+    }
+
+    const bundleAssetsResolution = resolveBundleAssets(options)
+    options.bundleAssets = bundleAssetsResolution.bundleAssets
+    if (bundleAssetsResolution._tag === 'vercel-native') {
+      logger.info('Vercel Skew Protection detected. Persistent asset storage is disabled. Build metadata tracking remains enabled. Set `bundleAssets: true` to override.')
     }
 
     nuxt.hooks.hook('nuxt-seo-pro:modules' as any, (modules: any[]) => {
