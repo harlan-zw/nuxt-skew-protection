@@ -1,4 +1,5 @@
 import type { CookieOptions } from 'nuxt/app'
+import type { SkewProtectionRuntimeConfig } from '../../types'
 import type { SkewConnection } from '../types'
 import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { useBotDetection } from '#imports'
@@ -38,9 +39,13 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   const basePath = (runtimeConfig.public.skewProtection as { basePath?: string }).basePath || '/__skew'
 
   // Initialize cookie first (always needed for return value)
-  const cookieConfig = runtimeConfig.public.skewProtection.cookie
-  const { name: cookieName, ...cookieOpts } = cookieConfig
-  const cookie = useCookie(cookieName, { ...(cookieOpts as CookieOptions), readonly: false })
+  const cookieConfig = runtimeConfig.public.skewProtection.cookie as SkewProtectionRuntimeConfig['cookie']
+  const cookie = cookieConfig === false
+    ? undefined
+    : (() => {
+        const { name: cookieName, ...cookieOpts } = cookieConfig
+        return useCookie(cookieName, { ...(cookieOpts as CookieOptions), readonly: false })
+      })()
 
   if (isBot.value) {
     logger.debug(`[${name}] Skipping connection for bot`)
@@ -48,7 +53,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   }
 
   // Set cookie client-side if not already set
-  if (import.meta.client && !cookie.value) {
+  if (import.meta.client && cookie && !cookie.value) {
     cookie.value = buildId
   }
 

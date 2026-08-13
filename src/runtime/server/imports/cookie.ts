@@ -7,11 +7,11 @@ import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection
  * Get the skew protection version cookie name from runtime config
  *
  * @param event - H3 event (optional, for better type safety)
- * @returns The configured cookie name
+ * @returns The configured cookie name, or undefined when cookies are disabled
  */
-export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string {
+export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string | undefined {
   const { cookie } = getRuntimeConfigSkewProtection(event)
-  return cookie.name
+  return cookie === false ? undefined : cookie.name
 }
 
 /**
@@ -30,6 +30,8 @@ export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string
  */
 export function getSkewProtectionCookie(event: SkewProtectionEvent): string | undefined {
   const cookieName = getSkewProtectionCookieName(event)
+  if (!cookieName)
+    return undefined
   return getCookie(event as Parameters<typeof getCookie>[0], cookieName)
 }
 
@@ -48,6 +50,8 @@ export function getSkewProtectionCookie(event: SkewProtectionEvent): string | un
  */
 export function setSkewProtectionCookie(event: SkewProtectionEvent, value: string): void {
   const { cookie: cookieConfig } = getRuntimeConfigSkewProtection(event)
+  if (cookieConfig === false)
+    return
   const { name: cookieName, ...cookieOptions } = cookieConfig
   setCookie(event as Parameters<typeof setCookie>[0], cookieName, value, cookieOptions as CookieSerializeOptions)
 }

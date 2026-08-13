@@ -17,7 +17,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
    */
   basePath: string
   assetRecovery: AssetRecoveryConfig
-  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+  cookie: false | Omit<CookieSerializeOptions, 'encode'> & {
     name?: string
   }
   debug: boolean
@@ -31,7 +31,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
 export interface SkewProtectionRuntimeConfig {
   basePath: string
   assetRecovery: AssetRecoveryConfig
-  cookie: Omit<CookieSerializeOptions, 'encode'> & {
+  cookie: false | Omit<CookieSerializeOptions, 'encode'> & {
     name: string
   }
   debug: boolean
