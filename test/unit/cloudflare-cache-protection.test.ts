@@ -85,6 +85,28 @@ describe('cloudflare asset cache protection', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('prevents the latest build manifest from entering browser or edge caches', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('{"id":"build-1"}', {
+      headers: {
+        'cache-control': 'public, max-age=31536000, immutable',
+        'cdn-cache-control': 'public, max-age=31536000, immutable',
+        'cloudflare-cdn-cache-control': 'public, max-age=31536000, immutable',
+      },
+    }))
+
+    const response = await fetchCloudflareBuildAsset(
+      new Request('https://example.com/pro/_nuxt/builds/latest.json'),
+      { fetch },
+      '/pro/_nuxt/',
+      '/pro/__skew/asset',
+    )
+
+    expect(await response?.json()).toEqual({ id: 'build-1' })
+    expect(response?.headers.get('cache-control')).toBe('no-store')
+    expect(response?.headers.get('cdn-cache-control')).toBe('no-store')
+    expect(response?.headers.get('cloudflare-cdn-cache-control')).toBe('no-store')
+  })
+
   it('wraps Nitro entry without depending on its source shape', async () => {
     const testDir = await mkdtemp(join(tmpdir(), 'skew-entry-'))
     const nitroEntryPath = join(testDir, 'nitro-entry.mjs')
