@@ -306,6 +306,12 @@ importers:
         specifier: 'catalog:'
         version: 4.121.0
 
+  test/fixtures/custom-adapter:
+    devDependencies:
+      nuxt-skew-protection:
+        specifier: workspace:*
+        version: link:../../..
+
   test/fixtures/hub:
     dependencies:
       '@nuxthub/core':
@@ -343,6 +349,8 @@ importers:
       pusher-js:
         specifier: 'catalog:'
         version: 8.6.0
+
+  test/fixtures/reload-strategy: {}
 
   test/fixtures/skew-notification: {}
 
@@ -12673,10 +12681,6 @@ snapshots:
     optionalDependencies:
       srvx: 0.11.22
 
-  crossws@0.4.10(srvx@0.12.5):
-    optionalDependencies:
-      srvx: 0.12.5
-
   css-declaration-sorter@7.4.0(postcss@8.5.19):
     dependencies:
       postcss: 8.5.19
@@ -14116,29 +14120,6 @@ snapshots:
       citty: 0.2.2
       consola: 3.4.2
       crossws: 0.4.10(srvx@0.11.22)
-      defu: 6.1.7
-      get-port-please: 3.2.0
-      h3: 1.15.11
-      http-shutdown: 1.2.2
-      jiti: 2.7.0
-      mlly: 1.8.2
-      node-forge: 1.4.0
-      pathe: 2.0.3
-      std-env: 4.2.0
-      tinyclip: 0.1.15
-      ufo: 1.6.4
-      untun: 0.1.3
-      uqr: 0.1.3
-    transitivePeerDependencies:
-      - srvx
-
-  listhen@1.10.0(srvx@0.12.5):
-    dependencies:
-      '@parcel/watcher': 2.5.6
-      '@parcel/watcher-wasm': 2.5.6
-      citty: 0.2.2
-      consola: 3.4.2
-      crossws: 0.4.10(srvx@0.12.5)
       defu: 6.1.7
       get-port-please: 3.2.0
       h3: 1.15.11

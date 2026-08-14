@@ -73,6 +73,48 @@ describe('asset manager', () => {
     await expect(manager.storeVersion('v2', publicDir, [asset])).rejects.toThrow('changed without changing its URL')
   })
 
+  it('keeps one release when concurrent builds publish divergent bytes at one URL', async () => {
+    const firstPublicDir = join(testDir, 'first-public')
+    const secondPublicDir = join(testDir, 'second-public')
+    const asset = '_nuxt/chunk.js'
+    await mkdir(join(firstPublicDir, '_nuxt'), { recursive: true })
+    await mkdir(join(secondPublicDir, '_nuxt'), { recursive: true })
+    await writeFile(join(firstPublicDir, asset), 'first')
+    await writeFile(join(secondPublicDir, asset), 'second')
+
+    let recordReads = 0
+    let releaseRecordReads!: () => void
+    const recordReadBarrier = new Promise<void>(resolve => releaseRecordReads = resolve)
+    const values = new Map<string, unknown>()
+    const storage = {
+      async getKeys(prefix = '') {
+        if (prefix === 'version-records' && ++recordReads <= 2) {
+          if (recordReads === 2)
+            releaseRecordReads()
+          await recordReadBarrier
+        }
+        return [...values.keys()].filter(key => key.startsWith(prefix))
+      },
+      getItem: async (key: string) => values.get(key) ?? null,
+      getItemRaw: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: unknown) => void values.set(key, value),
+      setItemRaw: async (key: string, value: unknown) => void values.set(key, value),
+      removeItem: async (key: string) => void values.delete(key),
+    }
+    const firstManager = createAssetManager({ storage: storage as any })
+    const secondManager = createAssetManager({ storage: storage as any })
+
+    const results = await Promise.allSettled([
+      firstManager.storeVersion('v1', firstPublicDir, [asset]),
+      secondManager.storeVersion('v2', secondPublicDir, [asset]),
+    ])
+
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected'])
+    await expect(firstManager.getManifest()).resolves.toMatchObject({
+      versions: { v1: { assets: [asset] } },
+    })
+  })
+
   it('stores isolated release records and applies count retention', async () => {
     const manager = await createManager({ maxNumberOfVersions: 2 })
     for (let index = 1; index <= 3; index++) {

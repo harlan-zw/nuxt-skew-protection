@@ -2,6 +2,7 @@ export interface BackoffQueueOptions {
   delays: number[]
   repeatLast?: boolean
   onTick: (index: number) => void | Promise<void>
+  onError: (error: unknown, index: number) => void
 }
 
 export interface BackoffQueue {
@@ -32,7 +33,9 @@ export function createBackoffQueue(options: BackoffQueueOptions): BackoffQueue {
     const currentGeneration = generation
     const schedule = (index: number, delay: number) => {
       timer = setTimeout(async () => {
-        await onTick(index)
+        await Promise.resolve(onTick(index)).catch((error: unknown) => {
+          options.onError(error, index)
+        })
         if (!running || currentGeneration !== generation)
           return
         const hasNext = index < delays.length - 1

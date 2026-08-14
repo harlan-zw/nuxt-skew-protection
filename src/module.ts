@@ -11,6 +11,7 @@ import {
   createResolver,
   defineNuxtModule,
   hasNuxtModule,
+  resolvePath,
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
@@ -193,6 +194,9 @@ export default defineNuxtModule<ModuleOptions>({
     if (nuxt.options.experimental.appManifest === false) {
       throw new Error('nuxt-skew-protection requires `experimental.appManifest` because deployment detection uses Nuxt build manifests.')
     }
+    // Nuxt's chunk reload plugin reloads after every manifest update. This
+    // module owns that decision so prompt and false strategies remain valid.
+    nuxt.options.experimental.emitRouteChunkError = 'manual'
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
 
     // Resolve the endpoint prefix. When `basePath` isn't set explicitly it's
@@ -429,8 +433,8 @@ export {}
       }
     }
 
-    // Multi-tab + auto-reload in dev mode
-    if (nuxt.options.dev && (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt'))) {
+    // Own chunk error recovery and manifest update handling in development.
+    if (nuxt.options.dev) {
       addPlugin({
         src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
         mode: 'client',
@@ -552,12 +556,10 @@ export {}
         })
       }
 
-      if (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt')) {
-        addPlugin({
-          src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
-          mode: 'client',
-        })
-      }
+      addPlugin({
+        src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
+        mode: 'client',
+      })
 
       const shouldBundleAssets = options.bundleAssets !== false
       const shouldTrackBuildMetadata = options.trackBuildMetadata !== false || shouldBundleAssets
@@ -675,11 +677,12 @@ export {}
 
         const adapterConfig = result.data
         const publicAdapterConfig = adapter.toPublicConfig(adapterConfig)
+        const clientModule = await resolvePath(adapter.clientModule, { cwd: nuxt.options.rootDir })
 
         // Only the explicitly public subscribe config is emitted into the client bundle.
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
-          getContents: () => `import { subscribe } from ${JSON.stringify(adapter.clientModule)}
+          getContents: () => `import { subscribe } from ${JSON.stringify(clientModule)}
 export const config = ${JSON.stringify(publicAdapterConfig)}
 export { subscribe }`,
         })

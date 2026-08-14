@@ -21,11 +21,12 @@ describe('migrate codemod', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('renames hook', () => {
-    writeFileSync(join(dir, 'plugin.ts'), `nuxtApp.hooks.hook('skew-protection:chunks-outdated', cb)`)
+  it('leaves incompatible chunk hook callbacks unchanged and warns for manual migration', () => {
+    const source = `nuxtApp.hooks.hook('skew-protection:chunks-outdated', ({ deletedChunks, invalidatedModules }) => {\n  return deletedChunks.concat(invalidatedModules)\n})`
+    writeFileSync(join(dir, 'plugin.ts'), source)
     const output = run(dir)
-    expect(readFileSync(join(dir, 'plugin.ts'), 'utf-8')).toBe(`nuxtApp.hooks.hook('app:manifest:update', cb)`)
-    expect(output).toContain('chunk hook -> app:manifest:update')
+    expect(readFileSync(join(dir, 'plugin.ts'), 'utf-8')).toBe(source)
+    expect(output).toContain('Manual migration required for skew-protection:chunks-outdated')
   })
 
   it('renames isOutdated to isAppOutdated', () => {
@@ -65,8 +66,9 @@ describe('migrate codemod', () => {
     const output = run(dir)
     const result = readFileSync(join(dir, 'app.vue'), 'utf-8')
     expect(result).toContain('isAppOutdated')
-    expect(result).toContain('app:manifest:update')
-    expect(output).toContain('2 change(s) across 1 file(s)')
+    expect(result).toContain('skew-protection:chunks-outdated')
+    expect(output).toContain('1 change(s) across 1 file(s)')
+    expect(output).toContain('Manual migration required for skew-protection:chunks-outdated')
   })
 
   it('reports no migration needed when files are clean', () => {

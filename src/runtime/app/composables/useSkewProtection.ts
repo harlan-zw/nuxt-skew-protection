@@ -59,6 +59,7 @@ function createSkewProtectionEngine(nuxtApp: NuxtApp) {
     delays: [0, 5000, 30000, 300000],
     repeatLast: true,
     onTick: () => nuxtApp.runWithContext(checkForUpdates),
+    onError: error => logger.debug('[SkewProtection] Update check failed; retrying.', error),
   })
 
   function connect() {

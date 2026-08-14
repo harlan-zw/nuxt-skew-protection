@@ -24,11 +24,11 @@ export function modifyVersion(fixtureDir: string, version: string, pages = ['ind
   }
 }
 
-export async function build(fixtureDir: string, deploymentId: string) {
+export async function build(fixtureDir: string, deploymentId: string, env: Record<string, string> = {}) {
   try {
     await execAsync(`pnpm build`, {
       cwd: fixtureDir,
-      env: { ...process.env, NUXT_DEPLOYMENT_ID: deploymentId },
+      env: { ...process.env, NUXT_DEPLOYMENT_ID: deploymentId, ...env },
     })
   }
   catch (err: any) {

@@ -15,6 +15,7 @@ describe('createBackoffQueue', () => {
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
       onTick,
+      onError: () => {},
     })
 
     queue.start()
@@ -37,6 +38,7 @@ describe('createBackoffQueue', () => {
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
       onTick,
+      onError: () => {},
     })
 
     queue.start()
@@ -54,6 +56,7 @@ describe('createBackoffQueue', () => {
     const queue = createBackoffQueue({
       delays: [0, 100, 200],
       onTick,
+      onError: () => {},
     })
 
     queue.start()
@@ -79,6 +82,7 @@ describe('createBackoffQueue', () => {
     const queue = createBackoffQueue({
       delays: [100],
       onTick,
+      onError: () => {},
     })
 
     expect(queue.isRunning()).toBe(false)
@@ -95,10 +99,34 @@ describe('createBackoffQueue', () => {
     const queue = createBackoffQueue({
       delays: [],
       onTick,
+      onError: () => {},
     })
 
     queue.start()
     expect(onTick).not.toHaveBeenCalled()
     expect(queue.isRunning()).toBe(false)
+  })
+
+  it('reports rejected ticks and continues retrying', async () => {
+    const error = new Error('network unavailable')
+    const onTick = vi.fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(undefined)
+    const onError = vi.fn()
+    const queue = createBackoffQueue({
+      delays: [0, 10],
+      repeatLast: true,
+      onTick,
+      onError,
+    })
+
+    queue.start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onError).toHaveBeenCalledWith(error, 0)
+    expect(queue.isRunning()).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onTick).toHaveBeenCalledTimes(2)
+    expect(queue.isRunning()).toBe(true)
   })
 })

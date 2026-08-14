@@ -20,6 +20,11 @@ export default defineNuxtPlugin({
     }
     const reloadStrategy = config.reloadStrategy ?? 'prompt'
 
+    nuxtApp.hooks.hook('app:chunkError', () => {
+      logger.debug('[AutoReload] Chunk failed to load, reloading')
+      return reloadNuxtApp({ force: true })
+    })
+
     if (reloadStrategy === 'immediate') {
       nuxtApp.hooks.hook('app:manifest:update', () => {
         logger.debug('[AutoReload] New deployment available, reloading immediately')

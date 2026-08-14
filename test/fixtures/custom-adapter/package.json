@@ -1,0 +1,11 @@
+{
+  "name": "test-fixture-custom-adapter",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build"
+  },
+  "devDependencies": {
+    "nuxt-skew-protection": "workspace:*"
+  }
+}

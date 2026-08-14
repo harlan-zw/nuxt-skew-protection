@@ -258,6 +258,23 @@ export function createAssetManager(options: {
       assets: Object.fromEntries(storedAssets),
     }
     await fromStorage(`write version record ${buildId}`, () => storage.setItem(recordKey(buildId), record))
+    const publishedRecords = await getVersionRecords(storage)
+    const conflictingRecord = publishedRecords
+      .filter(existingRecord => existingRecord.id !== buildId)
+      .find(existingRecord => Object.entries(record.assets).some(([asset, hash]) => {
+        const existingHash = existingRecord.assets[asset]
+        return existingHash && existingHash !== hash
+      }))
+    if (conflictingRecord) {
+      const competingRecord = [record, conflictingRecord].sort((left, right) => left.id.localeCompare(right.id))[0]!
+      if (competingRecord.id !== buildId) {
+        if (record.bundled) {
+          await processBatch(Object.keys(record.assets), 50, asset => fromStorage(`remove ${asset}`, () => storage.removeItem(assetKey(buildId, asset))))
+        }
+        await fromStorage(`remove version record ${buildId}`, () => storage.removeItem(recordKey(buildId)))
+        throw new Error(`Immutable asset conflict for build ${buildId}. Another release published different bytes at the same URL.`)
+      }
+    }
     currentBuildId = buildId
     logger.debug(`${record.bundled ? 'Stored' : 'Tracked'} ${protectedAssets.length} assets (${formatBytes(totalBytes)}) for ${buildId}`)
     return record

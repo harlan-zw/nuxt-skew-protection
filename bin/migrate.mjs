@@ -15,11 +15,6 @@ const IGNORE_DIRS = new Set(['node_modules', '.nuxt', '.output', 'dist', '.git']
 
 const replacements = [
   {
-    name: 'chunk hook -> app:manifest:update',
-    pattern: /(?:skew-protection|skew):chunks-outdated/g,
-    replacement: 'app:manifest:update',
-  },
-  {
     name: 'composable: isOutdated -> isAppOutdated',
     pattern: /\bisOutdated\b/g,
     replacement: 'isAppOutdated',
@@ -59,6 +54,7 @@ function walkDir(dir) {
 function migrate(cwd) {
   const files = walkDir(cwd)
   const changes = []
+  const warnings = []
 
   for (const file of files) {
     let content
@@ -70,6 +66,10 @@ function migrate(cwd) {
     }
 
     let modified = content
+    const incompatibleHooks = content.match(/(?:skew-protection|skew):chunks-outdated/g)
+    if (incompatibleHooks?.length) {
+      warnings.push({ file: file.replace(cwd, '.'), count: incompatibleHooks.length })
+    }
     for (const r of replacements) {
       if (r.fileFilter && !r.fileFilter(file))
         continue
@@ -86,7 +86,7 @@ function migrate(cwd) {
     }
   }
 
-  return { changes, totalFiles: files.length }
+  return { changes, warnings, totalFiles: files.length }
 }
 
 // CLI entry
@@ -105,7 +105,14 @@ const cwd = resolve(process.argv[3] || '.')
 console.log(`\nnuxt-skew-protection: migrating to v1.0.0...\n`)
 console.log(`Scanning: ${cwd}\n`)
 
-const { changes, totalFiles } = migrate(cwd)
+const { changes, warnings, totalFiles } = migrate(cwd)
+
+for (const warning of warnings) {
+  console.log(`Manual migration required for skew-protection:chunks-outdated in ${warning.file}. The replacement hook receives a Nuxt manifest, not chunk arrays. (${warning.count}x)`)
+}
+
+if (warnings.length)
+  console.log('')
 
 if (changes.length === 0) {
   console.log(`Scanned ${totalFiles} files. No migration needed!\n`)
