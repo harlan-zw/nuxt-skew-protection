@@ -7,7 +7,7 @@ packages:
   - test/fixtures/*
 
 patchedDependencies:
-  nuxtseo-shared@0.9.0: patches/nuxtseo-shared@0.9.0.patch
+  nuxtseo-shared@5.0.1: patches/nuxtseo-shared@5.0.1.patch
 catalog:
   '@antfu/eslint-config': ^7.7.3
   '@arethetypeswrong/cli': ^0.18.2
