@@ -2,6 +2,8 @@ import antfu from '@antfu/eslint-config'
 import harlanzw from 'eslint-plugin-harlanzw'
 
 export default antfu({
+  // This repo lints `test/fixtures/**` on purpose, so the shared ignore set is
+  // off and the repo keeps its own list. A global ignore cannot be undone.
   ignores: [
     '.eslintignore',
     'test/fixtures/*/node_modules',
@@ -10,10 +12,6 @@ export default antfu({
     'test/fixtures/*/.skew-storage',
   ],
   rules: {
-    'node/prefer-global/process': 'off',
-    'node/prefer-global/buffer': 'off',
-    'no-use-before-define': 'off',
-    'ts/no-use-before-define': 'off',
     'unused-imports/no-unused-vars': ['error', {
       argsIgnorePattern: '^_',
       varsIgnorePattern: '^_',
@@ -35,7 +33,7 @@ export default antfu({
     'unused-imports/no-unused-vars': 'off',
     'ts/no-unused-vars': 'off',
   },
-}, ...harlanzw({ link: true, nuxt: true, vue: true }), {
+}, ...harlanzw({ base: { ignores: false }, link: true, nuxt: true, vue: true }), {
   files: ['test/fixtures/**/*.vue'],
   rules: {
     'harlanzw/nuxt-no-unsafe-date': 'off',
