@@ -1,7 +1,12 @@
-import { getHeader, getResponseHeader, getResponseStatus, removeResponseHeader, setResponseHeader } from '#nuxtseo/h3'
+import { appendResponseHeader, getHeader, getResponseHeader, getResponseStatus, removeResponseHeader } from '#nuxtseo/h3'
 import { defineNitroPlugin, useRuntimeConfig } from '#nuxtseo/nitro'
 import { getSkewProtectionCookieName } from '../imports/cookie'
-import { htmlCacheRequestFromEvent, resolveHtmlCachePolicy, withoutCookie } from '../utils/html-cache-policy'
+import {
+  htmlCacheRequestFromEvent,
+  readSetCookies,
+  resolveHtmlCachePolicy,
+  withoutCookie,
+} from '../utils/html-cache-policy'
 
 /**
  * Drops the version cookie from documents a shared cache was asked to keep.
@@ -22,7 +27,7 @@ export default defineNitroPlugin((nitroApp) => {
       htmlCacheRequestFromEvent(event, getHeader),
       {
         status: getResponseStatus(event),
-        cacheControl: getResponseHeader(event, 'cache-control') as string | undefined,
+        cacheControl: getResponseHeader(event, 'cache-control'),
       },
     )
     if (decision._tag !== 'shared-cacheable')
@@ -32,13 +37,21 @@ export default defineNitroPlugin((nitroApp) => {
     if (!name)
       return
 
-    const remaining = withoutCookie(
+    const cookies = readSetCookies(
+      event as never,
       getResponseHeader(event, 'set-cookie') as string | string[] | undefined,
-      name,
     )
-    if (remaining.length)
-      setResponseHeader(event, 'set-cookie', remaining)
-    else
-      removeResponseHeader(event, 'set-cookie')
+    const remaining = withoutCookie(cookies, name)
+    // Nothing of ours to remove. Touching the header anyway risks rewriting an
+    // app cookie into a different shape for no gain.
+    if (remaining.length === cookies.length)
+      return
+
+    removeResponseHeader(event, 'set-cookie')
+    // Appended one at a time. Setting an array works on h3 v1 but collapses to
+    // a single malformed header on h3 v2, which is the same joining bug in the
+    // other direction.
+    for (const cookie of remaining)
+      appendResponseHeader(event, 'set-cookie', cookie)
   })
 })

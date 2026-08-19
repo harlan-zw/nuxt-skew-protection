@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   overlongRouteRules,
+  readSetCookies,
   resolveHtmlCachePolicy,
   sharedCacheSeconds,
   skewCacheCeilingSeconds,
@@ -12,6 +13,7 @@ const anonymousDocument = {
   secFetchDest: 'document',
   accept: 'text/html,application/xhtml+xml',
   cookie: undefined,
+  authorization: undefined,
 }
 
 const cached = { status: 200, cacheControl: 'public, s-maxage=300' }
@@ -47,8 +49,21 @@ describe('reading the app\'s cache-control', () => {
     expect(sharedCacheSeconds('')).toBeNull()
   })
 
-  it('is not fooled by a directive name appearing inside another', () => {
+  it('does not read a suffix of another directive name', () => {
+    // `s-maxage` ends in `maxage`, not `max-age`, so this is really about the
+    // leading boundary. A parser without one reads `x-max-age` as `max-age`.
+    expect(sharedCacheSeconds('public, x-max-age=600')).toBeNull()
+    expect(sharedCacheSeconds('public, no-s-maxage=600')).toBeNull()
     expect(sharedCacheSeconds('public, stale-while-revalidate=600')).toBeNull()
+  })
+
+  it('survives a header h3 handed back as an array', () => {
+    expect(sharedCacheSeconds(['public', 's-maxage=300'])).toBe(300)
+  })
+
+  it('survives a non-string header without throwing', () => {
+    expect(sharedCacheSeconds(0)).toBeNull()
+    expect(sharedCacheSeconds(null)).toBeNull()
   })
 })
 
@@ -153,12 +168,12 @@ describe('checking the app\'s own route rules', () => {
 
   it('names the route rule the author wrote', () => {
     expect(overlongRouteRules(routeRules, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/archive/**', seconds: 1_000_000 }])
+      .toEqual([{ route: '/archive/**', seconds: 1_000_000, source: 'cache-control' }])
   })
 
   it('matches the header name case-insensitively', () => {
     expect(overlongRouteRules({ '/x': { headers: { 'CACHE-CONTROL': 'public, s-maxage=999' } } }, 10))
-      .toEqual([{ route: '/x', seconds: 999 }])
+      .toEqual([{ route: '/x', seconds: 999, source: 'cache-control' }])
   })
 
   it('reports nothing when every window fits', () => {
@@ -167,5 +182,91 @@ describe('checking the app\'s own route rules', () => {
 
   it('copes with an app that has no route rules', () => {
     expect(overlongRouteRules({}, 60)).toEqual([])
+  })
+})
+
+describe('credentials other than cookies', () => {
+  // Before this feature the version cookie made every document unstorable, so
+  // a blanket route rule over an authenticated page was inert. Removing the
+  // cookie removes that accident too, and a bearer-token document published to
+  // a shared cache is served to everyone.
+  it('refuses a bearer-authenticated document', () => {
+    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, authorization: 'Bearer abc' }, cached))
+      .toEqual({ _tag: 'skipped', reason: 'request-is-authenticated' })
+  })
+
+  it('refuses a proxy-authenticated document', () => {
+    const request = { ...anonymousDocument, authorization: 'Basic abc' }
+
+    expect(resolveHtmlCachePolicy(true, request, cached)._tag).toBe('skipped')
+  })
+})
+
+describe('reading Set-Cookie across h3 majors', () => {
+  const h3v1 = {}
+  const h3v2 = (cookies: string[]) => ({
+    res: { headers: { getSetCookie: () => cookies } },
+  })
+
+  // h3 v2 stores response headers in a `Headers`, and `get('set-cookie')`
+  // joins every cookie with ", ". Filtering that string treats two cookies as
+  // one value and deletes the app's.
+  it('separates cookies on h3 v2 instead of taking the joined string', () => {
+    const joined = '__nkpv=abc; Path=/, session=xyz; HttpOnly'
+
+    expect(readSetCookies(h3v2(['__nkpv=abc; Path=/', 'session=xyz; HttpOnly']), joined))
+      .toEqual(['__nkpv=abc; Path=/', 'session=xyz; HttpOnly'])
+  })
+
+  it('keeps the app\'s cookie when ours is filtered out on h3 v2', () => {
+    const cookies = readSetCookies(h3v2(['__nkpv=abc; Path=/', 'session=xyz; HttpOnly']), undefined)
+
+    expect(withoutCookie(cookies, '__nkpv')).toEqual(['session=xyz; HttpOnly'])
+  })
+
+  it('reads the array h3 v1 already provides', () => {
+    expect(readSetCookies(h3v1, ['__nkpv=abc', 'session=xyz']))
+      .toEqual(['__nkpv=abc', 'session=xyz'])
+  })
+
+  it('wraps a lone string header', () => {
+    expect(readSetCookies(h3v1, '__nkpv=abc')).toEqual(['__nkpv=abc'])
+  })
+
+  it('reports no cookies rather than one empty one', () => {
+    expect(readSetCookies(h3v1, undefined)).toEqual([])
+    expect(readSetCookies(h3v1, '')).toEqual([])
+  })
+})
+
+describe('route rules that do not spell it as a header', () => {
+  it('sees a swr rule, which headers-only scanning missed entirely', () => {
+    expect(overlongRouteRules({ '/blog/**': { swr: 31_536_000 } }, skewCacheCeilingSeconds(30)))
+      .toEqual([{ route: '/blog/**', seconds: 31_536_000, source: 'swr' }])
+  })
+
+  it('sees an isr rule', () => {
+    expect(overlongRouteRules({ '/docs/**': { isr: 2_000_000 } }, skewCacheCeilingSeconds(1)))
+      .toEqual([{ route: '/docs/**', seconds: 2_000_000, source: 'isr' }])
+  })
+
+  it('treats an unbounded swr as unbounded rather than skipping it', () => {
+    expect(overlongRouteRules({ '/x': { swr: true } }, skewCacheCeilingSeconds(30)))
+      .toMatchObject([{ route: '/x', source: 'swr' }])
+  })
+
+  it('sees a normalised cache rule', () => {
+    expect(overlongRouteRules({ '/x': { cache: { maxAge: 60, staleMaxAge: 31_536_000 } } }, skewCacheCeilingSeconds(1)))
+      .toEqual([{ route: '/x', seconds: 31_536_060, source: 'cache' }])
+  })
+
+  it('prefers an explicit header over the shorthand', () => {
+    const rules = { '/x': { swr: 31_536_000, headers: { 'cache-control': 'public, s-maxage=60' } } }
+
+    expect(overlongRouteRules(rules, skewCacheCeilingSeconds(30))).toEqual([])
+  })
+
+  it('ignores a rule that says nothing about caching', () => {
+    expect(overlongRouteRules({ '/api/**': { cors: true } } as never, 60)).toEqual([])
   })
 })

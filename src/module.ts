@@ -79,10 +79,16 @@ export interface ModuleOptions {
    * who asked. And dropping the cookie means `isClientOutdated` and the version
    * an SSE connection reports fall back to the server's own build id.
    *
-   * Two platform notes. Cloudflare does not cache HTML off headers alone, so it
-   * needs a Cache Rule with "Eligible for cache" on those routes. And this has
-   * no effect on Vercel, whose skew protection sets a `__vdpl` cookie on every
-   * document.
+   * Two platform notes. On Cloudflare it depends which cache you are using.
+   * With Workers Cache (`"cache": { "enabled": true }` in wrangler) the
+   * response headers are the entire configuration and no dashboard rule is
+   * involved; leave `cross_version_cache` at its default of false and a deploy
+   * invalidates every stored document, which removes the retention race
+   * outright. On the zone cache, HTML is not cacheable by extension, so it also
+   * needs a Cache Rule marking those routes eligible.
+   *
+   * This has no effect on Vercel, whose skew protection sets a `__vdpl` cookie
+   * on every document. The module detects that and does not register.
    *
    * @default false
    */
@@ -480,6 +486,48 @@ export {}
       setupDevToolsUI(resolver.resolve, nuxt)
     }
 
+    // Deliberately outside the dev guard below. The overlong-route warning is
+    // the whole safety net for this option, and an author iterating in
+    // `nuxt dev` who only sees it after a production build has already shipped
+    // the mistake once.
+    if (options.htmlCache) {
+      // Mirrors `version-manager.ts`, which falls back to 7 rather than to the
+      // declared default. Reading 0 here while retention actually keeps a week
+      // produced a warning quoting a ceiling six days too small.
+      const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
+      const overlong = overlongRouteRules(nuxt.options.routeRules ?? {}, ceiling)
+      const onVercel = resolveNitroPreset(nuxt.options.nitro)?.includes('vercel')
+        || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+
+      if (onVercel) {
+        // Vercel pins each document to a deployment with the `__vdpl` cookie,
+        // and a shared cache will not store a response that sets one. The two
+        // designs cannot both hold: one wants a cookie per document, the other
+        // wants one document for everyone.
+        //
+        // Nothing is registered in this branch. An earlier revision printed
+        // this warning and installed the plugin anyway, which then stripped
+        // `__vdpl` and broke the mechanism the warning said it would not touch.
+        logger.warn('htmlCache has no effect on Vercel and was not enabled. Vercel skew protection sets a `__vdpl` cookie on every document, and shared caches will not store a response carrying Set-Cookie.')
+      }
+      else {
+        // Point at the route rule the author wrote, not at the config in
+        // general. Reading their own rules is the only way to do that.
+        for (const { route, seconds, source } of overlong)
+          logger.warn(`routeRules['${route}'] (${source}) keeps a document for up to ${seconds}s but retention only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
+
+        nuxt.options.runtimeConfig.skewProtection = {
+          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'
+            ? nuxt.options.runtimeConfig.skewProtection
+            : {}),
+          htmlCache: true,
+        } satisfies NuxtSkewProtectionPrivateRuntimeConfig
+        nuxt.options.nitro = nuxt.options.nitro || {}
+        nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
+        nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+      }
+    }
+
     // Skip production setup in dev mode
     if (!nuxt.options.dev) {
       // Detect platform at build time (reuse nitroPreset from above)
@@ -553,35 +601,6 @@ export {}
           handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
           middleware: true,
         })
-      }
-
-      if (options.htmlCache) {
-        const ceiling = skewCacheCeilingSeconds(options.retentionDays ?? 0)
-        const overlong = overlongRouteRules(nuxt.options.routeRules ?? {}, ceiling)
-        if (isVercel) {
-          // Vercel pins each document to a deployment with the `__vdpl` cookie,
-          // and a shared cache will not store a response that sets one. The two
-          // designs cannot both hold: one wants a cookie per document, the
-          // other wants one document for everyone. Say so rather than shipping
-          // an option that quietly does nothing.
-          logger.warn('htmlCache has no effect on Vercel. Vercel skew protection sets a `__vdpl` cookie on every document, and shared caches will not store a response carrying Set-Cookie.')
-        }
-        else {
-          // Point at the route rule the author wrote, not at the config in
-          // general. Reading their own rules is the only way to do that.
-          for (const { route, seconds } of overlong)
-            logger.warn(`routeRules['${route}'] keeps a document for up to ${seconds}s but retentionDays only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
-          logger.info(`htmlCache: anonymous documents may be shared-cached where your route rules say so. Keep each window under the time your last ${options.maxNumberOfVersions} deploys span.`)
-        }
-        nuxt.options.runtimeConfig.skewProtection = {
-          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'
-            ? nuxt.options.runtimeConfig.skewProtection
-            : {}),
-          htmlCache: true,
-        } satisfies NuxtSkewProtectionPrivateRuntimeConfig
-        nuxt.options.nitro = nuxt.options.nitro || {}
-        nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
-        nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
       }
 
       if (options.cookie !== false) {

@@ -31,6 +31,7 @@ export type HtmlCacheSkipReason
     | 'not-cacheable-method'
     | 'not-document'
     | 'request-has-cookie'
+    | 'request-is-authenticated'
     | 'not-ok-status'
     | 'no-shared-cache-directive'
 
@@ -43,6 +44,8 @@ export interface HtmlCacheRequest {
   secFetchDest: string | undefined
   accept: string | undefined
   cookie: string | undefined
+  /** Any credential that personalises a document without being a cookie. */
+  authorization: string | undefined
 }
 
 function isDocumentRequest(request: HtmlCacheRequest): boolean {
@@ -66,10 +69,16 @@ function directive(value: string, name: string): number | undefined {
  * `no-store` are refusals. `s-maxage` beats `max-age` because it is the one
  * addressed to shared caches, which is what a stale document is served from.
  */
-export function sharedCacheSeconds(cacheControl: string | undefined): number | null {
-  if (!cacheControl)
+export function sharedCacheSeconds(cacheControl: unknown): number | null {
+  // h3 v1 types this as `number | string | string[] | undefined`, and app code
+  // calling `appendResponseHeader` twice really does produce an array. Coercing
+  // here rather than asserting a string keeps a duplicated header from throwing
+  // inside a hook whose rejection Nitro swallows, which would leave the feature
+  // silently dead rather than loudly wrong.
+  const raw = Array.isArray(cacheControl) ? cacheControl.join(', ') : cacheControl
+  if (typeof raw !== 'string' || !raw)
     return null
-  const value = cacheControl.toLowerCase()
+  const value = raw.toLowerCase()
   if (value.includes('no-store') || value.includes('private'))
     return null
 
@@ -90,7 +99,7 @@ export function sharedCacheSeconds(cacheControl: string | undefined): number | n
 export function resolveHtmlCachePolicy(
   enabled: boolean,
   request: HtmlCacheRequest,
-  response: { status: number, cacheControl: string | undefined },
+  response: { status: number, cacheControl: unknown },
 ): HtmlCacheDecision {
   if (!enabled)
     return { _tag: 'skipped', reason: 'disabled' }
@@ -111,6 +120,16 @@ export function resolveHtmlCachePolicy(
   // `private` in the route rule for any page whose output depends on who asked.
   if (request.cookie)
     return { _tag: 'skipped', reason: 'request-has-cookie' }
+
+  // A cookie is not the only way a document gets personalised. Before this
+  // module the version cookie made every document unstorable, so a blanket
+  // `cache-control` route rule over an authenticated page was inert. Removing
+  // the cookie removes that accident, and a token-authenticated document would
+  // then be published to a shared cache and served to everyone. The guard has
+  // to cover every credential the request can carry, not just the one this
+  // module happens to set.
+  if (request.authorization)
+    return { _tag: 'skipped', reason: 'request-is-authenticated' }
 
   // Caching an error page is worse than not caching at all: a transient 500
   // during a deploy would be served to everyone for the whole window.
@@ -161,25 +180,84 @@ export function skewCacheCeilingSeconds(retentionDays: number): number {
 }
 
 /**
+ * A route rule as far as this check is concerned.
+ *
+ * Nitro accepts several spellings of "cache this", and they do not all end up
+ * in `headers`. `swr` and `isr` are normalised into `cache` during nitro's own
+ * config pass and only become a `cache-control` header at request time, so a
+ * check that reads `headers` alone sees nothing and stays silent on exactly the
+ * rules most likely to outlive retention: `swr: 31536000` is a year.
+ */
+export interface InspectableRouteRule {
+  headers?: Record<string, string>
+  // Deliberately loose. Nitro's own `NitroRouteConfig` carries far more than
+  // this check reads, and narrowing it here would force a cast at the one call
+  // site that matters. Every field is re-checked before use.
+  cache?: unknown
+  swr?: boolean | number
+  // Also accepts Vercel's `{ expiration }` object form, narrowed at use.
+  isr?: unknown
+}
+
+export interface OverlongRoute {
+  route: string
+  seconds: number
+  /** Which spelling declared it, so the warning names the line to edit. */
+  source: 'cache-control' | 'cache' | 'swr' | 'isr'
+}
+
+function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: OverlongRoute['source'] } | null {
+  const header = rule.headers
+    && Object.entries(rule.headers).find(([name]) => name.toLowerCase() === 'cache-control')?.[1]
+  const fromHeader = sharedCacheSeconds(header)
+  if (fromHeader !== null)
+    return { seconds: fromHeader, source: 'cache-control' }
+
+  const cache = rule.cache as { maxAge?: unknown, staleMaxAge?: unknown } | undefined
+  if (cache && typeof cache === 'object' && typeof cache.maxAge === 'number') {
+    const stale = typeof cache.staleMaxAge === 'number' ? cache.staleMaxAge : 0
+    return { seconds: cache.maxAge + stale, source: 'cache' }
+  }
+
+  // `true` means "cache indefinitely" for both, which no retention window can
+  // cover, so it is reported as unbounded rather than skipped.
+  if (typeof rule.swr === 'number')
+    return { seconds: rule.swr, source: 'swr' }
+  if (rule.swr === true)
+    return { seconds: Number.POSITIVE_INFINITY, source: 'swr' }
+  if (typeof rule.isr === 'number')
+    return { seconds: rule.isr, source: 'isr' }
+  if (rule.isr === true)
+    return { seconds: Number.POSITIVE_INFINITY, source: 'isr' }
+  // Vercel spells it `isr: { expiration }`, where `false` means never expire.
+  if (rule.isr && typeof rule.isr === 'object') {
+    const expiration = (rule.isr as { expiration?: unknown }).expiration
+    if (typeof expiration === 'number')
+      return { seconds: expiration, source: 'isr' }
+    if (expiration === false)
+      return { seconds: Number.POSITIVE_INFINITY, source: 'isr' }
+  }
+
+  return null
+}
+
+/**
  * Route rules whose declared window outlives the retained builds.
  *
  * Reads the app's own `routeRules` rather than a second copy of them, so the
  * warning points at the line the author wrote.
  */
 export function overlongRouteRules(
-  routeRules: Record<string, { headers?: Record<string, string> } | undefined>,
+  routeRules: Record<string, InspectableRouteRule | undefined>,
   ceilingSeconds: number,
-): { route: string, seconds: number }[] {
-  const overlong: { route: string, seconds: number }[] = []
+): OverlongRoute[] {
+  const overlong: OverlongRoute[] = []
   for (const [route, rule] of Object.entries(routeRules ?? {})) {
-    const headers = rule?.headers
-    if (!headers)
+    if (!rule || typeof rule !== 'object')
       continue
-    const header = Object.entries(headers)
-      .find(([name]) => name.toLowerCase() === 'cache-control')?.[1]
-    const seconds = sharedCacheSeconds(header)
-    if (seconds !== null && seconds > ceilingSeconds)
-      overlong.push({ route, seconds })
+    const window = ruleWindow(rule)
+    if (window && window.seconds > ceilingSeconds)
+      overlong.push({ route, seconds: window.seconds, source: window.source })
   }
   return overlong
 }
@@ -199,5 +277,34 @@ export function htmlCacheRequestFromEvent(
     secFetchDest: getHeader(event as never, 'sec-fetch-dest'),
     accept: getHeader(event as never, 'accept'),
     cookie: getHeader(event as never, 'cookie'),
+    authorization: getHeader(event as never, 'authorization')
+      ?? getHeader(event as never, 'proxy-authorization'),
   }
+}
+
+/**
+ * The response's `Set-Cookie` entries, one per cookie, across h3 majors.
+ *
+ * This cannot go through `getResponseHeader`. On h3 v2 the response headers are
+ * a `Headers` instance, and `Headers.get('set-cookie')` returns every cookie
+ * joined with `", "` as one string. Filtering that string treats two cookies as
+ * one value: measured on h3 2.0.1, a `__nkpv` set before an app's `session`
+ * cookie produced a single joined value beginning `__nkpv=`, so a prefix filter
+ * dropped both and deleted the app's cookie. `getSetCookie()` is the only
+ * accessor that separates them, and it exists solely on `Headers`.
+ *
+ * h3 v1 appends each cookie as its own header, so the array comes back from
+ * `getResponseHeader` directly. Feature detection rather than a version check,
+ * because the shape is what matters.
+ */
+export function readSetCookies(
+  event: { res?: { headers?: { getSetCookie?: () => string[] } } },
+  fallback: string | string[] | number | undefined,
+): string[] {
+  const headers = event.res?.headers
+  if (headers && typeof headers.getSetCookie === 'function')
+    return headers.getSetCookie()
+  if (Array.isArray(fallback))
+    return fallback
+  return fallback === undefined || fallback === '' ? [] : [String(fallback)]
 }
