@@ -21,7 +21,7 @@ import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
-import { htmlCacheCapability, overlongRouteRules, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
+import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -48,51 +48,6 @@ export interface ModuleOptions {
    * @default 10
    */
   maxNumberOfVersions?: number
-  /**
-   * Let shared caches store HTML documents.
-   *
-   * Off by default. Freshness stays yours: say how long each page keeps with
-   * Nuxt route rules, which already do exactly that.
-   *
-   * ```ts
-   * routeRules: {
-   *   '/gh/**': { headers: { 'cache-control': 'public, s-maxage=300' } },
-   *   '/blog/**': { headers: { 'cache-control': 'public, s-maxage=3600' } },
-   *   '/@**': { headers: { 'cache-control': 'private, no-store' } },
-   * }
-   * ```
-   *
-   * Today that rule silently does nothing, because `set-skew-protection-cookie`
-   * puts `__nkpv` on every document and shared caches will not store a response
-   * carrying Set-Cookie. Turning this on drops the version cookie from exactly
-   * the anonymous 200 documents a shared cache was asked to keep, and leaves
-   * every other response alone.
-   *
-   * It is safe to keep them because retention means the chunks a cached
-   * document names outlive the deploy that replaced them. Any route rule whose
-   * window exceeds what retention can promise is named at build time, and
-   * `skewCacheCeilingSeconds` gives you the same number to clamp against.
-   *
-   * It is opt-in for two reasons. Shared caches key on the URL and do not vary
-   * on Cookie, so a stored anonymous document is served to signed-in visitors
-   * too; say `private` in the route rule for any page whose output depends on
-   * who asked. And dropping the cookie means `isClientOutdated` and the version
-   * an SSE connection reports fall back to the server's own build id.
-   *
-   * Two platform notes. On Cloudflare it depends which cache you are using.
-   * With Workers Cache (`"cache": { "enabled": true }` in wrangler) the
-   * response headers are the entire configuration and no dashboard rule is
-   * involved; leave `cross_version_cache` at its default of false and a deploy
-   * invalidates every stored document, which removes the retention race
-   * outright. On the zone cache, HTML is not cacheable by extension, so it also
-   * needs a Cache Rule marking those routes eligible.
-   *
-   * This has no effect on Vercel, whose skew protection sets a `__vdpl` cookie
-   * on every document. The module detects that and does not register.
-   *
-   * @default false
-   */
-  htmlCache?: boolean
   /**
    * Strategy for checking for version updates
    * - 'polling': Nuxt's native polling of builds/latest.json (default)
@@ -207,7 +162,6 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     retentionDays: 30,
     maxNumberOfVersions: 10,
-    htmlCache: false,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
       // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
@@ -487,17 +441,16 @@ export {}
     }
 
     // Deliberately outside the dev guard below. The overlong-route warning is
-    // the whole safety net for this option, and an author iterating in
+    // the only safety net a caching route rule gets, and an author iterating in
     // `nuxt dev` who only sees it after a production build has already shipped
     // the mistake once.
-    if (options.htmlCache) {
-      // Mirrors `version-manager.ts`, which falls back to 7 rather than to the
-      // declared default. Reading 0 here while retention actually keeps a week
-      // produced a warning quoting a ceiling six days too small.
-      const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
-      const overlong = overlongRouteRules(nuxt.options.routeRules ?? {}, ceiling)
+    {
       const onVercel = resolveNitroPreset(nuxt.options.nitro)?.includes('vercel')
         || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+      // What the app has already asked shared caches to keep. Empty means the
+      // app declares no HTML caching in its config, which is what keeps every
+      // message below quiet for everyone who is not caching documents.
+      const caching = cachingRouteRules(nuxt.options.routeRules ?? {})
 
       if (onVercel) {
         // Vercel pins each document to a deployment with the `__vdpl` cookie,
@@ -508,23 +461,37 @@ export {}
         // Nothing is registered in this branch. An earlier revision printed
         // this warning and installed the plugin anyway, which then stripped
         // `__vdpl` and broke the mechanism the warning said it would not touch.
-        logger.warn('htmlCache has no effect on Vercel and was not enabled. Vercel skew protection sets a `__vdpl` cookie on every document, and shared caches will not store a response carrying Set-Cookie.')
+        if (caching.length) {
+          logger.warn(`${caching.length} route rule(s) ask a shared cache to store HTML, which cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document, and shared caches will not store a response carrying Set-Cookie.`)
+        }
       }
       else {
-        // Point at the route rule the author wrote, not at the config in
-        // general. Reading their own rules is the only way to do that.
-        for (const { route, seconds, source } of overlong)
-          logger.warn(`routeRules['${route}'] (${source}) keeps a document for up to ${seconds}s but retention only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
-
-        nuxt.options.runtimeConfig.skewProtection = {
-          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'
-            ? nuxt.options.runtimeConfig.skewProtection
-            : {}),
-          htmlCache: true,
-        } satisfies NuxtSkewProtectionPrivateRuntimeConfig
+        // Registered whether or not a route rule declares caching. The plugin
+        // reads the response, so it also covers a `cache-control` set by a
+        // handler or a nitro plugin, which nothing here can see. It costs two
+        // header reads on responses that are not documents.
         nuxt.options.nitro = nuxt.options.nitro || {}
         nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
         nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+
+        if (caching.length) {
+          // Mirrors `version-manager.ts`, which falls back to 7 rather than to
+          // the declared default. Reading 0 here while retention actually keeps
+          // a week produced a warning quoting a ceiling six days too small.
+          const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
+
+          // Say what changed. These rules did nothing before, because the
+          // version cookie made every document unstorable, so this is a live
+          // behaviour change the author did not ask for in config.
+          logger.info(`Shared caches can now store HTML on ${caching.map(({ route }) => route).join(', ')}. The version cookie is dropped there, so \`isClientOutdated\` falls back to the server build id. Say \`private\` in cache-control for any page whose output depends on who asked.`)
+
+          // Point at the route rule the author wrote, not at the config in
+          // general. Reading their own rules is the only way to do that.
+          for (const { route, seconds, source } of caching) {
+            if (seconds > ceiling)
+              logger.warn(`routeRules['${route}'] (${source}) keeps a document for up to ${seconds}s but retention only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
+          }
+        }
 
         // Tell any module that forces `no-store` on HTML what this one can
         // promise. `@harlan-zw/nuxt-cloudflare` reads it at `nitro:config`,
@@ -538,18 +505,22 @@ export {}
         // builds are not recoverable. Layers make that order the normal one,
         // since layer modules install before the root config's.
         nuxt.hook('modules:done', () => {
-          const preset = resolveNitroPreset(nuxt.options.nitro)
-          const servesOldBuilds = preset === 'cloudflare-module' || preset === 'cloudflare-durable'
           const capability = htmlCacheCapability({
             retentionDays: options.retentionDays || 7,
             maxNumberOfVersions: options.maxNumberOfVersions ?? 10,
-            // Where old builds are served from, and whether any were kept.
-            // `bundleAssets: false` or no storage means nothing was stored, so
-            // a retained-chunk promise would be a lie however long the window.
-            assetRecovery: servesOldBuilds && Boolean(options.bundleAssets) && Boolean(options.storage),
+            // Whether any old build was kept. These two are what drive
+            // `restoreOldAssetsToPublic`, which writes the retained chunks back
+            // into the public directory on every preset, so the guarantee does
+            // not depend on which one. `bundleAssets: false` or no storage means
+            // nothing was stored, and a retained-chunk promise would be a lie
+            // however long the window.
+            assetRecovery: Boolean(options.bundleAssets) && Boolean(options.storage),
           })
           if (!capability) {
-            logger.warn('htmlCache is on but this build stores no previous assets, so no chunk-retention guarantee is published. Check `bundleAssets` and `storage`.')
+            // Only worth saying to an app that is actually caching documents.
+            // Everyone else has nothing riding on the guarantee.
+            if (caching.length)
+              logger.warn('Route rules ask a shared cache to store HTML, but this build stores no previous assets, so no chunk-retention guarantee is published. A cached document can outlive its chunks. Check `bundleAssets` and `storage`.')
             return
           }
           const published = nuxt.options.runtimeConfig.htmlCacheCapabilities

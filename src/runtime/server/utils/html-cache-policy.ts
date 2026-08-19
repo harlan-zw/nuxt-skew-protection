@@ -24,11 +24,15 @@
  * Second, it states the bound. Any route whose declared window exceeds what
  * retention can promise is named at build time, because a document that
  * outlives its chunks is the failure this module exists to prevent.
+ *
+ * There is no option to turn this on. Writing the route rule is the opt-in, and
+ * a flag would only mean the rule keeps silently doing nothing until the author
+ * finds a second thing to write. What the response asks for is the whole input,
+ * so a route that says nothing about caching is never touched.
  */
 
 export type HtmlCacheSkipReason
-  = | 'disabled'
-    | 'not-cacheable-method'
+  = | 'not-cacheable-method'
     | 'not-document'
     | 'request-has-cookie'
     | 'request-is-authenticated'
@@ -97,13 +101,9 @@ export function sharedCacheSeconds(cacheControl: unknown): number | null {
  * its own cache layer needs no special case.
  */
 export function resolveHtmlCachePolicy(
-  enabled: boolean,
   request: HtmlCacheRequest,
   response: { status: number, cacheControl: unknown },
 ): HtmlCacheDecision {
-  if (!enabled)
-    return { _tag: 'skipped', reason: 'disabled' }
-
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return { _tag: 'skipped', reason: 'not-cacheable-method' }
 
@@ -242,24 +242,32 @@ function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: Over
 }
 
 /**
- * Route rules whose declared window outlives the retained builds.
+ * Route rules that ask a shared cache to keep a document.
  *
- * Reads the app's own `routeRules` rather than a second copy of them, so the
- * warning points at the line the author wrote.
+ * Reads the app's own `routeRules` rather than a second copy of them, so a
+ * warning points at the line the author wrote. Empty means the app never asked
+ * for shared caching in its config, which is the signal used to stay quiet.
  */
-export function overlongRouteRules(
+export function cachingRouteRules(
   routeRules: Record<string, InspectableRouteRule | undefined>,
-  ceilingSeconds: number,
 ): OverlongRoute[] {
-  const overlong: OverlongRoute[] = []
+  const caching: OverlongRoute[] = []
   for (const [route, rule] of Object.entries(routeRules ?? {})) {
     if (!rule || typeof rule !== 'object')
       continue
     const window = ruleWindow(rule)
-    if (window && window.seconds > ceilingSeconds)
-      overlong.push({ route, seconds: window.seconds, source: window.source })
+    if (window)
+      caching.push({ route, seconds: window.seconds, source: window.source })
   }
-  return overlong
+  return caching
+}
+
+/** Route rules whose declared window outlives the retained builds. */
+export function overlongRouteRules(
+  routeRules: Record<string, InspectableRouteRule | undefined>,
+  ceilingSeconds: number,
+): OverlongRoute[] {
+  return cachingRouteRules(routeRules).filter(route => route.seconds > ceilingSeconds)
 }
 
 /**

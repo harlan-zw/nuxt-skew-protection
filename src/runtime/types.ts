@@ -10,11 +10,6 @@ export type AssetRecoveryConfig
 
 export interface NuxtSkewProtectionPrivateRuntimeConfig {
   vercelCookiePath?: string
-  /**
-   * Present only when `htmlCache` is enabled. Server-side only: the client
-   * never needs it.
-   */
-  htmlCache?: boolean
 }
 
 export interface NuxtSkewProtectionRuntimeConfig {

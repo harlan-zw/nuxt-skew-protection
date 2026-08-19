@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cachingRouteRules,
   htmlCacheCapability,
   overlongRouteRules,
   readSetCookies,
@@ -70,52 +71,47 @@ describe('reading the app\'s cache-control', () => {
 
 describe('which documents the cache was asked to keep', () => {
   it('claims an anonymous 200 the app marked cacheable', () => {
-    expect(resolveHtmlCachePolicy(true, anonymousDocument, cached))
+    expect(resolveHtmlCachePolicy(anonymousDocument, cached))
       .toEqual({ _tag: 'shared-cacheable', seconds: 300 })
   })
 
   // The whole point of the redesign: freshness comes from the app's own rules,
   // so a route the app said nothing about is left completely alone.
   it('leaves a document the app said nothing about alone', () => {
-    expect(resolveHtmlCachePolicy(true, anonymousDocument, { status: 200, cacheControl: undefined }))
+    expect(resolveHtmlCachePolicy(anonymousDocument, { status: 200, cacheControl: undefined }))
       .toEqual({ _tag: 'skipped', reason: 'no-shared-cache-directive' })
   })
 
   it('respects a route the app marked private', () => {
-    expect(resolveHtmlCachePolicy(true, anonymousDocument, { status: 200, cacheControl: 'private, no-store' }))
+    expect(resolveHtmlCachePolicy(anonymousDocument, { status: 200, cacheControl: 'private, no-store' }))
       .toEqual({ _tag: 'skipped', reason: 'no-shared-cache-directive' })
   })
 
   it('never claims a request that carries a cookie', () => {
-    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, cookie: 'session=abc' }, cached))
+    expect(resolveHtmlCachePolicy({ ...anonymousDocument, cookie: 'session=abc' }, cached))
       .toEqual({ _tag: 'skipped', reason: 'request-has-cookie' })
   })
 
   // A transient 500 during a deploy, held for the whole window, is a worse
   // outage than the one that produced it.
   it.each([404, 410, 500, 502, 503])('refuses a %i', (status) => {
-    expect(resolveHtmlCachePolicy(true, anonymousDocument, { ...cached, status }))
+    expect(resolveHtmlCachePolicy(anonymousDocument, { ...cached, status }))
       .toEqual({ _tag: 'skipped', reason: 'not-ok-status' })
   })
 
   it('leaves sub-resource requests alone', () => {
-    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, secFetchDest: 'script' }, cached))
+    expect(resolveHtmlCachePolicy({ ...anonymousDocument, secFetchDest: 'script' }, cached))
       .toEqual({ _tag: 'skipped', reason: 'not-document' })
   })
 
   it('treats a crawler that sends no sec-fetch-dest as a document', () => {
-    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, secFetchDest: undefined }, cached)._tag)
+    expect(resolveHtmlCachePolicy({ ...anonymousDocument, secFetchDest: undefined }, cached)._tag)
       .toBe('shared-cacheable')
   })
 
   it('only claims safe methods', () => {
-    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, method: 'POST' }, cached))
+    expect(resolveHtmlCachePolicy({ ...anonymousDocument, method: 'POST' }, cached))
       .toEqual({ _tag: 'skipped', reason: 'not-cacheable-method' })
-  })
-
-  it('does nothing at all when the option is off', () => {
-    expect(resolveHtmlCachePolicy(false, anonymousDocument, cached))
-      .toEqual({ _tag: 'skipped', reason: 'disabled' })
   })
 })
 
@@ -184,6 +180,21 @@ describe('checking the app\'s own route rules', () => {
   it('copes with an app that has no route rules', () => {
     expect(overlongRouteRules({}, 60)).toEqual([])
   })
+
+  // This list is what decides whether the build says anything at all. An app
+  // that caches nothing must produce an empty one, or every user who never
+  // asked for HTML caching gets warned about it.
+  it('lists every rule that asks a shared cache to keep a document', () => {
+    expect(cachingRouteRules(routeRules)).toEqual([
+      { route: '/gh/**', seconds: 300, source: 'cache-control' },
+      { route: '/archive/**', seconds: 1_000_000, source: 'cache-control' },
+    ])
+  })
+
+  it('lists nothing for an app that declares no caching', () => {
+    expect(cachingRouteRules({ '/api/**': { cors: true }, '/@**': { headers: { 'cache-control': 'private, no-store' } } }))
+      .toEqual([])
+  })
 })
 
 describe('credentials other than cookies', () => {
@@ -192,14 +203,14 @@ describe('credentials other than cookies', () => {
   // cookie removes that accident too, and a bearer-token document published to
   // a shared cache is served to everyone.
   it('refuses a bearer-authenticated document', () => {
-    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, authorization: 'Bearer abc' }, cached))
+    expect(resolveHtmlCachePolicy({ ...anonymousDocument, authorization: 'Bearer abc' }, cached))
       .toEqual({ _tag: 'skipped', reason: 'request-is-authenticated' })
   })
 
   it('refuses a proxy-authenticated document', () => {
     const request = { ...anonymousDocument, authorization: 'Basic abc' }
 
-    expect(resolveHtmlCachePolicy(true, request, cached)._tag).toBe('skipped')
+    expect(resolveHtmlCachePolicy(request, cached)._tag).toBe('skipped')
   })
 })
 
