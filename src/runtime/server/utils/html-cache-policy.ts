@@ -94,6 +94,25 @@ export function sharedCacheSeconds(cacheControl: unknown): number | null {
 }
 
 /**
+ * Whether a shared-cache window came only from `max-age`.
+ *
+ * `s-maxage` is read by shared caches and ignored by browsers, so writing it is
+ * proof the author meant a CDN. `max-age` is also how you say "browser, hold
+ * this", and nothing in the header separates that intent from CDN intent. The
+ * response is storable by a shared cache either way, so this does not change
+ * what the policy decides. It exists so the build can name the routes where the
+ * author may not have meant it.
+ */
+export function sharedWindowFromMaxAgeAlone(cacheControl: unknown): boolean {
+  if (sharedCacheSeconds(cacheControl) === null)
+    return false
+  const raw = Array.isArray(cacheControl) ? cacheControl.join(', ') : cacheControl
+  if (typeof raw !== 'string')
+    return false
+  return directive(raw.toLowerCase(), 's-maxage') === undefined
+}
+
+/**
  * Whether this response is one a shared cache was asked to keep.
  *
  * The app's `cache-control` is the whole input. However it got there, route
@@ -204,38 +223,40 @@ export interface OverlongRoute {
   seconds: number
   /** Which spelling declared it, so the warning names the line to edit. */
   source: 'cache-control' | 'cache' | 'swr' | 'isr'
+  /** The window came from `max-age` alone, so CDN intent is a guess. */
+  fromMaxAgeAlone: boolean
 }
 
-function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: OverlongRoute['source'] } | null {
+function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: OverlongRoute['source'], fromMaxAgeAlone: boolean } | null {
   const header = rule.headers
     && Object.entries(rule.headers).find(([name]) => name.toLowerCase() === 'cache-control')?.[1]
   const fromHeader = sharedCacheSeconds(header)
   if (fromHeader !== null)
-    return { seconds: fromHeader, source: 'cache-control' }
+    return { seconds: fromHeader, source: 'cache-control', fromMaxAgeAlone: sharedWindowFromMaxAgeAlone(header) }
 
   const cache = rule.cache as { maxAge?: unknown, staleMaxAge?: unknown } | undefined
   if (cache && typeof cache === 'object' && typeof cache.maxAge === 'number') {
     const stale = typeof cache.staleMaxAge === 'number' ? cache.staleMaxAge : 0
-    return { seconds: cache.maxAge + stale, source: 'cache' }
+    return { seconds: cache.maxAge + stale, source: 'cache', fromMaxAgeAlone: false }
   }
 
   // `true` means "cache indefinitely" for both, which no retention window can
   // cover, so it is reported as unbounded rather than skipped.
   if (typeof rule.swr === 'number')
-    return { seconds: rule.swr, source: 'swr' }
+    return { seconds: rule.swr, source: 'swr', fromMaxAgeAlone: false }
   if (rule.swr === true)
-    return { seconds: Number.POSITIVE_INFINITY, source: 'swr' }
+    return { seconds: Number.POSITIVE_INFINITY, source: 'swr', fromMaxAgeAlone: false }
   if (typeof rule.isr === 'number')
-    return { seconds: rule.isr, source: 'isr' }
+    return { seconds: rule.isr, source: 'isr', fromMaxAgeAlone: false }
   if (rule.isr === true)
-    return { seconds: Number.POSITIVE_INFINITY, source: 'isr' }
+    return { seconds: Number.POSITIVE_INFINITY, source: 'isr', fromMaxAgeAlone: false }
   // Vercel spells it `isr: { expiration }`, where `false` means never expire.
   if (rule.isr && typeof rule.isr === 'object') {
     const expiration = (rule.isr as { expiration?: unknown }).expiration
     if (typeof expiration === 'number')
-      return { seconds: expiration, source: 'isr' }
+      return { seconds: expiration, source: 'isr', fromMaxAgeAlone: false }
     if (expiration === false)
-      return { seconds: Number.POSITIVE_INFINITY, source: 'isr' }
+      return { seconds: Number.POSITIVE_INFINITY, source: 'isr', fromMaxAgeAlone: false }
   }
 
   return null
@@ -257,7 +278,7 @@ export function cachingRouteRules(
       continue
     const window = ruleWindow(rule)
     if (window)
-      caching.push({ route, seconds: window.seconds, source: window.source })
+      caching.push({ route, seconds: window.seconds, source: window.source, fromMaxAgeAlone: window.fromMaxAgeAlone })
   }
   return caching
 }

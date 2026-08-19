@@ -6,6 +6,7 @@ import {
   readSetCookies,
   resolveHtmlCachePolicy,
   sharedCacheSeconds,
+  sharedWindowFromMaxAgeAlone,
   skewCacheCeilingSeconds,
   withoutCookie,
 } from '../../src/runtime/server/utils/html-cache-policy'
@@ -165,12 +166,12 @@ describe('checking the app\'s own route rules', () => {
 
   it('names the route rule the author wrote', () => {
     expect(overlongRouteRules(routeRules, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/archive/**', seconds: 1_000_000, source: 'cache-control' }])
+      .toEqual([{ route: '/archive/**', seconds: 1_000_000, source: 'cache-control', fromMaxAgeAlone: false }])
   })
 
   it('matches the header name case-insensitively', () => {
     expect(overlongRouteRules({ '/x': { headers: { 'CACHE-CONTROL': 'public, s-maxage=999' } } }, 10))
-      .toEqual([{ route: '/x', seconds: 999, source: 'cache-control' }])
+      .toEqual([{ route: '/x', seconds: 999, source: 'cache-control', fromMaxAgeAlone: false }])
   })
 
   it('reports nothing when every window fits', () => {
@@ -186,14 +187,50 @@ describe('checking the app\'s own route rules', () => {
   // asked for HTML caching gets warned about it.
   it('lists every rule that asks a shared cache to keep a document', () => {
     expect(cachingRouteRules(routeRules)).toEqual([
-      { route: '/gh/**', seconds: 300, source: 'cache-control' },
-      { route: '/archive/**', seconds: 1_000_000, source: 'cache-control' },
+      { route: '/gh/**', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
+      { route: '/archive/**', seconds: 1_000_000, source: 'cache-control', fromMaxAgeAlone: false },
     ])
   })
 
   it('lists nothing for an app that declares no caching', () => {
     expect(cachingRouteRules({ '/api/**': { cors: true }, '/@**': { headers: { 'cache-control': 'private, no-store' } } }))
       .toEqual([])
+  })
+})
+
+// `s-maxage` is ignored by browsers, so writing it is proof the author meant a
+// CDN. `max-age` alone is also how you say "browser, hold this", and the module
+// drops the version cookie either way. The build warns rather than guess.
+describe('telling CDN intent from browser intent', () => {
+  it('flags a window that came from max-age alone', () => {
+    expect(sharedWindowFromMaxAgeAlone('public, max-age=60')).toBe(true)
+  })
+
+  it('does not flag a window addressed to shared caches', () => {
+    expect(sharedWindowFromMaxAgeAlone('public, s-maxage=300')).toBe(false)
+    expect(sharedWindowFromMaxAgeAlone('public, s-maxage=300, max-age=0')).toBe(false)
+  })
+
+  it('does not flag a response no shared cache would keep', () => {
+    expect(sharedWindowFromMaxAgeAlone('private, max-age=60')).toBe(false)
+    expect(sharedWindowFromMaxAgeAlone(undefined)).toBe(false)
+  })
+
+  it('carries the flag through to the route the author wrote', () => {
+    expect(cachingRouteRules({
+      '/browser': { headers: { 'cache-control': 'public, max-age=60' } },
+      '/cdn': { headers: { 'cache-control': 'public, s-maxage=300' } },
+    })).toEqual([
+      { route: '/browser', seconds: 60, source: 'cache-control', fromMaxAgeAlone: true },
+      { route: '/cdn', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
+    ])
+  })
+
+  // `swr` and `isr` are nitro's own words for shared caching. There is no
+  // browser-only reading of them, so they are never ambiguous.
+  it('never flags nitro\'s own caching shorthands', () => {
+    expect(cachingRouteRules({ '/a': { swr: 60 }, '/b': { isr: 60 } })
+      .every(route => !route.fromMaxAgeAlone)).toBe(true)
   })
 })
 
@@ -276,12 +313,12 @@ describe('reading Set-Cookie across h3 majors', () => {
 describe('route rules that do not spell it as a header', () => {
   it('sees a swr rule, which headers-only scanning missed entirely', () => {
     expect(overlongRouteRules({ '/blog/**': { swr: 31_536_000 } }, skewCacheCeilingSeconds(30)))
-      .toEqual([{ route: '/blog/**', seconds: 31_536_000, source: 'swr' }])
+      .toEqual([{ route: '/blog/**', seconds: 31_536_000, source: 'swr', fromMaxAgeAlone: false }])
   })
 
   it('sees an isr rule', () => {
     expect(overlongRouteRules({ '/docs/**': { isr: 2_000_000 } }, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/docs/**', seconds: 2_000_000, source: 'isr' }])
+      .toEqual([{ route: '/docs/**', seconds: 2_000_000, source: 'isr', fromMaxAgeAlone: false }])
   })
 
   it('treats an unbounded swr as unbounded rather than skipping it', () => {
@@ -291,7 +328,7 @@ describe('route rules that do not spell it as a header', () => {
 
   it('sees a normalised cache rule', () => {
     expect(overlongRouteRules({ '/x': { cache: { maxAge: 60, staleMaxAge: 31_536_000 } } }, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/x', seconds: 31_536_060, source: 'cache' }])
+      .toEqual([{ route: '/x', seconds: 31_536_060, source: 'cache', fromMaxAgeAlone: false }])
   })
 
   it('prefers an explicit header over the shorthand', () => {

@@ -486,9 +486,15 @@ export {}
           //
           // Point at the route rule the author wrote, not at the config in
           // general. Reading their own rules is the only way to do that.
-          for (const { route, seconds, source } of caching) {
+          for (const { route, seconds, source, fromMaxAgeAlone } of caching) {
             if (seconds > ceiling)
               logger.warn(`routeRules['${route}'] (${source}) caches a document for ${seconds}s. Retention only keeps a build for ${ceiling}s. The cached document will outlive its chunks. Lower the window to ${ceiling}s or less.`)
+
+            // `s-maxage` says CDN and nothing else. `max-age` alone may have
+            // meant the browser, and the author then loses `isClientOutdated`
+            // on this route without ever asking for shared caching.
+            if (fromMaxAgeAlone)
+              logger.warn(`routeRules['${route}'] caches documents with \`max-age\` and no \`s-maxage\`. The version cookie is dropped there, so \`isClientOutdated\` falls back to the build id. Use \`s-maxage\` for CDN caching, or \`private\` if you meant browser caching only.`)
           }
         }
 
