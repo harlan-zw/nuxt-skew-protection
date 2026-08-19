@@ -197,6 +197,28 @@ describe('checking the app\'s own route rules', () => {
   })
 })
 
+describe('what retention can promise', () => {
+  const stored = { retentionDays: 30, maxNumberOfVersions: 10, assetRecovery: true }
+
+  // Was Cloudflare-only until #48 landed. Retained chunks are now restored
+  // before nitro seals its public asset manifest, so they resolve on every
+  // preset, and gating the promise on Cloudflare under-promised everywhere else.
+  it('promises retention whenever assets were actually kept', () => {
+    expect(htmlCacheCapability(stored)).toMatchObject({ v: 1, assetRecovery: true })
+  })
+
+  it('promises nothing when no assets were kept', () => {
+    expect(htmlCacheCapability({ ...stored, assetRecovery: false })).toBeNull()
+  })
+
+  // Rank binds before time for anyone deploying often, so the ceiling is the
+  // smaller of the two rather than the configured retention window.
+  it('takes the tighter of the time and rank bounds', () => {
+    expect(htmlCacheCapability({ ...stored, maxNumberOfVersions: 2 })?.documentTtlCeilingSeconds)
+      .toBe(2 * 60 * 60)
+  })
+})
+
 describe('credentials other than cookies', () => {
   // Before this feature the version cookie made every document unstorable, so
   // a blanket route rule over an authenticated page was inert. Removing the
