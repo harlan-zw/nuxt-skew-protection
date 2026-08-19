@@ -1,4 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
+import type { HtmlCacheHeadersOptions } from './server/utils/html-cache-policy'
 
 export type AssetRecoveryConfig
   = | { _tag: 'disabled' }
@@ -8,8 +9,16 @@ export type AssetRecoveryConfig
       recoveryPath: string
     }
 
+export type { HtmlCacheHeadersOptions }
+
 export interface NuxtSkewProtectionPrivateRuntimeConfig {
   vercelCookiePath?: string
+  /**
+   * Present only when `htmlCacheHeaders` is enabled. Server-side only: the
+   * client never needs it, and a cached document must not advertise how long
+   * it may be cached for.
+   */
+  htmlCacheHeaders?: HtmlCacheHeadersOptions
 }
 
 export interface NuxtSkewProtectionRuntimeConfig {

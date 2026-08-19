@@ -21,6 +21,7 @@ import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
+import { maxSafeHtmlCacheSeconds, resolveHtmlCacheHeadersOptions } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -47,6 +48,49 @@ export interface ModuleOptions {
    * @default 10
    */
   maxNumberOfVersions?: number
+  /**
+   * Emit shared-cache headers on anonymous HTML documents.
+   *
+   * Off by default. Retaining old builds makes a cached document safe to serve,
+   * because the chunks it names outlive the deploy that replaced them, so this
+   * is the payoff for skew protection rather than a separate concern. It is
+   * still opt-in, because the module cannot see whether a rendered document
+   * depends on who requested it.
+   *
+   * Only enable it when the server-rendered output is the same for every
+   * visitor. A request carrying cookies never populates the cache, but shared
+   * caches key on the URL and do not vary on Cookie, so a stored anonymous
+   * document will be served to signed-in visitors too.
+   *
+   * Choose `maxAge` shorter than the wall-clock time your last
+   * `maxNumberOfVersions` deploys span. That is the real bound and it cannot be
+   * checked at build time: `retentionDays` is a ceiling, deploy rate decides
+   * the floor.
+   *
+   * Two platform notes. Cloudflare does not cache HTML off headers alone, so
+   * this needs a Cache Rule with "Eligible for cache" on the document routes
+   * before it does anything. And it has no effect on Vercel at all, because
+   * Vercel skew protection sets a `__vdpl` cookie on every document and shared
+   * caches will not store a response carrying Set-Cookie.
+   *
+   * Enabling it stops anonymous documents setting the version cookie, so
+   * `isClientOutdated` and the version an SSE connection reports fall back to
+   * the server's own build id.
+   *
+   * @default false
+   */
+  htmlCacheHeaders?: boolean | {
+    /**
+     * Seconds a shared cache may serve the document without revalidating.
+     * @default 60
+     */
+    maxAge?: number
+    /**
+     * Seconds a shared cache may serve a stale document while it revalidates.
+     * @default 60
+     */
+    staleWhileRevalidate?: number
+  }
   /**
    * Strategy for checking for version updates
    * - 'polling': Nuxt's native polling of builds/latest.json (default)
@@ -161,6 +205,7 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     retentionDays: 30,
     maxNumberOfVersions: 10,
+    htmlCacheHeaders: false,
     cookie: {
       // `name` intentionally omitted — derived from the mount point in setup
       // (`resolveCookieName`) so path-routed apps get a distinct cookie. An
@@ -512,6 +557,35 @@ export {}
           handler: resolver.resolve('./runtime/server/middleware/vercel-skew'),
           middleware: true,
         })
+      }
+
+      const htmlCacheHeaders = resolveHtmlCacheHeadersOptions(options.htmlCacheHeaders)
+      if (htmlCacheHeaders) {
+        const cacheWindow = htmlCacheHeaders.maxAge + htmlCacheHeaders.staleWhileRevalidate
+        const ceiling = maxSafeHtmlCacheSeconds(options.retentionDays ?? 0)
+        if (isVercel) {
+          // Vercel pins each document to a deployment with the `__vdpl` cookie,
+          // and a shared cache will not store a response that sets one. The two
+          // designs cannot both hold: one wants a cookie per document, the other
+          // wants one document for everyone. Say so rather than shipping an
+          // option that quietly does nothing.
+          logger.warn('htmlCacheHeaders has no effect on Vercel. Vercel skew protection sets a `__vdpl` cookie on every document, and shared caches will not store a response carrying Set-Cookie.')
+        }
+        else if (cacheWindow > ceiling) {
+          logger.warn(`htmlCacheHeaders keeps a document for up to ${cacheWindow}s but retentionDays only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
+        }
+        else {
+          logger.info(`htmlCacheHeaders: anonymous documents are shared-cached for up to ${cacheWindow}s. Keep that under the time your last ${options.maxNumberOfVersions} deploys span.`)
+        }
+        nuxt.options.runtimeConfig.skewProtection = {
+          ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'
+            ? nuxt.options.runtimeConfig.skewProtection
+            : {}),
+          htmlCacheHeaders,
+        } satisfies NuxtSkewProtectionPrivateRuntimeConfig
+        nuxt.options.nitro = nuxt.options.nitro || {}
+        nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
+        nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
       }
 
       if (options.cookie !== false) {
