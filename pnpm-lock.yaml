@@ -312,6 +312,8 @@ importers:
         specifier: 'catalog:'
         version: 4.121.0
 
+  test/fixtures/html-cache: {}
+
   test/fixtures/hub:
     dependencies:
       '@nuxthub/core':

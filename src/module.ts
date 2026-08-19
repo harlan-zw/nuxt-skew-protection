@@ -21,6 +21,7 @@ import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
+import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -437,6 +438,103 @@ export {}
     if (nuxt.options.dev) {
       const { setupDevToolsUI } = await import('./build/devtools')
       setupDevToolsUI(resolver.resolve, nuxt)
+    }
+
+    // Deliberately outside the dev guard below. The overlong-route warning is
+    // the only safety net a caching route rule gets, and an author iterating in
+    // `nuxt dev` who only sees it after a production build has already shipped
+    // the mistake once.
+    {
+      const onVercel = resolveNitroPreset(nuxt.options.nitro)?.includes('vercel')
+        || process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1'
+      // What the app has already asked shared caches to keep. Empty means the
+      // app declares no HTML caching in its config, which is what keeps every
+      // message below quiet for everyone who is not caching documents.
+      const caching = cachingRouteRules(nuxt.options.routeRules ?? {})
+
+      if (onVercel) {
+        // Vercel pins each document to a deployment with the `__vdpl` cookie,
+        // and a shared cache will not store a response that sets one. The two
+        // designs cannot both hold: one wants a cookie per document, the other
+        // wants one document for everyone.
+        //
+        // Nothing is registered in this branch. An earlier revision printed
+        // this warning and installed the plugin anyway, which then stripped
+        // `__vdpl` and broke the mechanism the warning said it would not touch.
+        if (caching.length) {
+          logger.warn(`${caching.length} route rule${caching.length > 1 ? 's' : ''} ask a shared cache to store HTML. That cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document. Shared caches skip any response that sets a cookie.`)
+        }
+      }
+      else {
+        // Registered whether or not a route rule declares caching. The plugin
+        // reads the response, so it also covers a `cache-control` set by a
+        // handler or a nitro plugin, which nothing here can see. It costs two
+        // header reads on responses that are not documents.
+        nuxt.options.nitro = nuxt.options.nitro || {}
+        nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
+        nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+
+        if (caching.length) {
+          // Mirrors `version-manager.ts`, which falls back to 7 rather than to
+          // the declared default. Reading 0 here while retention actually keeps
+          // a week produced a warning quoting a ceiling six days too small.
+          const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
+
+          // Nothing is printed for a rule that fits. The dev-time warning in
+          // `html-cache-headers` says what changed at the moment it applies,
+          // which beats a build line every `nuxt dev` start forever.
+          //
+          // Point at the route rule the author wrote, not at the config in
+          // general. Reading their own rules is the only way to do that.
+          for (const { route, seconds, source } of caching) {
+            if (seconds > ceiling)
+              logger.warn(`routeRules['${route}'] (${source}) caches a document for ${seconds}s. Retention only keeps a build for ${ceiling}s. The cached document will outlive its chunks. Lower the window to ${ceiling}s or less.`)
+          }
+        }
+
+        // Tell any module that forces `no-store` on HTML what this one can
+        // promise. `@harlan-zw/nuxt-cloudflare` reads it at `nitro:config`,
+        // which runs after every module's `setup`, so publishing here cannot
+        // race. An array because more than one module may be able to promise
+        // something, and the consumer is expected to take the weakest.
+        // Published at `modules:done`, not here. `usesCloudflareAssets` is
+        // derived from the nitro preset, and the module that sets that preset
+        // may install after this one: measured, `[skew, cloudflare]` in
+        // `modules` left the preset unset and published a guarantee saying old
+        // builds are not recoverable. Layers make that order the normal one,
+        // since layer modules install before the root config's.
+        nuxt.hook('modules:done', () => {
+          const preset = resolveNitroPreset(nuxt.options.nitro)
+          // Cloudflare only, and measured rather than assumed.
+          // `restoreOldAssetsToPublic` writes retained chunks into the public
+          // directory on every preset, but only Cloudflare serves that
+          // directory as the source of truth. Node embeds a `_publicAssets`
+          // manifest in `nitro.mjs` at build time and 404s anything absent from
+          // it, so a restored chunk sits on disk unreachable: measured on the
+          // node preset, 2 of 6 chunks from the previous build 404 after a
+          // rebuild. Promising retention there would be a lie.
+          const servesOldBuilds = preset === 'cloudflare-module' || preset === 'cloudflare-durable'
+          const capability = htmlCacheCapability({
+            retentionDays: options.retentionDays || 7,
+            maxNumberOfVersions: options.maxNumberOfVersions ?? 10,
+            // `bundleAssets: false` or no storage means nothing was stored, so
+            // a retained-chunk promise would be a lie however long the window.
+            assetRecovery: servesOldBuilds && Boolean(options.bundleAssets) && Boolean(options.storage),
+          })
+          if (!capability) {
+            // Only worth saying to an app that is actually caching documents.
+            // Everyone else has nothing riding on the guarantee.
+            if (caching.length)
+              logger.warn('Route rules ask a shared cache to store HTML. This build cannot serve chunks from a previous build. A cached document will 404 its chunks after the next deploy. Keep the cache window short, or deploy to Cloudflare.')
+            return
+          }
+          const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
+          nuxt.options.runtimeConfig.htmlCacheCapabilities = [
+            ...(Array.isArray(published) ? published : []),
+            capability,
+          ]
+        })
+      }
     }
 
     // Skip production setup in dev mode
