@@ -21,7 +21,7 @@ import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
-import { overlongRouteRules, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
+import { htmlCacheCapability, overlongRouteRules, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -525,6 +525,26 @@ export {}
         nuxt.options.nitro = nuxt.options.nitro || {}
         nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
         nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+
+        // Tell any module that forces `no-store` on HTML what this one can
+        // promise. `@harlan-zw/nuxt-cloudflare` reads it at `nitro:config`,
+        // which runs after every module's `setup`, so publishing here cannot
+        // race. An array because more than one module may be able to promise
+        // something, and the consumer is expected to take the weakest.
+        const capability = htmlCacheCapability({
+          retentionDays: options.retentionDays || 7,
+          // Old builds are only recoverable where the module actually serves
+          // them. Without that a retired chunk 404s whatever the retention
+          // window says, so the guarantee would be a lie.
+          assetRecovery: Boolean(usesCloudflareAssets),
+        })
+        if (capability) {
+          const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
+          nuxt.options.runtimeConfig.htmlCacheCapabilities = [
+            ...(Array.isArray(published) ? published : []),
+            capability,
+          ]
+        }
       }
     }
 

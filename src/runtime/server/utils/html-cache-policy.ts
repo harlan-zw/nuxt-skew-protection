@@ -308,3 +308,58 @@ export function readSetCookies(
     return fallback
   return fallback === undefined || fallback === '' ? [] : [String(fallback)]
 }
+
+/**
+ * What this module can promise another module about cached documents.
+ *
+ * Duplicated verbatim in `@harlan-zw/nuxt-cloudflare`, which forces
+ * `private, no-store` on HTML because a cached document can name chunks a later
+ * deploy deleted. Retention is the answer to that, so this is how retention is
+ * stated in a form another module can act on.
+ *
+ * It states a bound and never an instruction. A module should not be able to
+ * tell another module to lower a safety rail; it can only supply the number the
+ * other module needs to make its own decision.
+ *
+ * Kept to a versioned, field-only interface so the two copies cannot drift in
+ * behaviour, only in whether they recognise a version. A consumer that reads an
+ * unknown `v` is expected to ignore it rather than guess.
+ */
+export interface HtmlCacheCapability {
+  v: 1
+  by: string
+  /** Seconds a document may outlive its build and still resolve every chunk. */
+  documentTtlCeilingSeconds: number
+  basis: 'observed-retained-builds' | 'retention-days' | 'none'
+  /** Requests for a retired build's chunks resolve instead of 404. */
+  assetRecovery: boolean
+}
+
+/**
+ * The capability this configuration supports, or null when it supports none.
+ *
+ * `assetRecovery` is the load-bearing field, not the ceiling. Retaining old
+ * builds is what turns a stale document from a `ChunkLoadError` into a slow
+ * page, and a consumer is expected to refuse the whole handshake without it.
+ *
+ * The ceiling is derived from `retentionDays` alone, which is the honest limit
+ * of what config can tell us: `maxNumberOfVersions` is usually the tighter
+ * bound and converting it to seconds needs a deploy rate that no configuration
+ * knows. `basis` says so, and the build warning covers the gap by naming any
+ * route rule that asks for longer.
+ */
+export function htmlCacheCapability(input: {
+  retentionDays: number
+  assetRecovery: boolean
+}): HtmlCacheCapability | null {
+  const ceiling = skewCacheCeilingSeconds(input.retentionDays)
+  if (ceiling <= 0)
+    return null
+  return {
+    v: 1,
+    by: 'nuxt-skew-protection',
+    documentTtlCeilingSeconds: ceiling,
+    basis: 'retention-days',
+    assetRecovery: input.assetRecovery,
+  }
+}

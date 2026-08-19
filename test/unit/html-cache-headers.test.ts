@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  htmlCacheCapability,
   overlongRouteRules,
   readSetCookies,
   resolveHtmlCachePolicy,
@@ -268,5 +269,32 @@ describe('route rules that do not spell it as a header', () => {
 
   it('ignores a rule that says nothing about caching', () => {
     expect(overlongRouteRules({ '/api/**': { cors: true } } as never, 60)).toEqual([])
+  })
+})
+
+describe('what this module promises other modules', () => {
+  // `@harlan-zw/nuxt-cloudflare` forces `private, no-store` on HTML because a
+  // cached document can name chunks a later deploy deleted. This is how the
+  // answer to that is stated in a form it can act on.
+  it('publishes a bound, not an instruction', () => {
+    expect(htmlCacheCapability({ retentionDays: 30, assetRecovery: true })).toEqual({
+      v: 1,
+      by: 'nuxt-skew-protection',
+      documentTtlCeilingSeconds: 2_592_000,
+      basis: 'retention-days',
+      assetRecovery: true,
+    })
+  })
+
+  // Retaining builds is what turns a stale document from a ChunkLoadError into
+  // a slow page. Without recovery the ceiling would be a lie, so it is reported
+  // truthfully and the consumer is expected to refuse.
+  it('reports honestly when old builds are not served', () => {
+    expect(htmlCacheCapability({ retentionDays: 30, assetRecovery: false }))
+      .toMatchObject({ assetRecovery: false })
+  })
+
+  it('promises nothing when retention is zero', () => {
+    expect(htmlCacheCapability({ retentionDays: 0, assetRecovery: true })).toBeNull()
   })
 })
