@@ -1,42 +1,44 @@
-import type { HtmlCacheHeadersOptions } from '../utils/html-cache-policy'
-import { getHeader, getResponseHeader, getResponseStatus, setResponseHeader } from '#nuxtseo/h3'
+import { getHeader, getResponseHeader, getResponseStatus, removeResponseHeader, setResponseHeader } from '#nuxtseo/h3'
 import { defineNitroPlugin, useRuntimeConfig } from '#nuxtseo/nitro'
-import {
-  htmlCacheHeaderValues,
-  htmlCacheRequestFromEvent,
-  resolveHtmlCachePolicy,
-} from '../utils/html-cache-policy'
+import { getSkewProtectionCookieName } from '../imports/cookie'
+import { htmlCacheRequestFromEvent, resolveHtmlCachePolicy, withoutCookie } from '../utils/html-cache-policy'
 
 /**
- * Marks anonymous document responses as cacheable by a shared cache.
+ * Drops the version cookie from documents a shared cache was asked to keep.
  *
- * Runs on `beforeResponse` rather than as middleware, for two reasons that both
- * need the response: the status code decides whether the document is worth
- * keeping, and a `Cache-Control` the app already set means the app has its own
- * policy and this one stands down.
+ * Runs on `beforeResponse` rather than as middleware, because the answer needs
+ * the response: the status decides whether the document is worth keeping, and
+ * the app's own `cache-control` is the only signal that it wants one kept.
+ * Reading it here also means it does not matter how the app set it, route rule
+ * or plugin or handler.
  */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
-    const options = useRuntimeConfig(event).skewProtection?.htmlCacheHeaders as HtmlCacheHeadersOptions | false | undefined
-    if (!options)
+    if (!useRuntimeConfig(event).skewProtection?.htmlCache)
       return
 
     const decision = resolveHtmlCachePolicy(
-      options,
+      true,
       htmlCacheRequestFromEvent(event, getHeader),
       {
         status: getResponseStatus(event),
-        hasSetCookie: Boolean(getResponseHeader(event, 'set-cookie')),
-        hasCacheControl: Boolean(getResponseHeader(event, 'cache-control')),
+        cacheControl: getResponseHeader(event, 'cache-control') as string | undefined,
       },
     )
-    if (decision._tag !== 'cacheable')
+    if (decision._tag !== 'shared-cacheable')
       return
 
-    const headers = htmlCacheHeaderValues(decision.rule)
-    setResponseHeader(event, 'Cache-Control', headers.cacheControl)
-    // The portable header. Cloudflare, Fastly and Akamai all read it, and it
-    // leaves the browser-facing policy above alone.
-    setResponseHeader(event, 'CDN-Cache-Control', headers.cdnCacheControl)
+    const name = getSkewProtectionCookieName()
+    if (!name)
+      return
+
+    const remaining = withoutCookie(
+      getResponseHeader(event, 'set-cookie') as string | string[] | undefined,
+      name,
+    )
+    if (remaining.length)
+      setResponseHeader(event, 'set-cookie', remaining)
+    else
+      removeResponseHeader(event, 'set-cookie')
   })
 })

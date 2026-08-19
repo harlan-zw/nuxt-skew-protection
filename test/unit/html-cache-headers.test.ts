@@ -1,212 +1,131 @@
 import { describe, expect, it } from 'vitest'
 import {
-  htmlCacheHeaderValues,
-  matchRoutePattern,
-  overlongRoutes,
-  resolveHtmlCacheHeadersOptions,
+  overlongRouteRules,
   resolveHtmlCachePolicy,
-  resolveHtmlCacheRequestPolicy,
-  resolveRouteRule,
+  sharedCacheSeconds,
   skewCacheCeilingSeconds,
+  withoutCookie,
 } from '../../src/runtime/server/utils/html-cache-policy'
 
-function documentAt(path: string) {
-  return {
-    method: 'GET',
-    path,
-    secFetchDest: 'document',
-    accept: 'text/html,application/xhtml+xml',
-    cookie: undefined,
-  }
+const anonymousDocument = {
+  method: 'GET',
+  secFetchDest: 'document',
+  accept: 'text/html,application/xhtml+xml',
+  cookie: undefined,
 }
 
-const anonymousDocument = documentAt('/gh/nuxt/skills/deploy')
-const okResponse = { status: 200, hasSetCookie: false, hasCacheControl: false }
-const enabled = resolveHtmlCacheHeadersOptions(true)
+const cached = { status: 200, cacheControl: 'public, s-maxage=300' }
 
-// A registry page rebuilt on repo sync, a board rebuilt nightly, and an account
-// page that must never be shared. One TTL cannot serve all three.
-const perRoute = resolveHtmlCacheHeadersOptions({
-  maxAge: 60,
-  routes: {
-    '/gh/**': { maxAge: 300 },
-    '/skills/trending': { maxAge: 1800, staleWhileRevalidate: 3600 },
-    '/@**': false,
-  },
-})
-
-describe('htmlCacheHeaders options', () => {
-  it('is off unless asked for', () => {
-    expect(resolveHtmlCacheHeadersOptions(undefined)).toBe(false)
-    expect(resolveHtmlCacheHeadersOptions(false)).toBe(false)
+describe('reading the app\'s cache-control', () => {
+  it('reads the directive addressed to shared caches', () => {
+    expect(sharedCacheSeconds('public, s-maxage=300')).toBe(300)
   })
 
-  it('defaults to a window short enough for a busy deploy day', () => {
-    expect(resolveHtmlCacheHeadersOptions(true)).toEqual({ maxAge: 60, staleWhileRevalidate: 60, routes: {} })
+  it('prefers s-maxage over max-age', () => {
+    expect(sharedCacheSeconds('public, max-age=60, s-maxage=300')).toBe(300)
   })
 
-  it('keeps the default for whichever field is omitted', () => {
-    expect(resolveHtmlCacheHeadersOptions({ maxAge: 300 }))
-      .toEqual({ maxAge: 300, staleWhileRevalidate: 60, routes: {} })
-  })
-})
-
-describe('route patterns', () => {
-  it('matches any depth under a double star', () => {
-    expect(matchRoutePattern('/gh/**', '/gh/nuxt/skills/deploy').matched).toBe(true)
-    expect(matchRoutePattern('/gh/**', '/gh').matched).toBe(true)
-    expect(matchRoutePattern('/gh/**', '/ghost').matched).toBe(false)
+  it('falls back to max-age when there is no s-maxage', () => {
+    expect(sharedCacheSeconds('public, max-age=120')).toBe(120)
   })
 
-  it('matches one segment under a single star', () => {
-    expect(matchRoutePattern('/gh/*', '/gh/nuxt').matched).toBe(true)
-    expect(matchRoutePattern('/gh/*', '/gh/nuxt/skills').matched).toBe(false)
+  it('counts the stale window, since a stale document is still served', () => {
+    expect(sharedCacheSeconds('public, s-maxage=300, stale-while-revalidate=600')).toBe(900)
   })
 
-  it('ignores query and hash', () => {
-    expect(matchRoutePattern('/skills', '/skills?page=2').matched).toBe(true)
+  it.each([
+    'private, no-store',
+    'no-store',
+    'private, max-age=60',
+    'public, max-age=0, must-revalidate',
+  ])('treats %s as a refusal', (value) => {
+    expect(sharedCacheSeconds(value)).toBeNull()
   })
 
-  it('ranks exact above any pattern', () => {
-    const exact = matchRoutePattern('/skills/trending', '/skills/trending')
-    const deep = matchRoutePattern('/skills/**', '/skills/trending')
-
-    expect(exact.matched && deep.matched).toBe(true)
-    expect(exact.specificity).toBeGreaterThan(deep.specificity)
+  it('returns null when the app said nothing', () => {
+    expect(sharedCacheSeconds(undefined)).toBeNull()
+    expect(sharedCacheSeconds('')).toBeNull()
   })
 
-  it('ranks a longer prefix above a shorter one', () => {
-    const long = matchRoutePattern('/gh/nuxt/**', '/gh/nuxt/skills')
-    const short = matchRoutePattern('/gh/**', '/gh/nuxt/skills')
-
-    expect(long.specificity).toBeGreaterThan(short.specificity)
+  it('is not fooled by a directive name appearing inside another', () => {
+    expect(sharedCacheSeconds('public, stale-while-revalidate=600')).toBeNull()
   })
 })
 
-describe('per-route rules', () => {
-  it('gives a registry page its own longer window', () => {
-    expect(resolveRouteRule(perRoute as never, '/gh/nuxt/skills/deploy'))
-      .toEqual({ maxAge: 300, staleWhileRevalidate: 60 })
+describe('which documents the cache was asked to keep', () => {
+  it('claims an anonymous 200 the app marked cacheable', () => {
+    expect(resolveHtmlCachePolicy(true, anonymousDocument, cached))
+      .toEqual({ _tag: 'shared-cacheable', seconds: 300 })
   })
 
-  it('gives a nightly board a much longer one', () => {
-    expect(resolveRouteRule(perRoute as never, '/skills/trending'))
-      .toEqual({ maxAge: 1800, staleWhileRevalidate: 3600 })
+  // The whole point of the redesign: freshness comes from the app's own rules,
+  // so a route the app said nothing about is left completely alone.
+  it('leaves a document the app said nothing about alone', () => {
+    expect(resolveHtmlCachePolicy(true, anonymousDocument, { status: 200, cacheControl: undefined }))
+      .toEqual({ _tag: 'skipped', reason: 'no-shared-cache-directive' })
   })
 
-  it('opts a route out entirely', () => {
-    expect(resolveRouteRule(perRoute as never, '/@harlan-zw')).toBe(false)
+  it('respects a route the app marked private', () => {
+    expect(resolveHtmlCachePolicy(true, anonymousDocument, { status: 200, cacheControl: 'private, no-store' }))
+      .toEqual({ _tag: 'skipped', reason: 'no-shared-cache-directive' })
   })
 
-  it('falls back to the defaults for an unlisted route', () => {
-    expect(resolveRouteRule(perRoute as never, '/about'))
-      .toEqual({ maxAge: 60, staleWhileRevalidate: 60 })
-  })
-
-  it('lets the most specific pattern win', () => {
-    const nested = resolveHtmlCacheHeadersOptions({
-      maxAge: 60,
-      routes: { '/gh/**': { maxAge: 300 }, '/gh/nuxt/**': { maxAge: 30 } },
-    })
-
-    expect(resolveRouteRule(nested as never, '/gh/nuxt/skills')).toMatchObject({ maxAge: 30 })
-    expect(resolveRouteRule(nested as never, '/gh/other/skills')).toMatchObject({ maxAge: 300 })
-  })
-})
-
-describe('request-side policy', () => {
-  it('accepts an anonymous document', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, anonymousDocument))
-      .toEqual({ _tag: 'cacheable', rule: { maxAge: 60, staleWhileRevalidate: 60 } })
-  })
-
-  it('never caches a request that carries a cookie', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, { ...anonymousDocument, cookie: 'session=abc' }))
+  it('never claims a request that carries a cookie', () => {
+    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, cookie: 'session=abc' }, cached))
       .toEqual({ _tag: 'skipped', reason: 'request-has-cookie' })
-  })
-
-  it('reports an opted-out route by name', () => {
-    expect(resolveHtmlCacheRequestPolicy(perRoute, documentAt('/@harlan-zw')))
-      .toEqual({ _tag: 'skipped', reason: 'route-opted-out' })
-  })
-
-  it('leaves sub-resource requests alone', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, { ...anonymousDocument, secFetchDest: 'script' }))
-      .toEqual({ _tag: 'skipped', reason: 'not-document' })
-  })
-
-  it('treats a crawler that sends no sec-fetch-dest as a document', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, { ...anonymousDocument, secFetchDest: undefined })._tag)
-      .toBe('cacheable')
-  })
-
-  it('ignores a client that sends neither signal', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, {
-      ...anonymousDocument,
-      secFetchDest: undefined,
-      accept: '*/*',
-    })).toEqual({ _tag: 'skipped', reason: 'not-document' })
-  })
-
-  it('only caches safe methods', () => {
-    expect(resolveHtmlCacheRequestPolicy(enabled, { ...anonymousDocument, method: 'POST' }))
-      .toEqual({ _tag: 'skipped', reason: 'not-cacheable-method' })
-  })
-
-  it('does nothing at all when the option is off', () => {
-    expect(resolveHtmlCacheRequestPolicy(false, anonymousDocument))
-      .toEqual({ _tag: 'skipped', reason: 'disabled' })
-  })
-})
-
-describe('response-side policy', () => {
-  it('caches a 200 that sets no cookie and no policy', () => {
-    expect(resolveHtmlCachePolicy(enabled, anonymousDocument, okResponse)._tag).toBe('cacheable')
-  })
-
-  it('carries the matched route rule through', () => {
-    expect(resolveHtmlCachePolicy(perRoute, anonymousDocument, okResponse))
-      .toEqual({ _tag: 'cacheable', rule: { maxAge: 300, staleWhileRevalidate: 60 } })
   })
 
   // A transient 500 during a deploy, held for the whole window, is a worse
   // outage than the one that produced it.
-  it.each([404, 410, 500, 502, 503])('refuses to cache a %i', (status) => {
-    expect(resolveHtmlCachePolicy(enabled, anonymousDocument, { ...okResponse, status }))
+  it.each([404, 410, 500, 502, 503])('refuses a %i', (status) => {
+    expect(resolveHtmlCachePolicy(true, anonymousDocument, { ...cached, status }))
       .toEqual({ _tag: 'skipped', reason: 'not-ok-status' })
   })
 
-  it('refuses a response that sets a cookie', () => {
-    expect(resolveHtmlCachePolicy(enabled, anonymousDocument, { ...okResponse, hasSetCookie: true }))
-      .toEqual({ _tag: 'skipped', reason: 'response-sets-cookie' })
+  it('leaves sub-resource requests alone', () => {
+    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, secFetchDest: 'script' }, cached))
+      .toEqual({ _tag: 'skipped', reason: 'not-document' })
   })
 
-  // An app with its own cache layer knows things this module cannot, so it wins
-  // outright instead of being overwritten.
-  it('stands down when the app already set a policy', () => {
-    expect(resolveHtmlCachePolicy(enabled, anonymousDocument, { ...okResponse, hasCacheControl: true }))
-      .toEqual({ _tag: 'skipped', reason: 'app-set-cache-control' })
+  it('treats a crawler that sends no sec-fetch-dest as a document', () => {
+    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, secFetchDest: undefined }, cached)._tag)
+      .toBe('shared-cacheable')
   })
 
-  it('cannot widen a request-side refusal', () => {
-    expect(resolveHtmlCachePolicy(enabled, { ...anonymousDocument, cookie: 'a=1' }, okResponse))
-      .toEqual({ _tag: 'skipped', reason: 'request-has-cookie' })
+  it('only claims safe methods', () => {
+    expect(resolveHtmlCachePolicy(true, { ...anonymousDocument, method: 'POST' }, cached))
+      .toEqual({ _tag: 'skipped', reason: 'not-cacheable-method' })
+  })
+
+  it('does nothing at all when the option is off', () => {
+    expect(resolveHtmlCachePolicy(false, anonymousDocument, cached))
+      .toEqual({ _tag: 'skipped', reason: 'disabled' })
   })
 })
 
-describe('emitted headers', () => {
-  it('keeps the document out of browser caches and in shared ones', () => {
-    expect(htmlCacheHeaderValues({ maxAge: 60, staleWhileRevalidate: 60 })).toEqual({
-      cacheControl: 'public, max-age=0, must-revalidate',
-      cdnCacheControl: 'public, s-maxage=60, stale-while-revalidate=60',
-    })
+describe('dropping the version cookie', () => {
+  it('removes only the version cookie', () => {
+    expect(withoutCookie(['__nkpv=abc; Path=/', 'consent=1; Path=/'], '__nkpv'))
+      .toEqual(['consent=1; Path=/'])
   })
 
-  it('carries a route window to the shared cache only', () => {
-    expect(htmlCacheHeaderValues({ maxAge: 300, staleWhileRevalidate: 30 })).toMatchObject({
-      cacheControl: 'public, max-age=0, must-revalidate',
-      cdnCacheControl: 'public, s-maxage=300, stale-while-revalidate=30',
-    })
+  it('handles a single string header', () => {
+    expect(withoutCookie('__nkpv=abc; Path=/', '__nkpv')).toEqual([])
+  })
+
+  it('respects a derived cookie name', () => {
+    expect(withoutCookie(['__nkpv_pro=abc'], '__nkpv_pro')).toEqual([])
+    expect(withoutCookie(['__nkpv_pro=abc'], '__nkpv')).toEqual(['__nkpv_pro=abc'])
+  })
+
+  // An app cookie set during render is not ours to drop. The response simply
+  // will not be stored, which is the correct outcome.
+  it('leaves an app cookie in place', () => {
+    expect(withoutCookie(['session=xyz; HttpOnly'], '__nkpv')).toEqual(['session=xyz; HttpOnly'])
+  })
+
+  it('copes with no cookie at all', () => {
+    expect(withoutCookie(undefined, '__nkpv')).toEqual([])
   })
 })
 
@@ -222,43 +141,31 @@ describe('skew ceiling', () => {
     expect(skewCacheCeilingSeconds(Number.NaN)).toBe(0)
     expect(skewCacheCeilingSeconds(Number.POSITIVE_INFINITY)).toBe(0)
   })
+})
 
-  it('names the route to change rather than the config in general', () => {
-    const options = resolveHtmlCacheHeadersOptions({
-      maxAge: 60,
-      routes: { '/gh/**': { maxAge: 100_000 }, '/blog/**': { maxAge: 30 }, '/@**': false },
-    })
+describe('checking the app\'s own route rules', () => {
+  const routeRules = {
+    '/gh/**': { headers: { 'cache-control': 'public, s-maxage=300' } },
+    '/archive/**': { headers: { 'Cache-Control': 'public, s-maxage=1000000' } },
+    '/@**': { headers: { 'cache-control': 'private, no-store' } },
+    '/api/**': { cors: true },
+  }
 
-    expect(overlongRoutes(options as never, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/gh/**', seconds: 100_060 }])
+  it('names the route rule the author wrote', () => {
+    expect(overlongRouteRules(routeRules, skewCacheCeilingSeconds(1)))
+      .toEqual([{ route: '/archive/**', seconds: 1_000_000 }])
+  })
+
+  it('matches the header name case-insensitively', () => {
+    expect(overlongRouteRules({ '/x': { headers: { 'CACHE-CONTROL': 'public, s-maxage=999' } } }, 10))
+      .toEqual([{ route: '/x', seconds: 999 }])
   })
 
   it('reports nothing when every window fits', () => {
-    expect(overlongRoutes(perRoute as never, skewCacheCeilingSeconds(30))).toEqual([])
-  })
-})
-
-describe('cookie interaction', () => {
-  // Shared caches will not store a response carrying Set-Cookie, so the cookie
-  // middleware has to stand down on exactly the requests this option claims,
-  // and only those. An opted-out route keeps its cookie.
-  it('stands down only where the cache actually claims the document', () => {
-    expect(resolveHtmlCacheRequestPolicy(perRoute, documentAt('/gh/nuxt/skills'))._tag).toBe('cacheable')
-    expect(resolveHtmlCacheRequestPolicy(perRoute, documentAt('/@harlan-zw'))._tag).toBe('skipped')
-    expect(resolveHtmlCacheRequestPolicy(perRoute, { ...anonymousDocument, cookie: '__nkpv=abc' })._tag).toBe('skipped')
+    expect(overlongRouteRules(routeRules, skewCacheCeilingSeconds(30))).toEqual([])
   })
 
-  it('leaves the cookie in place for every install that has not opted in', () => {
-    expect(resolveHtmlCacheRequestPolicy(false, anonymousDocument)._tag).toBe('skipped')
-  })
-})
-
-describe('identity routes', () => {
-  // `/@handle` has no separator before the wildcard, and it is exactly the kind
-  // of route that must never be shared between visitors.
-  it('opts out an at-prefixed namespace', () => {
-    expect(matchRoutePattern('/@**', '/@harlan-zw').matched).toBe(true)
-    expect(matchRoutePattern('/@**', '/@harlan-zw/collections').matched).toBe(true)
-    expect(matchRoutePattern('/@**', '/about').matched).toBe(false)
+  it('copes with an app that has no route rules', () => {
+    expect(overlongRouteRules({}, 60)).toEqual([])
   })
 })
