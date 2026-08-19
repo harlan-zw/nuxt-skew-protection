@@ -531,20 +531,33 @@ export {}
         // which runs after every module's `setup`, so publishing here cannot
         // race. An array because more than one module may be able to promise
         // something, and the consumer is expected to take the weakest.
-        const capability = htmlCacheCapability({
-          retentionDays: options.retentionDays || 7,
-          // Old builds are only recoverable where the module actually serves
-          // them. Without that a retired chunk 404s whatever the retention
-          // window says, so the guarantee would be a lie.
-          assetRecovery: Boolean(usesCloudflareAssets),
-        })
-        if (capability) {
+        // Published at `modules:done`, not here. `usesCloudflareAssets` is
+        // derived from the nitro preset, and the module that sets that preset
+        // may install after this one: measured, `[skew, cloudflare]` in
+        // `modules` left the preset unset and published a guarantee saying old
+        // builds are not recoverable. Layers make that order the normal one,
+        // since layer modules install before the root config's.
+        nuxt.hook('modules:done', () => {
+          const preset = resolveNitroPreset(nuxt.options.nitro)
+          const servesOldBuilds = preset === 'cloudflare-module' || preset === 'cloudflare-durable'
+          const capability = htmlCacheCapability({
+            retentionDays: options.retentionDays || 7,
+            maxNumberOfVersions: options.maxNumberOfVersions ?? 10,
+            // Where old builds are served from, and whether any were kept.
+            // `bundleAssets: false` or no storage means nothing was stored, so
+            // a retained-chunk promise would be a lie however long the window.
+            assetRecovery: servesOldBuilds && Boolean(options.bundleAssets) && Boolean(options.storage),
+          })
+          if (!capability) {
+            logger.warn('htmlCache is on but this build stores no previous assets, so no chunk-retention guarantee is published. Check `bundleAssets` and `storage`.')
+            return
+          }
           const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
           nuxt.options.runtimeConfig.htmlCacheCapabilities = [
             ...(Array.isArray(published) ? published : []),
             capability,
           ]
-        }
+        })
       }
     }
 

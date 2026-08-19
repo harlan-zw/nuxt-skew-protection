@@ -336,30 +336,53 @@ export interface HtmlCacheCapability {
 }
 
 /**
+ * The shortest interval this module is willing to assume between deploys.
+ *
+ * `maxNumberOfVersions` prunes by rank, not by age, so the real retention
+ * window is `maxNumberOfVersions x deploy interval` and no configuration knows
+ * the second term. Publishing `retentionDays` alone overstates it badly:
+ * measured on skilld.dev, two deploys landed four minutes apart, so a
+ * ten-version window can be spent in under an hour while the config still says
+ * thirty days.
+ *
+ * An hour is the assumption. It is wrong for anyone deploying faster, which is
+ * why `overlongRouteRules` still names any rule that outlives the published
+ * number, and why the ceiling is a floor on honesty rather than a measurement.
+ */
+const ASSUMED_MIN_DEPLOY_INTERVAL_SECONDS = 60 * 60
+
+/**
  * The capability this configuration supports, or null when it supports none.
  *
  * `assetRecovery` is the load-bearing field, not the ceiling. Retaining old
  * builds is what turns a stale document from a `ChunkLoadError` into a slow
  * page, and a consumer is expected to refuse the whole handshake without it.
+ * It is true only when this module actually stores asset bytes: the preset
+ * says where old builds would be served from, `bundleAssets` and `storage`
+ * decide whether any were kept.
  *
- * The ceiling is derived from `retentionDays` alone, which is the honest limit
- * of what config can tell us: `maxNumberOfVersions` is usually the tighter
- * bound and converting it to seconds needs a deploy rate that no configuration
- * knows. `basis` says so, and the build warning covers the gap by naming any
- * route rule that asks for longer.
+ * The ceiling is the smaller of what time allows and what rank allows, because
+ * whichever binds first is the one that ends the guarantee.
  */
 export function htmlCacheCapability(input: {
   retentionDays: number
+  maxNumberOfVersions: number
   assetRecovery: boolean
 }): HtmlCacheCapability | null {
-  const ceiling = skewCacheCeilingSeconds(input.retentionDays)
+  if (!input.assetRecovery)
+    return null
+
+  const byTime = skewCacheCeilingSeconds(input.retentionDays)
+  const byRank = Math.max(0, Math.floor(input.maxNumberOfVersions)) * ASSUMED_MIN_DEPLOY_INTERVAL_SECONDS
+  const ceiling = Math.min(byTime, byRank)
   if (ceiling <= 0)
     return null
+
   return {
     v: 1,
     by: 'nuxt-skew-protection',
     documentTtlCeilingSeconds: ceiling,
     basis: 'retention-days',
-    assetRecovery: input.assetRecovery,
+    assetRecovery: true,
   }
 }

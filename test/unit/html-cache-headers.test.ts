@@ -273,28 +273,42 @@ describe('route rules that do not spell it as a header', () => {
 })
 
 describe('what this module promises other modules', () => {
+  const full = { retentionDays: 30, maxNumberOfVersions: 10, assetRecovery: true }
+
   // `@harlan-zw/nuxt-cloudflare` forces `private, no-store` on HTML because a
   // cached document can name chunks a later deploy deleted. This is how the
   // answer to that is stated in a form it can act on.
   it('publishes a bound, not an instruction', () => {
-    expect(htmlCacheCapability({ retentionDays: 30, assetRecovery: true })).toEqual({
+    expect(htmlCacheCapability(full)).toEqual({
       v: 1,
       by: 'nuxt-skew-protection',
-      documentTtlCeilingSeconds: 2_592_000,
+      documentTtlCeilingSeconds: 36_000,
       basis: 'retention-days',
       assetRecovery: true,
     })
   })
 
+  // `maxNumberOfVersions` prunes by rank, so ten versions at one deploy an hour
+  // is ten hours, not the thirty days `retentionDays` claims. Whichever binds
+  // first ends the guarantee.
+  it('takes the rank bound when it is tighter than the time bound', () => {
+    expect(htmlCacheCapability({ ...full, maxNumberOfVersions: 3 }))
+      .toMatchObject({ documentTtlCeilingSeconds: 10_800 })
+  })
+
+  it('takes the time bound when that is tighter', () => {
+    expect(htmlCacheCapability({ ...full, retentionDays: 0.1, maxNumberOfVersions: 100 }))
+      .toMatchObject({ documentTtlCeilingSeconds: 8_640 })
+  })
+
   // Retaining builds is what turns a stale document from a ChunkLoadError into
-  // a slow page. Without recovery the ceiling would be a lie, so it is reported
-  // truthfully and the consumer is expected to refuse.
-  it('reports honestly when old builds are not served', () => {
-    expect(htmlCacheCapability({ retentionDays: 30, assetRecovery: false }))
-      .toMatchObject({ assetRecovery: false })
+  // a slow page. Promising a window with nothing stored behind it is worse than
+  // promising nothing.
+  it('promises nothing when old builds are not served', () => {
+    expect(htmlCacheCapability({ ...full, assetRecovery: false })).toBeNull()
   })
 
   it('promises nothing when retention is zero', () => {
-    expect(htmlCacheCapability({ retentionDays: 0, assetRecovery: true })).toBeNull()
+    expect(htmlCacheCapability({ ...full, retentionDays: 0, maxNumberOfVersions: 0 })).toBeNull()
   })
 })
