@@ -26,7 +26,8 @@ export default defineEventHandler(async (event) => {
     return
 
   // Most shared caches refuse to store a response carrying Set-Cookie, so
-  // leaving the cookie on would make `htmlCacheHeaders` silently do nothing.
+  // leaving the cookie on would make `htmlCacheHeaders` silently do nothing on
+  // exactly the routes it claims.
   // The value itself would have been correct, since a cached document really
   // was rendered by the build it names.
   //

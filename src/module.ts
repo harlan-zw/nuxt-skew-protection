@@ -21,7 +21,7 @@ import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
-import { maxSafeHtmlCacheSeconds, resolveHtmlCacheHeadersOptions } from './runtime/server/utils/html-cache-policy'
+import { overlongRoutes, resolveHtmlCacheHeadersOptions, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
 import {
@@ -53,16 +53,38 @@ export interface ModuleOptions {
    *
    * Off by default. Retaining old builds makes a cached document safe to serve,
    * because the chunks it names outlive the deploy that replaced them, so this
-   * is the payoff for skew protection rather than a separate concern. It is
-   * still opt-in, because the module cannot see whether a rendered document
-   * depends on who requested it.
+   * is the payoff for skew protection rather than a separate concern.
    *
-   * Only enable it when the server-rendered output is the same for every
-   * visitor. A request carrying cookies never populates the cache, but shared
-   * caches key on the URL and do not vary on Cookie, so a stored anonymous
-   * document will be served to signed-in visitors too.
+   * Freshness is per route, because content is. Set a default and override the
+   * pages that change on a different clock:
    *
-   * Choose `maxAge` shorter than the wall-clock time your last
+   * ```ts
+   * htmlCacheHeaders: {
+   *   maxAge: 60,
+   *   routes: {
+   *     '/gh/**': { maxAge: 300 },        // rebuilt when a repo syncs
+   *     '/blog/**': { maxAge: 3600 },     // changes when someone publishes
+   *     '/account/**': false,             // never shared
+   *   },
+   * }
+   * ```
+   *
+   * Patterns are `/exact`, `/prefix/*` for one segment, and `/prefix/**` for
+   * any depth. The most specific match wins. Routes with no match take the
+   * defaults.
+   *
+   * If your app already owns a cache policy, leave `routes` empty and keep
+   * yours: a response that already carries `Cache-Control` is never touched.
+   * Clamp your own numbers with `skewCacheCeilingSeconds` so they stay inside
+   * the window retention can actually promise.
+   *
+   * It is opt-in because the module cannot see whether a rendered document
+   * depends on who requested it. A request carrying cookies never populates the
+   * cache, but shared caches key on the URL and do not vary on Cookie, so a
+   * stored anonymous document will be served to signed-in visitors too. Opt
+   * those routes out.
+   *
+   * Keep each window shorter than the wall-clock time your last
    * `maxNumberOfVersions` deploys span. That is the real bound and it cannot be
    * checked at build time: `retentionDays` is a ceiling, deploy rate decides
    * the floor.
@@ -73,7 +95,7 @@ export interface ModuleOptions {
    * Vercel skew protection sets a `__vdpl` cookie on every document and shared
    * caches will not store a response carrying Set-Cookie.
    *
-   * Enabling it stops anonymous documents setting the version cookie, so
+   * Enabling it stops cacheable documents setting the version cookie, so
    * `isClientOutdated` and the version an SSE connection reports fall back to
    * the server's own build id.
    *
@@ -81,7 +103,7 @@ export interface ModuleOptions {
    */
   htmlCacheHeaders?: boolean | {
     /**
-     * Seconds a shared cache may serve the document without revalidating.
+     * Seconds a shared cache may serve a document without revalidating.
      * @default 60
      */
     maxAge?: number
@@ -90,6 +112,10 @@ export interface ModuleOptions {
      * @default 60
      */
     staleWhileRevalidate?: number
+    /**
+     * Per-route overrides. `false` opts a route out entirely.
+     */
+    routes?: Record<string, false | { maxAge?: number, staleWhileRevalidate?: number }>
   }
   /**
    * Strategy for checking for version updates
@@ -561,21 +587,26 @@ export {}
 
       const htmlCacheHeaders = resolveHtmlCacheHeadersOptions(options.htmlCacheHeaders)
       if (htmlCacheHeaders) {
-        const cacheWindow = htmlCacheHeaders.maxAge + htmlCacheHeaders.staleWhileRevalidate
-        const ceiling = maxSafeHtmlCacheSeconds(options.retentionDays ?? 0)
+        const ceiling = skewCacheCeilingSeconds(options.retentionDays ?? 0)
+        const overlong = overlongRoutes(htmlCacheHeaders, ceiling)
         if (isVercel) {
           // Vercel pins each document to a deployment with the `__vdpl` cookie,
           // and a shared cache will not store a response that sets one. The two
-          // designs cannot both hold: one wants a cookie per document, the other
-          // wants one document for everyone. Say so rather than shipping an
-          // option that quietly does nothing.
+          // designs cannot both hold: one wants a cookie per document, the
+          // other wants one document for everyone. Say so rather than shipping
+          // an option that quietly does nothing.
           logger.warn('htmlCacheHeaders has no effect on Vercel. Vercel skew protection sets a `__vdpl` cookie on every document, and shared caches will not store a response carrying Set-Cookie.')
         }
-        else if (cacheWindow > ceiling) {
-          logger.warn(`htmlCacheHeaders keeps a document for up to ${cacheWindow}s but retentionDays only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
+        else if (overlong.length) {
+          // Name the rule to change. "Your config is too long" sends the reader
+          // back through every route to work out which one.
+          for (const { route, seconds } of overlong)
+            logger.warn(`htmlCacheHeaders ${route} keeps a document for up to ${seconds}s but retentionDays only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
         }
         else {
-          logger.info(`htmlCacheHeaders: anonymous documents are shared-cached for up to ${cacheWindow}s. Keep that under the time your last ${options.maxNumberOfVersions} deploys span.`)
+          const routeCount = Object.keys(htmlCacheHeaders.routes).length
+          const scope = routeCount ? `, plus ${routeCount} route override${routeCount === 1 ? '' : 's'}` : ''
+          logger.info(`htmlCacheHeaders: anonymous documents are shared-cached for up to ${htmlCacheHeaders.maxAge + htmlCacheHeaders.staleWhileRevalidate}s by default${scope}. Keep each window under the time your last ${options.maxNumberOfVersions} deploys span.`)
         }
         nuxt.options.runtimeConfig.skewProtection = {
           ...(typeof nuxt.options.runtimeConfig.skewProtection === 'object'

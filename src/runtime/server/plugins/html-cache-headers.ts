@@ -10,10 +10,10 @@ import {
 /**
  * Marks anonymous document responses as cacheable by a shared cache.
  *
- * Runs on `beforeResponse` rather than as middleware, because the status code
- * decides the answer and middleware cannot see it. A transient 500 during a
- * deploy, cached for the whole window, would be a worse outage than the one it
- * came from.
+ * Runs on `beforeResponse` rather than as middleware, for two reasons that both
+ * need the response: the status code decides whether the document is worth
+ * keeping, and a `Cache-Control` the app already set means the app has its own
+ * policy and this one stands down.
  */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
@@ -27,12 +27,13 @@ export default defineNitroPlugin((nitroApp) => {
       {
         status: getResponseStatus(event),
         hasSetCookie: Boolean(getResponseHeader(event, 'set-cookie')),
+        hasCacheControl: Boolean(getResponseHeader(event, 'cache-control')),
       },
     )
     if (decision._tag !== 'cacheable')
       return
 
-    const headers = htmlCacheHeaderValues(options)
+    const headers = htmlCacheHeaderValues(decision.rule)
     setResponseHeader(event, 'Cache-Control', headers.cacheControl)
     // The portable header. Cloudflare, Fastly and Akamai all read it, and it
     // leaves the browser-facing policy above alone.
