@@ -568,87 +568,91 @@ export {}
 
       // Build metadata is required by chunk invalidation, even when providers retain asset bytes.
       if (options.storage) {
-        nuxt.hook('nitro:init', (nitro) => {
-          const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
-          let assetManager: ReturnType<typeof createAssetManager>
+        const buildId = nuxt.options.runtimeConfig.app.buildId ||= nuxt.options.buildId
+        let assetManager: ReturnType<typeof createAssetManager>
 
-          // Process assets before rollup finalization
-          nitro.hooks.hook('compiled', async () => {
-            // Use publicDir directly - handles different nitro preset structures (Netlify, Vercel, etc.)
-            const publicDir = nitro.options.output.publicDir
+        // `nitro:build:public-assets`, not `compiled`. Nitro freezes the public
+        // asset manifest into `nitro.mjs` while rollup runs, and the node-server
+        // family serves only what is in it: a chunk restored afterwards sits in
+        // `.output/public` and 404s. Measured on node-server, 3 of 10 restored
+        // assets were unreachable. This hook runs at `rollup:before`, after
+        // `copyPublicAssets` and after prerendering, so the restored files are
+        // present when nitro globs the directory.
+        nuxt.hook('nitro:build:public-assets', async (nitro) => {
+          // Use publicDir directly - handles different nitro preset structures (Netlify, Vercel, etc.)
+          const publicDir = nitro.options.output.publicDir
 
-            assetManager = createAssetManager({
-              ...options,
-              buildAssetsDir: nuxt.options.app.buildAssetsDir,
-              persistAssets: options.bundleAssets !== false,
-              driver: await resolveBuildTimeDriver(options.storage!),
-            })
-
-            // Get list of assets from build
-            const assets = await assetManager.getAssetsFromBuild(publicDir)
-
-            // Update versions manifest
-            const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
-
-            if (options.bundleAssets) {
-              // Get release info for logging
-              const manifest = await assetManager.getManifest()
-              const totalReleases = Object.keys(manifest.versions).length
-              const timestamps = Object.values(manifest.versions).map(v => new Date(v.timestamp).getTime())
-              const oldestTimestamp = Math.min(...timestamps)
-              const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
-              const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
-
-              // Store assets in configured storage (can be slow with many assets)
-              const storageInfo = options.storage!.base
-                ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
-                : colors.green(options.storage!.driver)
-              if (totalReleases === 1) {
-                logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
-              }
-              else {
-                logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
-              }
-
-              await assetManager.storeAssetsInStorage(buildId, publicDir, assets)
-                .catch((error: unknown) => {
-                  logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
-                  throw error
-                })
-
-              // Count versions (excluding current)
-              const existingVersions = await assetManager.listExistingVersions()
-              const versionCount = existingVersions.filter(v => v.id !== buildId).length
-
-              logger.success(`Successfully stored ${assets.length} assets for latest release`)
-
-              // For static/prerendered builds: restore old versioned assets into public directory
-              if (versionCount > 0) {
-                // Re-read manifest after storeAssetsInStorage to get post-deduplication counts
-                const updatedManifest = await assetManager.getManifest()
-                let totalAssets = 0
-                const versionSizes: string[] = []
-
-                for (const [vId, vData] of Object.entries(updatedManifest.versions)) {
-                  if (vId !== buildId) {
-                    totalAssets += vData.assets.length
-                    versionSizes.push(`${vId.slice(0, 8)}:${vData.assets.length}`)
-                  }
-                }
-
-                logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
-              }
-
-              await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
-            }
-
-            // Augment Nuxt build metadata files with skew protection data
-            // Pass serverDir so we can patch Nitro's static asset manifest
-            const serverDir = nitro.options.output.serverDir
-            await assetManager.augmentBuildMetadata(buildId, publicDir, serverDir)
+          assetManager = createAssetManager({
+            ...options,
+            buildAssetsDir: nuxt.options.app.buildAssetsDir,
+            persistAssets: options.bundleAssets !== false,
+            driver: await resolveBuildTimeDriver(options.storage!),
           })
 
-          // Clean up expired versions on close
+          // Get list of assets from build
+          const assets = await assetManager.getAssetsFromBuild(publicDir)
+
+          // Update versions manifest
+          const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
+
+          if (options.bundleAssets) {
+            // Get release info for logging
+            const manifest = await assetManager.getManifest()
+            const totalReleases = Object.keys(manifest.versions).length
+            const timestamps = Object.values(manifest.versions).map(v => new Date(v.timestamp).getTime())
+            const oldestTimestamp = Math.min(...timestamps)
+            const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
+            const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
+
+            // Store assets in configured storage (can be slow with many assets)
+            const storageInfo = options.storage!.base
+              ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
+              : colors.green(options.storage!.driver)
+            if (totalReleases === 1) {
+              logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
+            }
+            else {
+              logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
+            }
+
+            await assetManager.storeAssetsInStorage(buildId, publicDir, assets)
+              .catch((error: unknown) => {
+                logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
+                throw error
+              })
+
+            // Count versions (excluding current)
+            const existingVersions = await assetManager.listExistingVersions()
+            const versionCount = existingVersions.filter(v => v.id !== buildId).length
+
+            logger.success(`Successfully stored ${assets.length} assets for latest release`)
+
+            // For static/prerendered builds: restore old versioned assets into public directory
+            if (versionCount > 0) {
+              // Re-read manifest after storeAssetsInStorage to get post-deduplication counts
+              const updatedManifest = await assetManager.getManifest()
+              let totalAssets = 0
+              const versionSizes: string[] = []
+
+              for (const [vId, vData] of Object.entries(updatedManifest.versions)) {
+                if (vId !== buildId) {
+                  totalAssets += vData.assets.length
+                  versionSizes.push(`${vId.slice(0, 8)}:${vData.assets.length}`)
+                }
+              }
+
+              logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
+            }
+
+            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
+          }
+
+          // Augment Nuxt build metadata files with skew protection data
+          await assetManager.augmentBuildMetadata(buildId, publicDir)
+        })
+
+        // Clean up expired versions on close
+        nuxt.hook('nitro:init', (nitro) => {
           nitro.hooks.hook('close', async () => {
             if (assetManager) {
               await assetManager.cleanupExpiredVersions().catch((error) => {

@@ -1,5 +1,4 @@
 import type { Driver, Storage } from 'unstorage'
-import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
@@ -8,12 +7,6 @@ import { logger } from '../logger'
 
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
 const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
-const RE_SIZE_PROP = /(['"]?)size\1\s*:\s*\d+/
-const RE_SIZE_PREFIX = /^(['"]?)size\1\s*:\s*/
-const RE_ETAG_PROP = /(['"]?)etag\1\s*:\s*(['"])(?:[^\\]|\\.)*?\2/
-const RE_ETAG_KEY_PREFIX = /^(['"]?)etag\1\s*:\s*/
-const RE_ETAG_QUOTE = /:\s*(['"])/
-const RE_ESCAPE_DOUBLE_QUOTE = /"/g
 
 function formatStorageError(error: unknown, operation: string): Error {
   const cause = error instanceof Error ? (error.cause as Error | undefined) : undefined
@@ -215,7 +208,6 @@ export function createAssetManager(options: {
   const retentionDays = options.retentionDays || 7
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
   const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
-  const buildAssetsPath = `/${buildAssetsDir}`
   const persistAssets = options.persistAssets !== false
 
   async function getAssetsFromBuild(publicDir: string) {
@@ -629,7 +621,7 @@ export function createAssetManager(options: {
     logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
   }
 
-  async function augmentBuildMetadata(buildId: string, publicDir: string, serverDir?: string) {
+  async function augmentBuildMetadata(buildId: string, publicDir: string) {
     const manifest = await getVersionManifest(storage)
 
     // Augment builds/latest.json
@@ -680,93 +672,6 @@ export function createAssetManager(options: {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Failed to augment builds/meta/${buildId}.json: ${message}`)
     }
-
-    // Patch Nitro's static asset manifest to fix Content-Length
-    // Nitro pre-calculates file sizes during rollup, but we modify files after
-    if (serverDir && newLatestContent) {
-      await patchNitroManifest(serverDir, `${buildAssetsPath}/builds/latest.json`, newLatestContent)
-    }
-  }
-
-  /**
-   * Patch Nitro's static asset manifest to fix Content-Length after we augment files.
-   * Works with both JSON syntax (Node) and JS object syntax (Cloudflare).
-   */
-  async function patchNitroManifest(serverDir: string, assetPath: string, newContent: string) {
-    const nitroPath = join(serverDir, 'chunks', 'nitro', 'nitro.mjs')
-    let nitro = await fs.readFile(nitroPath, 'utf-8').catch(() => {
-      // Some presets do not emit an embedded Nitro asset manifest to patch.
-      return null
-    })
-    if (!nitro)
-      return
-
-    const assetIdx = nitro.indexOf(`"${assetPath}":`)
-    if (assetIdx === -1)
-      return
-
-    const size = Buffer.byteLength(newContent, 'utf-8')
-    const hash = createHash('sha1').update(newContent).digest('base64').substring(0, 27)
-    const newEtag = `"${size.toString(16)}-${hash}"`
-
-    // Find the object bounds for this asset entry
-    const start = nitro.indexOf('{', assetIdx)
-    if (start === -1)
-      return
-
-    // Find matching closing brace, accounting for strings (both " and ')
-    let depth = 0
-    let stringChar: string | null = null
-    let end = -1
-    for (let i = start; i < nitro.length; i++) {
-      const char = nitro[i]
-      if (stringChar) {
-        if (char === '\\')
-          i++ // skip escaped char
-        else if (char === stringChar)
-          stringChar = null
-      }
-      else {
-        if (char === '"' || char === '\'') {
-          stringChar = char
-        }
-        else if (char === '{') {
-          depth++
-        }
-        else if (char === '}') {
-          depth--
-          if (depth === 0) {
-            end = i
-            break
-          }
-        }
-      }
-    }
-    if (end === -1)
-      return
-
-    // Replace property values in place (handles both JSON and JS syntax)
-    let entryStr = nitro.substring(start, end + 1)
-
-    // Replace size value (number after "size": or size:)
-    entryStr = entryStr.replace(RE_SIZE_PROP, (match) => {
-      const prefix = match.match(RE_SIZE_PREFIX)?.[0] || 'size:'
-      return `${prefix}${size}`
-    })
-
-    // Replace etag value (string after "etag": or etag:)
-    // Handles both "\"hash\"" (JSON) and '"hash"' (JS with single quotes)
-    entryStr = entryStr.replace(RE_ETAG_PROP, (match) => {
-      const keyMatch = match.match(RE_ETAG_KEY_PREFIX)
-      const prefix = keyMatch?.[0] || 'etag:'
-      const quoteChar = match.match(RE_ETAG_QUOTE)?.[1] || '"'
-      // For single quotes, don't escape inner quotes; for double quotes, escape them
-      const escapedEtag = quoteChar === '\'' ? newEtag : newEtag.replace(RE_ESCAPE_DOUBLE_QUOTE, '\\"')
-      return `${prefix}${quoteChar}${escapedEtag}${quoteChar}`
-    })
-
-    nitro = nitro.substring(0, start) + entryStr + nitro.substring(end + 1)
-    await fs.writeFile(nitroPath, nitro, 'utf-8')
   }
 
   return {
