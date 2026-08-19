@@ -504,22 +504,28 @@ export {}
         // builds are not recoverable. Layers make that order the normal one,
         // since layer modules install before the root config's.
         nuxt.hook('modules:done', () => {
+          const preset = resolveNitroPreset(nuxt.options.nitro)
+          // Cloudflare only, and measured rather than assumed.
+          // `restoreOldAssetsToPublic` writes retained chunks into the public
+          // directory on every preset, but only Cloudflare serves that
+          // directory as the source of truth. Node embeds a `_publicAssets`
+          // manifest in `nitro.mjs` at build time and 404s anything absent from
+          // it, so a restored chunk sits on disk unreachable: measured on the
+          // node preset, 2 of 6 chunks from the previous build 404 after a
+          // rebuild. Promising retention there would be a lie.
+          const servesOldBuilds = preset === 'cloudflare-module' || preset === 'cloudflare-durable'
           const capability = htmlCacheCapability({
             retentionDays: options.retentionDays || 7,
             maxNumberOfVersions: options.maxNumberOfVersions ?? 10,
-            // Whether any old build was kept. These two are what drive
-            // `restoreOldAssetsToPublic`, which writes the retained chunks back
-            // into the public directory on every preset, so the guarantee does
-            // not depend on which one. `bundleAssets: false` or no storage means
-            // nothing was stored, and a retained-chunk promise would be a lie
-            // however long the window.
-            assetRecovery: Boolean(options.bundleAssets) && Boolean(options.storage),
+            // `bundleAssets: false` or no storage means nothing was stored, so
+            // a retained-chunk promise would be a lie however long the window.
+            assetRecovery: servesOldBuilds && Boolean(options.bundleAssets) && Boolean(options.storage),
           })
           if (!capability) {
             // Only worth saying to an app that is actually caching documents.
             // Everyone else has nothing riding on the guarantee.
             if (caching.length)
-              logger.warn('Route rules ask a shared cache to store HTML. This build keeps no previous assets. A cached document can outlive its chunks. Set `bundleAssets` and `storage` to keep them.')
+              logger.warn('Route rules ask a shared cache to store HTML. This build cannot serve chunks from a previous build. A cached document will 404 its chunks after the next deploy. Keep the cache window short, or deploy to Cloudflare.')
             return
           }
           const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
