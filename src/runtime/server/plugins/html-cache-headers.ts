@@ -67,7 +67,7 @@ export default defineNitroPlugin((nitroApp) => {
       const path = pathOf(event as never)
       if (!warned.has(path)) {
         warned.add(path)
-        console.warn(`[nuxt-skew-protection] Dropped the version cookie from ${path} so a shared cache can store it for ${decision.seconds}s. \`isClientOutdated\` falls back to the server build id there. Say \`private\` in cache-control for any page whose output depends on who asked.`)
+        console.warn(`[nuxt-skew-protection] Dropped the version cookie from ${path}. A shared cache can store that document for ${decision.seconds}s. \`isClientOutdated\` falls back to the server build id there. If the page changes per visitor, set \`private\` in its cache-control.`)
       }
     }
   })

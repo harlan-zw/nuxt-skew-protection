@@ -462,7 +462,7 @@ export {}
         // this warning and installed the plugin anyway, which then stripped
         // `__vdpl` and broke the mechanism the warning said it would not touch.
         if (caching.length) {
-          logger.warn(`${caching.length} route rule(s) ask a shared cache to store HTML, which cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document, and shared caches will not store a response carrying Set-Cookie.`)
+          logger.warn(`${caching.length} route rule${caching.length > 1 ? 's' : ''} ask a shared cache to store HTML. That cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document. Shared caches skip any response that sets a cookie.`)
         }
       }
       else {
@@ -483,13 +483,13 @@ export {}
           // Say what changed. These rules did nothing before, because the
           // version cookie made every document unstorable, so this is a live
           // behaviour change the author did not ask for in config.
-          logger.info(`Shared caches can now store HTML on ${caching.map(({ route }) => route).join(', ')}. The version cookie is dropped there, so \`isClientOutdated\` falls back to the server build id. Say \`private\` in cache-control for any page whose output depends on who asked.`)
+          logger.info(`Shared caches can now store HTML on ${caching.map(({ route }) => route).join(', ')}. The module drops the version cookie there. \`isClientOutdated\` falls back to the server build id on those routes. If a page changes per visitor, set \`private\` in its cache-control.`)
 
           // Point at the route rule the author wrote, not at the config in
           // general. Reading their own rules is the only way to do that.
           for (const { route, seconds, source } of caching) {
             if (seconds > ceiling)
-              logger.warn(`routeRules['${route}'] (${source}) keeps a document for up to ${seconds}s but retention only keeps a build for ${ceiling}s. A cached document will outlive its chunks.`)
+              logger.warn(`routeRules['${route}'] (${source}) caches a document for ${seconds}s. Retention only keeps a build for ${ceiling}s. The cached document will outlive its chunks. Lower the window to ${ceiling}s or less.`)
           }
         }
 
@@ -520,7 +520,7 @@ export {}
             // Only worth saying to an app that is actually caching documents.
             // Everyone else has nothing riding on the guarantee.
             if (caching.length)
-              logger.warn('Route rules ask a shared cache to store HTML, but this build stores no previous assets, so no chunk-retention guarantee is published. A cached document can outlive its chunks. Check `bundleAssets` and `storage`.')
+              logger.warn('Route rules ask a shared cache to store HTML. This build keeps no previous assets. A cached document can outlive its chunks. Set `bundleAssets` and `storage` to keep them.')
             return
           }
           const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
