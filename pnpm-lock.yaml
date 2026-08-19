@@ -314,6 +314,8 @@ importers:
 
   test/fixtures/html-cache: {}
 
+  test/fixtures/html-cache-cloudflare: {}
+
   test/fixtures/hub:
     dependencies:
       '@nuxthub/core':
