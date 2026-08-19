@@ -11,6 +11,7 @@ export default defineNuxtConfig({
   routeRules: {
     '/cached': { headers: { 'cache-control': 'public, s-maxage=300' } },
     '/private': { headers: { 'cache-control': 'private, no-store' } },
+    '/browser': { headers: { 'cache-control': 'public, max-age=60' } },
   },
 
   skewProtection: {

@@ -1,8 +1,12 @@
 import type { ChildProcess } from 'node:child_process'
+import { exec } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { build, cleanFixture, startServer, stopServer } from './utils'
+
+const execAsync = promisify(exec)
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../fixtures/html-cache')
@@ -26,6 +30,8 @@ describe('html caching without a module option', () => {
   beforeAll(async () => {
     cleanFixture(fixtureDir)
     await build(fixtureDir, 'dpl-html-cache-1')
+    // A server left behind by an interrupted run answers 404 for everything.
+    await execAsync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`)
     server = await startServer(fixtureDir, port)
   }, 180000)
 
@@ -49,6 +55,15 @@ describe('html caching without a module option', () => {
   it('leaves the version cookie on a route the app marked private', async () => {
     const response = await document('/private')
     expect(versionCookies(response)).toHaveLength(1)
+  })
+
+  // `max-age` with no `s-maxage` is still a shared-cache directive, so the
+  // cookie goes. The build warns about it separately, because the author may
+  // have meant browser caching only.
+  it('drops the cookie for a max-age rule that named no shared cache', async () => {
+    const response = await document('/browser')
+    expect(response.headers.get('cache-control')).toContain('max-age=60')
+    expect(versionCookies(response)).toEqual([])
   })
 
   it('keeps the document unstorable when the request carries a cookie', async () => {
