@@ -480,11 +480,10 @@ export {}
           // a week produced a warning quoting a ceiling six days too small.
           const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
 
-          // Say what changed. These rules did nothing before, because the
-          // version cookie made every document unstorable, so this is a live
-          // behaviour change the author did not ask for in config.
-          logger.info(`Shared caches can now store HTML on ${caching.map(({ route }) => route).join(', ')}. The module drops the version cookie there. \`isClientOutdated\` falls back to the server build id on those routes. If a page changes per visitor, set \`private\` in its cache-control.`)
-
+          // Nothing is printed for a rule that fits. The dev-time warning in
+          // `html-cache-headers` says what changed at the moment it applies,
+          // which beats a build line every `nuxt dev` start forever.
+          //
           // Point at the route rule the author wrote, not at the config in
           // general. Reading their own rules is the only way to do that.
           for (const { route, seconds, source } of caching) {
