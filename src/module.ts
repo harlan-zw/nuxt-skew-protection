@@ -497,43 +497,37 @@ export {}
         // which runs after every module's `setup`, so publishing here cannot
         // race. An array because more than one module may be able to promise
         // something, and the consumer is expected to take the weakest.
-        // Published at `modules:done`, not here. `usesCloudflareAssets` is
-        // derived from the nitro preset, and the module that sets that preset
-        // may install after this one: measured, `[skew, cloudflare]` in
-        // `modules` left the preset unset and published a guarantee saying old
-        // builds are not recoverable. Layers make that order the normal one,
-        // since layer modules install before the root config's.
-        nuxt.hook('modules:done', () => {
-          const preset = resolveNitroPreset(nuxt.options.nitro)
-          // Cloudflare only, and measured rather than assumed.
-          // `restoreOldAssetsToPublic` writes retained chunks into the public
-          // directory on every preset, but only Cloudflare serves that
-          // directory as the source of truth. Node embeds a `_publicAssets`
-          // manifest in `nitro.mjs` at build time and 404s anything absent from
-          // it, so a restored chunk sits on disk unreachable: measured on the
-          // node preset, 2 of 6 chunks from the previous build 404 after a
-          // rebuild. Promising retention there would be a lie.
-          const servesOldBuilds = preset === 'cloudflare-module' || preset === 'cloudflare-durable'
+        //
+        // Published in `setup` rather than at `modules:done`. It used to wait
+        // because the answer depended on the nitro preset, which a module
+        // installing after this one may set. It no longer reads the preset.
+        {
           const capability = htmlCacheCapability({
             retentionDays: options.retentionDays || 7,
             maxNumberOfVersions: options.maxNumberOfVersions ?? 10,
-            // `bundleAssets: false` or no storage means nothing was stored, so
-            // a retained-chunk promise would be a lie however long the window.
-            assetRecovery: servesOldBuilds && Boolean(options.bundleAssets) && Boolean(options.storage),
+            // No preset gate. Retained chunks are restored before nitro seals
+            // its public asset manifest (#48), so they resolve wherever the
+            // build is served from. `bundleAssets: false` or no storage means
+            // nothing was stored, and a retained-chunk promise would be a lie
+            // however long the window.
+            assetRecovery: Boolean(options.bundleAssets) && Boolean(options.storage),
           })
-          if (!capability) {
-            // Only worth saying to an app that is actually caching documents.
-            // Everyone else has nothing riding on the guarantee.
-            if (caching.length)
-              logger.warn('Route rules ask a shared cache to store HTML. This build cannot serve chunks from a previous build. A cached document will 404 its chunks after the next deploy. Keep the cache window short, or deploy to Cloudflare.')
-            return
+          // No early return here. This block runs in `setup`, so returning
+          // would abandon every registration after it, the module's own routes
+          // included.
+          if (capability) {
+            const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
+            nuxt.options.runtimeConfig.htmlCacheCapabilities = [
+              ...(Array.isArray(published) ? published : []),
+              capability,
+            ]
           }
-          const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
-          nuxt.options.runtimeConfig.htmlCacheCapabilities = [
-            ...(Array.isArray(published) ? published : []),
-            capability,
-          ]
-        })
+          // Only worth saying to an app that is actually caching documents.
+          // Everyone else has nothing riding on the guarantee.
+          else if (caching.length) {
+            logger.warn('Route rules ask a shared cache to store HTML. This build keeps no previous assets. A cached document will 404 its chunks after the next deploy. Set `bundleAssets` and `storage` to keep them.')
+          }
+        }
       }
     }
 
