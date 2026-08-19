@@ -512,18 +512,21 @@ export {}
             // however long the window.
             assetRecovery: Boolean(options.bundleAssets) && Boolean(options.storage),
           })
-          if (!capability) {
-            // Only worth saying to an app that is actually caching documents.
-            // Everyone else has nothing riding on the guarantee.
-            if (caching.length)
-              logger.warn('Route rules ask a shared cache to store HTML. This build keeps no previous assets. A cached document will 404 its chunks after the next deploy. Set `bundleAssets` and `storage` to keep them.')
-            return
+          // No early return here. This block runs in `setup`, so returning
+          // would abandon every registration after it, the module's own routes
+          // included.
+          if (capability) {
+            const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
+            nuxt.options.runtimeConfig.htmlCacheCapabilities = [
+              ...(Array.isArray(published) ? published : []),
+              capability,
+            ]
           }
-          const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
-          nuxt.options.runtimeConfig.htmlCacheCapabilities = [
-            ...(Array.isArray(published) ? published : []),
-            capability,
-          ]
+          // Only worth saying to an app that is actually caching documents.
+          // Everyone else has nothing riding on the guarantee.
+          else if (caching.length) {
+            logger.warn('Route rules ask a shared cache to store HTML. This build keeps no previous assets. A cached document will 404 its chunks after the next deploy. Set `bundleAssets` and `storage` to keep them.')
+          }
         }
       }
     }
