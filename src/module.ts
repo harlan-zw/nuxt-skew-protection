@@ -480,9 +480,9 @@ export {}
           // a week produced a warning quoting a ceiling six days too small.
           const ceiling = skewCacheCeilingSeconds(options.retentionDays || 7)
 
-          // Nothing is printed for a rule that fits. The dev-time warning in
-          // `html-cache-headers` says what changed at the moment it applies,
-          // which beats a build line every `nuxt dev` start forever.
+          // Nothing is printed for a rule that fits within retention and names
+          // a shared cache outright. A line on every build and every `nuxt dev`
+          // start is noise once the author has read it.
           //
           // Point at the route rule the author wrote, not at the config in
           // general. Reading their own rules is the only way to do that.

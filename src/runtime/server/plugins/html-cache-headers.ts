@@ -8,14 +8,6 @@ import {
   withoutCookie,
 } from '../utils/html-cache-policy'
 
-/** Routes already warned about in dev, so a busy page warns once, not per hit. */
-const warned = new Set<string>()
-
-/** `event.path` on h3 v1, `event.url` on h3 v2. Read by shape, not by version. */
-function pathOf(event: { path?: string, url?: { pathname?: string } }): string {
-  return event.path ?? event.url?.pathname ?? '(unknown)'
-}
-
 /**
  * Drops the version cookie from documents a shared cache was asked to keep.
  *
@@ -25,10 +17,12 @@ function pathOf(event: { path?: string, url?: { pathname?: string } }): string {
  * Reading it here also means it does not matter how the app set it, route rule
  * or plugin or handler.
  *
- * A route rule is caught at build time and named there. A header set by a
- * handler or a nitro plugin cannot be, so this warns in dev the first time it
- * strips on a route. That warning is the only signal an app doing it at runtime
- * ever gets.
+ * A route rule is caught at build time and named there. A `cache-control` set
+ * by a handler or a nitro plugin is not, and gets no warning at all. There is
+ * nowhere to put one: the cookie middleware only registers outside dev
+ * (`module.ts`), so nothing is ever dropped while `nuxt dev` runs, and a
+ * per-route warning in production logs is noise for a header the author wrote
+ * on purpose.
  */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
@@ -62,13 +56,5 @@ export default defineNitroPlugin((nitroApp) => {
     // other direction.
     for (const cookie of remaining)
       appendResponseHeader(event, 'set-cookie', cookie)
-
-    if (import.meta.dev) {
-      const path = pathOf(event as never)
-      if (!warned.has(path)) {
-        warned.add(path)
-        console.warn(`[nuxt-skew-protection] Dropped the version cookie from ${path}. A shared cache can store that document for ${decision.seconds}s. \`isClientOutdated\` falls back to the server build id there. If the page changes per visitor, set \`private\` in its cache-control.`)
-      }
-    }
   })
 })
