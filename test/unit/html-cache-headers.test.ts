@@ -196,6 +196,38 @@ describe('checking the app\'s own route rules', () => {
     expect(cachingRouteRules({ '/api/**': { cors: true }, '/@**': { headers: { 'cache-control': 'private, no-store' } } }))
       .toEqual([])
   })
+
+  it('ignores route rules that can only serve assets', () => {
+    expect(cachingRouteRules({
+      '/_fonts/**': { cache: { maxAge: 31_536_000 } },
+      '/fonts/**': { headers: { 'cache-control': 'public, max-age=31536000' } },
+      '/docs/**': { headers: { 'cache-control': 'public, s-maxage=300' } },
+    })).toEqual([
+      { route: '/docs/**', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
+    ])
+  })
+
+  it('ignores a custom public asset prefix', () => {
+    expect(cachingRouteRules({
+      '/media/**': { cache: { maxAge: 31_536_000 } },
+      '/marketing/**': { swr: 300 },
+    }, ['/media'])).toEqual([
+      { route: '/marketing/**', seconds: 300, source: 'swr', fromMaxAgeAlone: false },
+    ])
+  })
+
+  it('reads an explicit edge policy before the browser policy', () => {
+    expect(cachingRouteRules({
+      '/docs/**': {
+        headers: {
+          'cache-control': 'public, max-age=0',
+          'cloudflare-cdn-cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
+        },
+      },
+    })).toEqual([
+      { route: '/docs/**', seconds: 90_000, source: 'cache-control', fromMaxAgeAlone: false },
+    ])
+  })
 })
 
 // `s-maxage` is ignored by browsers, so writing it is proof the author meant a
