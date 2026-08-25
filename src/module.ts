@@ -450,7 +450,9 @@ export {}
       // What the app has already asked shared caches to keep. Empty means the
       // app declares no HTML caching in its config, which is what keeps every
       // message below quiet for everyone who is not caching documents.
-      const caching = cachingRouteRules(nuxt.options.routeRules ?? {})
+      const publicAssetBaseURLs = (nuxt.options.nitro.publicAssets ?? [])
+        .flatMap(asset => asset && typeof asset.baseURL === 'string' ? [asset.baseURL] : [])
+      const caching = cachingRouteRules(nuxt.options.routeRules ?? {}, publicAssetBaseURLs)
 
       if (onVercel) {
         // Vercel pins each document to a deployment with the `__vdpl` cookie,

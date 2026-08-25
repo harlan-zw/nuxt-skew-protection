@@ -5,6 +5,7 @@ import {
   htmlCacheRequestFromEvent,
   readSetCookies,
   resolveHtmlCachePolicy,
+  sharedCacheControlHeader,
   withoutCookie,
 } from '../utils/html-cache-policy'
 
@@ -13,12 +14,12 @@ import {
  *
  * Runs on `beforeResponse` rather than as middleware, because the answer needs
  * the response: the status decides whether the document is worth keeping, and
- * the app's own `cache-control` is the only signal that it wants one kept.
+ * the app's cache policy is the only signal that it wants one kept.
  * Reading it here also means it does not matter how the app set it, route rule
  * or plugin or handler.
  *
- * A route rule is caught at build time and named there. A `cache-control` set
- * by a handler or a nitro plugin is not, and gets no warning at all. There is
+ * A route rule is caught at build time and named there. A cache header set by
+ * a handler or a nitro plugin is not, and gets no warning at all. There is
  * nowhere to put one: the cookie middleware only registers outside dev
  * (`module.ts`), so nothing is ever dropped while `nuxt dev` runs, and a
  * per-route warning in production logs is noise for a header the author wrote
@@ -26,11 +27,12 @@ import {
  */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
+    const cacheControl = sharedCacheControlHeader(name => getResponseHeader(event, name))
     const decision = resolveHtmlCachePolicy(
       htmlCacheRequestFromEvent(event, getHeader),
       {
         status: getResponseStatus(event),
-        cacheControl: getResponseHeader(event, 'cache-control'),
+        cacheControl: cacheControl?.value,
       },
     )
     if (decision._tag !== 'shared-cacheable')

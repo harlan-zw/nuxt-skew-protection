@@ -227,12 +227,66 @@ export interface OverlongRoute {
   fromMaxAgeAlone: boolean
 }
 
+const SHARED_CACHE_CONTROL_HEADERS = [
+  'cloudflare-cdn-cache-control',
+  'cdn-cache-control',
+  'cache-control',
+] as const
+const NON_HTML_ROUTE_PREFIXES = [
+  '/.well-known',
+  '/api',
+  '/assets',
+  '/fonts',
+  '/images',
+  '/mcp',
+] as const
+const NON_HTML_EXTENSION_RE = /\.(?:avif|css|csv|gif|ico|jpe?g|js|json|map|md|mjs|pdf|png|svg|txt|webmanifest|webp|woff2?|xml)(?:$|[?*])/i
+const HTML_CONTENT_TYPE_RE = /^(?:application\/xhtml\+xml|text\/html)(?:\s*;|$)/i
+
+interface SharedCacheControlHeader {
+  name: typeof SHARED_CACHE_CONTROL_HEADERS[number]
+  value: unknown
+}
+
+/** The highest-precedence header that states a shared-cache policy. */
+export function sharedCacheControlHeader(
+  getHeader: (name: string) => unknown,
+): SharedCacheControlHeader | null {
+  for (const name of SHARED_CACHE_CONTROL_HEADERS) {
+    const value = getHeader(name)
+    if (value !== undefined)
+      return { name, value }
+  }
+  return null
+}
+
+function isHtmlCapableRoute(
+  route: string,
+  rule: InspectableRouteRule,
+  publicAssetPrefixes: readonly string[],
+): boolean {
+  const contentType = rule.headers
+    && Object.entries(rule.headers).find(([name]) => name.toLowerCase() === 'content-type')?.[1]
+  if (typeof contentType === 'string')
+    return HTML_CONTENT_TYPE_RE.test(contentType)
+  if (route.startsWith('/_') || NON_HTML_EXTENSION_RE.test(route))
+    return false
+  if (NON_HTML_ROUTE_PREFIXES.some(prefix => route === prefix || route.startsWith(`${prefix}/`)))
+    return false
+  return !publicAssetPrefixes.some(prefix => route === prefix || route.startsWith(`${prefix}/`))
+}
+
 function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: OverlongRoute['source'], fromMaxAgeAlone: boolean } | null {
-  const header = rule.headers
-    && Object.entries(rule.headers).find(([name]) => name.toLowerCase() === 'cache-control')?.[1]
-  const fromHeader = sharedCacheSeconds(header)
-  if (fromHeader !== null)
-    return { seconds: fromHeader, source: 'cache-control', fromMaxAgeAlone: sharedWindowFromMaxAgeAlone(header) }
+  const header = sharedCacheControlHeader(name => rule.headers
+    && Object.entries(rule.headers).find(([candidate]) => candidate.toLowerCase() === name)?.[1])
+  const fromHeader = sharedCacheSeconds(header?.value)
+  if (fromHeader !== null) {
+    return {
+      seconds: fromHeader,
+      source: 'cache-control',
+      fromMaxAgeAlone: header?.name === 'cache-control' && sharedWindowFromMaxAgeAlone(header.value),
+    }
+  }
 
   const cache = rule.cache as { maxAge?: unknown, staleMaxAge?: unknown } | undefined
   if (cache && typeof cache === 'object' && typeof cache.maxAge === 'number') {
@@ -265,16 +319,22 @@ function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: Over
 /**
  * Route rules that ask a shared cache to keep a document.
  *
- * Reads the app's own `routeRules` rather than a second copy of them, so a
- * warning points at the line the author wrote. Empty means the app never asked
- * for shared caching in its config, which is the signal used to stay quiet.
+ * Reads the app's own `routeRules` rather than a second copy of them. Public
+ * asset prefixes are excluded because their cached responses are not HTML.
+ * Empty means the app never asked for shared HTML caching in its config.
  */
 export function cachingRouteRules(
   routeRules: Record<string, InspectableRouteRule | undefined>,
+  publicAssetBaseURLs: readonly string[] = [],
 ): OverlongRoute[] {
   const caching: OverlongRoute[] = []
+  const publicAssetPrefixes = publicAssetBaseURLs
+    .map(baseURL => `/${baseURL}`.replace(/^\/{2,}/, '/').replace(/\/+$/, ''))
+    .filter(prefix => prefix !== '' && prefix !== '/')
   for (const [route, rule] of Object.entries(routeRules ?? {})) {
     if (!rule || typeof rule !== 'object')
+      continue
+    if (!isHtmlCapableRoute(route, rule, publicAssetPrefixes))
       continue
     const window = ruleWindow(rule)
     if (window)
@@ -287,8 +347,9 @@ export function cachingRouteRules(
 export function overlongRouteRules(
   routeRules: Record<string, InspectableRouteRule | undefined>,
   ceilingSeconds: number,
+  publicAssetBaseURLs: readonly string[] = [],
 ): OverlongRoute[] {
-  return cachingRouteRules(routeRules).filter(route => route.seconds > ceilingSeconds)
+  return cachingRouteRules(routeRules, publicAssetBaseURLs).filter(route => route.seconds > ceilingSeconds)
 }
 
 /**
