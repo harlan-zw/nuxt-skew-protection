@@ -67,7 +67,7 @@ export default defineNuxtPlugin({
     let receivedFromChannel = false
 
     // When this tab detects an update, broadcast to other tabs
-    nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
+    const stopBroadcasting = nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
       if (receivedFromChannel) {
         receivedFromChannel = false
         return
@@ -85,8 +85,11 @@ export default defineNuxtPlugin({
       }
     }
 
-    // Cleanup on app error
+    // Cleanup on app error. The listener goes with the channel: an outdated-build
+    // poll after `close()` would otherwise post to a closed channel and surface
+    // as an unhandled rejection.
     nuxtApp.hook('app:error', () => {
+      stopBroadcasting()
       channel.close()
     })
   },

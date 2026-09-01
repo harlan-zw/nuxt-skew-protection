@@ -185,6 +185,19 @@ describe('multi-tab plugin', () => {
     })
   })
 
+  it('stops broadcasting once app:error closed the channel', async () => {
+    await setupPlugin()
+
+    const channel = MockBroadcastChannel.instances[0]
+    await mockCallHook('app:error')
+    expect(channel.close).toHaveBeenCalled()
+    channel.postMessage.mockClear()
+
+    await mockCallHook('app:manifest:update', { id: 'v2', timestamp: 12345 })
+
+    expect(channel.postMessage).not.toHaveBeenCalled()
+  })
+
   it('ignores broadcast messages without version-update type', async () => {
     await setupPlugin()
 
