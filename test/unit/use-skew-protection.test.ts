@@ -21,6 +21,7 @@ const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
 })
 
 const mockRunWithContext = vi.fn((fn: () => any) => fn())
+const mockOnUnmounted = vi.fn()
 
 vi.mock('nuxt/app', () => ({
   useNuxtApp: vi.fn(() => ({
@@ -58,7 +59,7 @@ vi.mock('@vueuse/core', () => ({
 vi.mock('vue', () => ({
   computed: vi.fn((fn: () => any) => ({ value: fn() })),
   onMounted: vi.fn((cb: () => void) => cb()),
-  onUnmounted: vi.fn(),
+  onUnmounted: mockOnUnmounted,
 }))
 
 vi.mock('#internal/nuxt/paths', () => ({
@@ -79,6 +80,7 @@ describe('useSkewProtection', () => {
     mockHooks.clear()
     mockCallHook.mockClear()
     mockHookFn.mockClear()
+    mockOnUnmounted.mockClear()
     mockFetch.mockReset()
   })
 
@@ -107,6 +109,16 @@ describe('useSkewProtection', () => {
   }
 
   describe('queue restart prevention on reconnection', () => {
+    it('removes its message listener when the component unmounts', async () => {
+      await setup()
+      expect(mockHooks.get('skew:message')).toHaveLength(1)
+
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      expect(mockHooks.get('skew:message')).toHaveLength(0)
+    })
+
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {
       mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
       await setup()

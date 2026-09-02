@@ -25,6 +25,60 @@ describe('skew-notification', () => {
       await stopServer(serverProc)
   })
 
+  it('shows the built-in notification with the prompt strategy', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}/default`)
+    await page.waitForSelector('[data-testid="default-page"]')
+
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.hooks?.callHook('app:manifest:update', {
+        id: 'new-version-v2',
+        timestamp: Date.now(),
+      })
+    })
+
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+    expect(await page.textContent('[data-testid="skew-update-notification"]')).toContain('Update available')
+    await page.click('[aria-label="Dismiss update"]')
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { state: 'detached' })
+
+    await browser.close()
+  }, 30000)
+
+  it('reloads from the built-in notification', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}/default`)
+    await page.waitForSelector('[data-testid="default-page"]')
+
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.hooks?.callHook('app:manifest:update', {
+        id: 'new-version-v3',
+        timestamp: Date.now(),
+      })
+    })
+
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+    await Promise.all([
+      page.waitForEvent('load'),
+      page.getByRole('button', { name: 'Refresh' }).click(),
+    ])
+    await page.waitForSelector('[data-testid="default-page"]')
+
+    await browser.close()
+  }, 30000)
+
   it('shows notification when app:manifest:update hook fires', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({
@@ -52,6 +106,7 @@ describe('skew-notification', () => {
     await page.waitForSelector('[data-testid="skew-notification"]', { timeout: 5000 })
     notification = await page.$('[data-testid="skew-notification"]')
     expect(notification).not.toBeNull()
+    expect(await page.$('[data-testid="skew-update-notification"]')).toBeNull()
 
     const message = await page.textContent('[data-testid="notification-message"]')
     expect(message).toContain('new version')

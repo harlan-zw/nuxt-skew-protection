@@ -180,6 +180,39 @@ export default defineNuxtModule<ModuleOptions>({
   },
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    let originalAppComponent: string | null | undefined
+    const updateNotificationApp = options.enabled !== false && options.reloadStrategy === 'prompt'
+      ? addTemplate({
+          filename: 'skew-protection-app.mjs',
+          getContents: () => {
+            if (!originalAppComponent)
+              throw new Error('Nuxt did not resolve the app before generating the update notification.')
+            return `import { defineComponent, h } from 'vue'
+import NuxtSkewOriginalApp from ${JSON.stringify(originalAppComponent)}
+import SkewUpdateNotification from ${JSON.stringify(resolver.resolve('./runtime/app/components/SkewUpdateNotification.vue'))}
+
+export default defineComponent({
+  name: 'SkewProtectionApp',
+  setup: () => () => [
+    h(NuxtSkewOriginalApp),
+    h(SkewUpdateNotification),
+  ],
+})
+`
+          },
+        })
+      : undefined
+
+    if (updateNotificationApp) {
+      nuxt.hook('modules:done', () => {
+        nuxt.hook('app:resolve', (app) => {
+          if (app.mainComponent === updateNotificationApp.dst)
+            return
+          originalAppComponent = app.mainComponent
+          app.mainComponent = updateNotificationApp.dst
+        })
+      })
+    }
     const { version } = await readPackageJSON(resolver.resolve('../package.json'))
     logger.level = (options.debug || nuxt.options.debug) ? 4 : 3
     if (options.enabled === false) {

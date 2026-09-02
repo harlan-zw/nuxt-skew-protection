@@ -61,7 +61,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   }
 
   // Listen for version updates from connection
-  nuxtApp.hooks.hook('skew:message', (msg) => {
+  const removeMessageHook = nuxtApp.hooks.hook('skew:message', (msg) => {
     if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
       return
     if (msg.version) {
@@ -78,6 +78,11 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     lastDetectedServerVersion = msg.version as string
     logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
     queue.start()
+  })
+
+  onUnmounted(() => {
+    if (typeof removeMessageHook === 'function')
+      removeMessageHook()
   })
 
   function connect() {
