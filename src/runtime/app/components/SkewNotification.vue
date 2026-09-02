@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { ChunksOutdatedPayload } from '../../types'
 import { useTimeAgo } from '@vueuse/core'
-import { reloadNuxtApp, useNuxtApp, useState } from 'nuxt/app'
-import { computed, onUnmounted, ref } from 'vue'
+import { reloadNuxtApp, useNuxtApp } from 'nuxt/app'
+import { computed, ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 interface Props {
@@ -10,11 +10,6 @@ interface Props {
    * Force the notification to be open (for testing/debugging).
    */
   forceOpen?: boolean
-  /**
-   * Marks the module-provided notification.
-   * A mounted custom notification takes priority over this fallback.
-   */
-  fallback?: boolean
 }
 
 defineOptions({
@@ -45,16 +40,6 @@ const chunksOutdated = ref(false)
 const appOutdated = ref(false)
 const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
 const dismissed = ref(false)
-const customNotificationCount = useState('skew-custom-notification-count', () => 0)
-
-if (import.meta.client && !props.fallback) {
-  customNotificationCount.value += 1
-  onUnmounted(() => {
-    customNotificationCount.value = Math.max(0, customNotificationCount.value - 1)
-  })
-}
-
-const fallbackIsSuppressed = computed(() => props.fallback && customNotificationCount.value > 0)
 
 // Listen for chunks outdated events
 skewProtection.onCurrentChunksOutdated((payload) => {
@@ -68,8 +53,6 @@ skewProtection.onAppOutdated(() => {
 
 // Determine if notification should be open
 const isCurrentChunksOutdated = computed(() => {
-  if (fallbackIsSuppressed.value)
-    return false
   if (!isOnline.value)
     return false
   if (dismissed.value)
@@ -80,8 +63,6 @@ const isCurrentChunksOutdated = computed(() => {
 })
 
 const isAppOutdated = computed(() => {
-  if (fallbackIsSuppressed.value)
-    return false
   if (!isOnline.value)
     return false
   if (dismissed.value)

@@ -1,11 +1,5 @@
-<script setup lang="ts">
-import { useState } from 'nuxt/app'
-
-const customNotificationCount = useState('skew-custom-notification-count', () => 0)
-</script>
-
 <template>
-  <SkewNotification v-if="customNotificationCount === 0" v-slot="{ isOpen, dismiss, reload }" fallback>
+  <SkewNotification v-slot="{ isOpen, dismiss, reload }">
     <Transition name="skew-update-notification">
       <section
         v-if="isOpen"

@@ -25,7 +25,7 @@ describe('skew-notification', () => {
       await stopServer(serverProc)
   })
 
-  it('shows the built-in notification with the prompt strategy', async () => {
+  it('keeps the prompt strategy headless by default', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -43,23 +43,21 @@ describe('skew-notification', () => {
       })
     })
 
-    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
-    expect(await page.textContent('[data-testid="skew-update-notification"]')).toContain('Update available')
-    await page.click('[aria-label="Dismiss update"]')
-    await page.waitForSelector('[data-testid="skew-update-notification"]', { state: 'detached' })
+    await sleep(500)
+    expect(await page.$('[data-testid="skew-update-notification"]')).toBeNull()
 
     await browser.close()
   }, 30000)
 
-  it('reloads from the built-in notification', async () => {
+  it('shows the native notification when it mounts', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     })
     const page = await context.newPage()
 
-    await page.goto(`http://localhost:${port}/default`)
-    await page.waitForSelector('[data-testid="default-page"]')
+    await page.goto(`http://localhost:${port}/native`)
+    await page.waitForSelector('[data-testid="native-page"]')
 
     await page.evaluate(() => {
       const nuxtApp = (window as any).__TEST_NUXT_APP__
@@ -70,11 +68,37 @@ describe('skew-notification', () => {
     })
 
     await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+    expect(await page.textContent('[data-testid="skew-update-notification"]')).toContain('Update available')
+    await page.click('[aria-label="Dismiss update"]')
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { state: 'detached' })
+
+    await browser.close()
+  }, 30000)
+
+  it('reloads from the native notification', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}/native`)
+    await page.waitForSelector('[data-testid="native-page"]')
+
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.hooks?.callHook('app:manifest:update', {
+        id: 'new-version-v4',
+        timestamp: Date.now(),
+      })
+    })
+
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
     await Promise.all([
       page.waitForEvent('load'),
       page.getByRole('button', { name: 'Refresh' }).click(),
     ])
-    await page.waitForSelector('[data-testid="default-page"]')
+    await page.waitForSelector('[data-testid="native-page"]')
 
     await browser.close()
   }, 30000)
