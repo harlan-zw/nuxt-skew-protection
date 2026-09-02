@@ -23,21 +23,25 @@ const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
 const mockRunWithContext = vi.fn((fn: () => any) => fn())
 const mockOnUnmounted = vi.fn()
 
-vi.mock('nuxt/app', () => ({
-  useNuxtApp: vi.fn(() => ({
-    $skewConnection: {
-      buildId: 'client-v1',
-      cookie: { value: 'client-v1' },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    },
-    hooks: {
-      hook: mockHookFn,
-      callHook: mockCallHook,
-    },
+// One nuxtApp instance shared by every useSkewProtection() call, like a real app
+const mockNuxtApp = {
+  _skewVersionDetection: undefined as Record<string, unknown> | undefined,
+  $skewConnection: {
+    buildId: 'client-v1',
+    cookie: { value: 'client-v1' },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  },
+  hooks: {
     hook: mockHookFn,
-    runWithContext: mockRunWithContext,
-  })),
+    callHook: mockCallHook,
+  },
+  hook: mockHookFn,
+  runWithContext: mockRunWithContext,
+}
+
+vi.mock('nuxt/app', () => ({
+  useNuxtApp: vi.fn(() => mockNuxtApp),
   useRuntimeConfig: vi.fn(() => ({
     app: { buildId: 'client-v1' },
     public: {
@@ -82,6 +86,7 @@ describe('useSkewProtection', () => {
     mockHookFn.mockClear()
     mockOnUnmounted.mockClear()
     mockFetch.mockReset()
+    mockNuxtApp._skewVersionDetection = undefined
   })
 
   afterEach(() => {
@@ -109,14 +114,34 @@ describe('useSkewProtection', () => {
   }
 
   describe('queue restart prevention on reconnection', () => {
-    it('removes its message listener when the component unmounts', async () => {
+    it('keeps detecting version updates after the component unmounts', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
       await setup()
-      expect(mockHooks.get('skew:message')).toHaveLength(1)
+
+      // Component unmounts, e.g. on client-side navigation
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // The connection stays open and reports a version mismatch after unmount
+      simulateMessage({ type: 'version', version: 'server-v2' })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('registers one version listener per app so remounts do not stack listeners', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+      await setup()
+      await setup()
 
       for (const [callback] of mockOnUnmounted.mock.calls)
         callback()
 
-      expect(mockHooks.get('skew:message')).toHaveLength(0)
+      simulateMessage({ type: 'version', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockHooks.get('skew:message')).toHaveLength(1)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {

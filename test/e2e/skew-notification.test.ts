@@ -75,6 +75,108 @@ describe('skew-notification', () => {
     await browser.close()
   }, 30000)
 
+  it('notification reappears for a new version after dismiss', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}/native`)
+    await page.waitForSelector('[data-testid="native-page"]')
+
+    const triggerUpdate = (id: string) => {
+      return page.evaluate((manifestId) => {
+        const nuxtApp = (window as any).__TEST_NUXT_APP__
+        return nuxtApp?.hooks?.callHook('app:manifest:update', {
+          id: manifestId,
+          timestamp: Date.now(),
+        })
+      }, id)
+    }
+
+    await triggerUpdate('dismissed-v2')
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+    await page.click('[aria-label="Dismiss update"]')
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { state: 'detached' })
+
+    // A newer deployment must re-enable the notification
+    await triggerUpdate('dismissed-v3')
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+
+    await browser.close()
+  }, 30000)
+
+  it('runs a single version check per app across component unmount and remount', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}`)
+    await page.waitForSelector('[data-testid="version"]')
+
+    // Record whether the app still reacts to version updates, and how often
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      ;(window as any).__MANIFEST_UPDATED__ = 0
+      nuxtApp.hooks.hook('app:manifest:update', () => {
+        (window as any).__MANIFEST_UPDATED__++
+      })
+    })
+
+    // Client-side navigation unmounts the SkewNotification component
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      nuxtApp.$router.push('/no-skew-components-here')
+    })
+    await page.waitForFunction(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.$router?.currentRoute?.value?.path === '/no-skew-components-here'
+    }, undefined, { timeout: 5000 })
+
+    // Navigate back: a fresh SkewNotification mounts
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      nuxtApp.$router.push('/')
+    })
+    await page.waitForFunction(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.$router?.currentRoute?.value?.path === '/'
+    }, undefined, { timeout: 5000 })
+    await sleep(500)
+
+    // A new deployment is live: make the manifest check see a new build id,
+    // and count how many update checks run
+    await page.evaluate(() => {
+      (window as any).__FETCH_COUNT__ = 0
+      const originalFetch = window.$fetch
+      window.$fetch = (request: any, options: any) => {
+        if (String(request).includes('latest.json')) {
+          (window as any).__FETCH_COUNT__++
+          return Promise.resolve({ id: 'listener-v2', timestamp: Date.now() })
+        }
+        return originalFetch(request, options)
+      }
+    })
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp.hooks.callHook('skew:message', { type: 'version', version: 'listener-v2' })
+    })
+
+    await page.waitForFunction(() => (window as any).__MANIFEST_UPDATED__ >= 1, undefined, { timeout: 5000 })
+    await sleep(500)
+    const counts = await page.evaluate(() => ({
+      updates: (window as any).__MANIFEST_UPDATED__,
+      fetches: (window as any).__FETCH_COUNT__,
+    }))
+    expect(counts.updates).toBe(1)
+    expect(counts.fetches).toBe(1)
+
+    await browser.close()
+  }, 30000)
+
   it('reloads from the native notification', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({
