@@ -9,28 +9,22 @@
         aria-atomic="true"
         data-testid="skew-update-notification"
       >
-        <div class="skew-update-notification__copy">
-          <strong>Update available</strong>
-          <span>A new version is ready.</span>
-        </div>
-
-        <div class="skew-update-notification__actions">
-          <button
-            type="button"
-            class="skew-update-notification__button skew-update-notification__button--primary"
-            @click="reload"
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            class="skew-update-notification__button skew-update-notification__button--secondary"
-            aria-label="Dismiss update"
-            @click="dismiss"
-          >
-            Dismiss
-          </button>
-        </div>
+        <strong class="skew-update-notification__label">Update available</strong>
+        <button
+          type="button"
+          class="skew-update-notification__button skew-update-notification__button--primary"
+          @click="reload"
+        >
+          Refresh
+        </button>
+        <button
+          type="button"
+          class="skew-update-notification__button skew-update-notification__button--dismiss"
+          aria-label="Dismiss update"
+          @click="dismiss"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
       </section>
     </Transition>
   </SkewNotification>
@@ -44,75 +38,68 @@
   inset-block-end: max(1rem, env(safe-area-inset-bottom));
   box-sizing: border-box;
   display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: space-between;
-  inline-size: min(28rem, calc(100vw - 2rem));
-  padding: 0.875rem;
-  color: #18181b;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #fff;
-  border: 1px solid #e4e4e7;
-  border-radius: 0.75rem;
-  box-shadow: 0 12px 32px rgb(24 24 27 / 14%);
-}
-
-.skew-update-notification__copy {
-  display: grid;
-  min-inline-size: 0;
-  line-height: 1.35;
-}
-
-.skew-update-notification__copy strong {
-  font-size: 0.875rem;
-  font-weight: 650;
-}
-
-.skew-update-notification__copy span {
-  margin-block-start: 0.125rem;
-  color: #71717a;
-  font-size: 0.8125rem;
-}
-
-.skew-update-notification__actions {
-  display: flex;
-  flex: none;
   gap: 0.375rem;
+  align-items: center;
+  inline-size: max-content;
+  max-inline-size: calc(100vw - 2rem);
+  padding: 0.5rem;
+  color: var(--ui-text-highlighted, #18181b);
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  background: var(--ui-bg-elevated, #fff);
+  border: 1px solid var(--ui-border, #e4e4e7);
+  border-radius: 9999px;
+  box-shadow: 0 10px 28px rgb(24 24 27 / 16%);
+}
+
+.skew-update-notification__label {
+  padding-inline: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .skew-update-notification__button {
   min-block-size: 2.75rem;
-  padding: 0.4375rem 0.75rem;
+  padding: 0.625rem 0.875rem;
   color: inherit;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 0.5rem;
+  border-radius: 9999px;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
 .skew-update-notification__button--primary {
-  color: #fff;
-  background: #18181b;
+  color: var(--ui-text-inverted, #fff);
+  background: var(--ui-primary, #18181b);
 }
 
 .skew-update-notification__button--primary:hover {
-  background: #3f3f46;
+  opacity: 0.88;
 }
 
-.skew-update-notification__button--secondary {
-  color: #52525b;
+.skew-update-notification__button--dismiss {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  padding: 0;
+  color: var(--ui-text-muted, #52525b);
+  font-size: 1.25rem;
+  font-weight: 400;
 }
 
-.skew-update-notification__button--secondary:hover {
-  background: #f4f4f5;
+.skew-update-notification__button--dismiss:hover {
+  color: var(--ui-text-highlighted, #18181b);
+  background: var(--ui-bg-muted, #f4f4f5);
 }
 
 .skew-update-notification__button:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--ui-primary, #2563eb);
   outline-offset: 2px;
 }
 
@@ -129,42 +116,38 @@
 
 @media (prefers-color-scheme: dark) {
   .skew-update-notification {
-    color: #fafafa;
-    background: #18181b;
-    border-color: #3f3f46;
+    color: var(--ui-text-highlighted, #fafafa);
+    background: var(--ui-bg-elevated, #18181b);
+    border-color: var(--ui-border, #3f3f46);
     box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
   }
 
-  .skew-update-notification__copy span,
-  .skew-update-notification__button--secondary {
-    color: #a1a1aa;
-  }
-
   .skew-update-notification__button--primary {
-    color: #18181b;
-    background: #fafafa;
+    color: var(--ui-text-inverted, #18181b);
+    background: var(--ui-primary, #fafafa);
   }
 
-  .skew-update-notification__button--primary:hover {
-    background: #d4d4d8;
+  .skew-update-notification__button--dismiss {
+    color: var(--ui-text-muted, #a1a1aa);
   }
 
-  .skew-update-notification__button--secondary:hover {
-    background: #27272a;
+  .skew-update-notification__button--dismiss:hover {
+    color: var(--ui-text-highlighted, #fafafa);
+    background: var(--ui-bg-muted, #27272a);
   }
 }
 
 @media (max-width: 30rem) {
   .skew-update-notification {
-    inset-inline-start: max(0.75rem, env(safe-area-inset-left));
     inset-inline-end: max(0.75rem, env(safe-area-inset-right));
-    inline-size: auto;
+    max-inline-size: calc(100vw - 1.5rem);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .skew-update-notification-enter-active,
-  .skew-update-notification-leave-active {
+  .skew-update-notification-leave-active,
+  .skew-update-notification__button {
     transition: none;
   }
 }
