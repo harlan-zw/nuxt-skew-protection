@@ -1,5 +1,5 @@
 import type { NuxtAppManifestMeta } from 'nuxt/app'
-import type { ChunksOutdatedPayload } from '../../types'
+import type { ChunksOutdatedPayload, SkewVersionDetection } from '../../types'
 import { useOnline } from '@vueuse/core'
 import { useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
 import { computed, onMounted, onUnmounted } from 'vue'
@@ -27,10 +27,9 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   const serverVersion = useState<string | undefined>('skew-server-version', () => undefined)
   const manifest = useState<NuxtAppManifestMeta | undefined>('skew-manifest', () => undefined)
 
-  // Track versions we've already detected/processed to avoid
-  // re-triggering on SSE/WS reconnection or repeated backoff ticks
-  let lastDetectedServerVersion: string | undefined
-  let lastProcessedManifestId: string | undefined
+  // Version detection is app-scoped: the connection stays open across client
+  // navigations, so its listener and backoff queue must outlive components.
+  const detection: SkewVersionDetection = nuxtApp._skewVersionDetection ??= {}
 
   async function checkForUpdates() {
     // Don't check for updates when offline
@@ -41,17 +40,12 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       // A deployment may not have propagated the manifest yet; the backoff queue retries.
       return null
     })
-    if (meta && meta.id !== clientVersion && meta.id !== lastProcessedManifestId) {
-      lastProcessedManifestId = meta.id
-      queue.clear()
+    if (meta && meta.id !== clientVersion && meta.id !== detection.lastProcessedManifestId) {
+      detection.lastProcessedManifestId = meta.id
+      detection.queue?.clear()
       await nuxtApp.hooks.callHook('app:manifest:update', meta)
     }
   }
-
-  const queue = createBackoffQueue({
-    delays: [0, 5000, 30000, 300000],
-    onTick: () => nuxtApp.runWithContext(checkForUpdates),
-  })
 
   // Auto-connect on mount unless lazy
   if (!lazy) {
@@ -60,25 +54,35 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     })
   }
 
-  // Listen for version updates from connection
-  nuxtApp.hooks.hook('skew:message', (msg) => {
-    if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
-      return
-    if (msg.version) {
-      serverVersion.value = msg.version as string
-    }
-    if (!msg.version || msg.version === clientVersion)
-      return
+  // Listen for version updates from the connection. Registered once per app:
+  // components unmount on navigation, but the connection (and the update
+  // detection it feeds) must keep running.
+  if (!detection.listenerInstalled) {
+    detection.listenerInstalled = true
+    detection.queue = createBackoffQueue({
+      delays: [0, 5000, 30000, 300000],
+      onTick: () => nuxtApp.runWithContext(checkForUpdates),
+    })
 
-    // Skip if we've already started checking for this server version
-    // (e.g., SSE/WS reconnection resends the same CONNECTED message)
-    if (msg.version === lastDetectedServerVersion)
-      return
+    nuxtApp.hooks.hook('skew:message', (msg) => {
+      if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
+        return
+      if (msg.version) {
+        serverVersion.value = msg.version as string
+      }
+      if (!msg.version || msg.version === clientVersion)
+        return
 
-    lastDetectedServerVersion = msg.version as string
-    logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
-    queue.start()
-  })
+      // Skip if we've already started checking for this server version
+      // (e.g., SSE/WS reconnection resends the same CONNECTED message)
+      if (msg.version === detection.lastDetectedServerVersion)
+        return
+
+      detection.lastDetectedServerVersion = msg.version as string
+      logger.debug(`[SkewProtection] Version mismatch (${msg.version} !== ${clientVersion}), starting backoff checks`)
+      detection.queue?.start()
+    })
+  }
 
   function connect() {
     if (!import.meta.client || isConnected.value)
@@ -91,7 +95,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     if (!import.meta.client || !isConnected.value)
       return
     isConnected.value = false
-    queue.clear()
+    detection.queue?.clear()
     nuxtApp.$skewConnection?.disconnect()
   }
 

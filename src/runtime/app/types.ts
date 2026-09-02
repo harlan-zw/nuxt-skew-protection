@@ -1,6 +1,8 @@
 import type { UseEventSourceOptions, UseWebSocketOptions } from '@vueuse/core'
 import type { Ref } from 'vue'
 
+export type { SkewVersionDetection } from '../types'
+
 export interface SkewWebSocketConfig {
   url: string
   options: UseWebSocketOptions

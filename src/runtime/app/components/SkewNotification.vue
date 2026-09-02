@@ -2,7 +2,7 @@
 import type { ChunksOutdatedPayload } from '../../types'
 import { useTimeAgo } from '@vueuse/core'
 import { reloadNuxtApp, useNuxtApp } from 'nuxt/app'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
 interface Props {
@@ -40,6 +40,13 @@ const chunksOutdated = ref(false)
 const appOutdated = ref(false)
 const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
 const dismissed = ref(false)
+
+// Dismissing only hides the current notification. When a new deployment
+// arrives (new manifest id), notifications are re-enabled.
+watch(() => skewProtection.manifest.value?.id, (id, prevId) => {
+  if (id && id !== prevId)
+    dismissed.value = false
+})
 
 // Listen for chunks outdated events
 skewProtection.onCurrentChunksOutdated((payload) => {
