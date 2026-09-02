@@ -1,6 +1,74 @@
 # Changelog
 
 
+## v1.5.1...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.5.1...main)
+
+### 🩹 Fixes
+
+- **cache:** Ignore non-HTML route rules ([#52](https://github.com/harlan-zw/nuxt-skew-protection/pull/52))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v1.5.0...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.5.0...main)
+
+### 🩹 Fixes
+
+- Restore retained chunks before nitro seals its asset manifest ([#48](https://github.com/harlan-zw/nuxt-skew-protection/pull/48))
+- Let route rules actually cache HTML documents ([#47](https://github.com/harlan-zw/nuxt-skew-protection/pull/47))
+- Promise chunk retention wherever assets were kept ([#49](https://github.com/harlan-zw/nuxt-skew-protection/pull/49))
+- Name the routes where max-age alone drops the version cookie ([#50](https://github.com/harlan-zw/nuxt-skew-protection/pull/50))
+
+### 🏡 Chore
+
+- Adopt the shared eslint base config ([#46](https://github.com/harlan-zw/nuxt-skew-protection/pull/46))
+- Register the html-cache-cloudflare fixture in the lockfile ([3bbbc68](https://github.com/harlan-zw/nuxt-skew-protection/commit/3bbbc68))
+- Drop a dev warning that could never fire ([#51](https://github.com/harlan-zw/nuxt-skew-protection/pull/51))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
+## v1.4.4...main
+
+[compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.4...main)
+
+### 🚀 Enhancements
+
+- Track chunk metadata without asset bundling ([#43](https://github.com/harlan-zw/nuxt-skew-protection/pull/43))
+- **vercel:** Default native asset storage off ([#44](https://github.com/harlan-zw/nuxt-skew-protection/pull/44))
+
+### 🩹 Fixes
+
+- Fail builds with no collected assets ([#25](https://github.com/harlan-zw/nuxt-skew-protection/pull/25))
+- **cloudflare:** Prevent caching latest build manifest ([#34](https://github.com/harlan-zw/nuxt-skew-protection/pull/34))
+- Fail builds on asset retention errors ([#35](https://github.com/harlan-zw/nuxt-skew-protection/pull/35))
+- Support disabled version cookies ([#37](https://github.com/harlan-zw/nuxt-skew-protection/pull/37))
+- ⚠️  Keep adapter secrets out of client bundles ([#38](https://github.com/harlan-zw/nuxt-skew-protection/pull/38))
+- **cloudflare:** Harden build-time KV storage ([#39](https://github.com/harlan-zw/nuxt-skew-protection/pull/39))
+- Stop SSE process listener leaks ([#40](https://github.com/harlan-zw/nuxt-skew-protection/pull/40))
+- **vercel:** Scope deployment cookie to app mount ([#41](https://github.com/harlan-zw/nuxt-skew-protection/pull/41))
+
+### 🏡 Chore
+
+- Bump ([5c3bb95](https://github.com/harlan-zw/nuxt-skew-protection/commit/5c3bb95))
+- Bump ([f88f2b2](https://github.com/harlan-zw/nuxt-skew-protection/commit/f88f2b2))
+- Bump ([572b3cd](https://github.com/harlan-zw/nuxt-skew-protection/commit/572b3cd))
+- Bump ([c0dd627](https://github.com/harlan-zw/nuxt-skew-protection/commit/c0dd627))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Keep adapter secrets out of client bundles ([#38](https://github.com/harlan-zw/nuxt-skew-protection/pull/38))
+
+### ❤️ Contributors
+
+- Harlan Wilton ([@harlan-zw](https://github.com/harlan-zw))
+
 ## v1.4.3...main
 
 [compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.4.3...main)
