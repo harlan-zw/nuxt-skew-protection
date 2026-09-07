@@ -1,4 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { BackoffQueue } from './app/utils/backoff-queue'
 
 export type AssetRecoveryConfig
@@ -69,4 +70,6 @@ export interface SkewVersionDetection {
   lastDetectedServerVersion?: string
   /** Last manifest id we fired `app:manifest:update` for */
   lastProcessedManifestId?: string
+  /** The manifest behind `lastProcessedManifestId`, replayed to consumers that mount later */
+  lastManifest?: NuxtAppManifestMeta
 }

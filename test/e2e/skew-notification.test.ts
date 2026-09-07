@@ -177,6 +177,56 @@ describe('skew-notification', () => {
     await browser.close()
   }, 30000)
 
+  it('shows the pending update when the notification mounts after detection', async () => {
+    const browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    const page = await context.newPage()
+
+    await page.goto(`http://localhost:${port}/native`)
+    await page.waitForSelector('[data-testid="native-page"]')
+
+    // Client-side navigation unmounts the notification component
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      nuxtApp.$router.push('/no-skew-components-here')
+    })
+    await page.waitForFunction(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp?.$router?.currentRoute?.value?.path === '/no-skew-components-here'
+    }, undefined, { timeout: 5000 })
+
+    // A new deployment is detected while no notification component is mounted
+    await page.evaluate(() => {
+      const originalFetch = window.$fetch
+      window.$fetch = (request: any, options: any) => {
+        if (String(request).includes('latest.json'))
+          return Promise.resolve({ id: 'replay-v2', timestamp: Date.now() })
+        return originalFetch(request, options)
+      }
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      return nuxtApp.hooks.callHook('skew:message', { type: 'version', version: 'replay-v2' })
+    })
+    await sleep(1000)
+
+    // Nuxt core arms a full-page reload on the next navigation after
+    // app:manifest:update. Seed its reload guard so the return navigation
+    // stays client-side and the component remounts within the same app.
+    await page.evaluate(() => {
+      sessionStorage.setItem('nuxt:reload', JSON.stringify({ path: '/native', expires: Date.now() + 10000 }))
+    })
+
+    // Navigate back: a fresh notification mounts and must surface the pending update
+    await page.evaluate(() => {
+      const nuxtApp = (window as any).__TEST_NUXT_APP__
+      nuxtApp.$router.push('/native')
+    })
+    await page.waitForSelector('[data-testid="skew-update-notification"]', { timeout: 5000 })
+
+    await browser.close()
+  }, 30000)
+
   it('reloads from the native notification', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({

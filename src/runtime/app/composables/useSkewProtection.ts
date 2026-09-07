@@ -42,6 +42,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     })
     if (meta && meta.id !== clientVersion && meta.id !== detection.lastProcessedManifestId) {
       detection.lastProcessedManifestId = meta.id
+      detection.lastManifest = meta
       detection.queue?.clear()
       await nuxtApp.hooks.callHook('app:manifest:update', meta)
     }
@@ -120,6 +121,15 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       manifest.value = _manifest
       callback(_manifest)
     })
+
+    // An update detected while no consumer was mounted fired
+    // `app:manifest:update` with no listener, and detection dedupe blocks
+    // re-checks. Replay the pending manifest so this consumer opens too.
+    const lastManifest = detection.lastManifest
+    if (lastManifest && lastManifest.id !== clientVersion) {
+      manifest.value = lastManifest
+      void callback(lastManifest)
+    }
 
     onUnmounted(() => {
       if (typeof hook === 'function') {

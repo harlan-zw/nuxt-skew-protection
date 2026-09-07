@@ -184,6 +184,40 @@ describe('useSkewProtection', () => {
     })
   })
 
+  describe('pending update replay', () => {
+    it('replays a pending app-scoped update to consumers that mount after detection', async () => {
+      const manifest = { id: 'server-v2', timestamp: Date.now() }
+      mockFetch.mockResolvedValue(manifest)
+      await setup()
+
+      // The consumer unmounts before the update is detected
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // Update detected while no consumer is mounted
+      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // A consumer mounts later: it must learn about the pending update
+      mockFetch.mockClear()
+      const seen: any[] = []
+      const { result } = await setup()
+      result.onAppOutdated(m => seen.push(m))
+
+      expect(seen).toHaveLength(1)
+      expect(seen[0]?.id).toBe('server-v2')
+      expect(result.manifest.value?.id).toBe('server-v2')
+
+      // The pending update is not re-detected: no extra fetch, no extra hook fire
+      expect(mockFetch).toHaveBeenCalledTimes(0)
+      const manifestUpdateCalls = mockCallHook.mock.calls.filter(
+        ([name]) => name === 'app:manifest:update',
+      )
+      expect(manifestUpdateCalls).toHaveLength(1)
+    })
+  })
+
   describe('manifest update deduplication', () => {
     it('fires app:manifest:update only once for the same manifest version', async () => {
       const manifest = { id: 'server-v2', timestamp: Date.now(), skewProtection: { versions: {} } }
