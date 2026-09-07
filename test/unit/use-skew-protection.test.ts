@@ -218,6 +218,42 @@ describe('useSkewProtection', () => {
     })
   })
 
+  describe('dismiss persistence', () => {
+    it('does not replay an update the user dismissed until a new manifest id is detected', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+
+      // First consumer sees the update and dismisses it
+      const first = await setup()
+      const firstSeen: any[] = []
+      first.result.onAppOutdated(m => firstSeen.push(m))
+      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(firstSeen).toHaveLength(1)
+      first.result.dismissUpdate()
+
+      // The consumer unmounts, a fresh consumer mounts on the same app:
+      // the dismissed update must stay hidden
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+      const second = await setup()
+      const secondSeen: any[] = []
+      second.result.onAppOutdated(m => secondSeen.push(m))
+      expect(secondSeen).toHaveLength(0)
+
+      // A new manifest id re-enables the update for fresh consumers
+      mockFetch.mockResolvedValue({ id: 'server-v3', timestamp: Date.now() })
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+      simulateMessage({ type: 'version', version: 'server-v3' })
+      await vi.advanceTimersByTimeAsync(0)
+      const third = await setup()
+      const thirdSeen: any[] = []
+      third.result.onAppOutdated(m => thirdSeen.push(m))
+      expect(thirdSeen).toHaveLength(1)
+      expect(thirdSeen[0]?.id).toBe('server-v3')
+    })
+  })
+
   describe('manifest update deduplication', () => {
     it('fires app:manifest:update only once for the same manifest version', async () => {
       const manifest = { id: 'server-v2', timestamp: Date.now(), skewProtection: { versions: {} } }

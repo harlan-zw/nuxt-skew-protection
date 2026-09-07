@@ -72,4 +72,6 @@ export interface SkewVersionDetection {
   lastProcessedManifestId?: string
   /** The manifest behind `lastProcessedManifestId`, replayed to consumers that mount later */
   lastManifest?: NuxtAppManifestMeta
+  /** Manifest id the user dismissed; the replay stays silent for it until a new id is detected */
+  dismissedManifestId?: string
 }

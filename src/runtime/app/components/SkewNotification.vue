@@ -104,6 +104,9 @@ const timeAgo = useTimeAgo(releaseTimestamp, {
 function handleDismiss() {
   dismissed.value = true
   chunksOutdated.value = false
+  // Record the dismissal app-scoped so a remount does not replay the
+  // same manifest id (a new manifest id re-enables notifications)
+  skewProtection.dismissUpdate()
   emit('dismiss')
 }
 

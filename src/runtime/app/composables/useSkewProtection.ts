@@ -43,6 +43,8 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     if (meta && meta.id !== clientVersion && meta.id !== detection.lastProcessedManifestId) {
       detection.lastProcessedManifestId = meta.id
       detection.lastManifest = meta
+      // A new manifest id re-enables notifications dismissed for the old one
+      detection.dismissedManifestId = undefined
       detection.queue?.clear()
       await nuxtApp.hooks.callHook('app:manifest:update', meta)
     }
@@ -116,6 +118,15 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     return hook
   }
 
+  /**
+   * Record the currently shown update as dismissed. The dismissal is
+   * app-scoped: a consumer that mounts later does not replay the same
+   * manifest id. A new manifest id clears it.
+   */
+  function dismissUpdate() {
+    detection.dismissedManifestId = manifest.value?.id
+  }
+
   function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
     const hook = nuxtApp.hooks.hook('app:manifest:update', (_manifest) => {
       manifest.value = _manifest
@@ -124,9 +135,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
 
     // An update detected while no consumer was mounted fired
     // `app:manifest:update` with no listener, and detection dedupe blocks
-    // re-checks. Replay the pending manifest so this consumer opens too.
+    // re-checks. Replay the pending manifest so this consumer opens too,
+    // unless the user dismissed that manifest id.
     const lastManifest = detection.lastManifest
-    if (lastManifest && lastManifest.id !== clientVersion) {
+    if (lastManifest && lastManifest.id !== clientVersion && lastManifest.id !== detection.dismissedManifestId) {
       manifest.value = lastManifest
       void callback(lastManifest)
     }
@@ -168,6 +180,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     disconnect,
     onCurrentChunksOutdated,
     onAppOutdated,
+    dismissUpdate,
     checkForUpdates,
     async simulateUpdate() {
       if (!import.meta.dev) {
