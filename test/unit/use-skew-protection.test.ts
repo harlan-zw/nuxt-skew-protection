@@ -21,22 +21,27 @@ const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
 })
 
 const mockRunWithContext = vi.fn((fn: () => any) => fn())
+const mockOnUnmounted = vi.fn()
+
+// One nuxtApp instance shared by every useSkewProtection() call, like a real app
+const mockNuxtApp = {
+  _skewVersionDetection: undefined as Record<string, unknown> | undefined,
+  $skewConnection: {
+    buildId: 'client-v1',
+    cookie: { value: 'client-v1' },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  },
+  hooks: {
+    hook: mockHookFn,
+    callHook: mockCallHook,
+  },
+  hook: mockHookFn,
+  runWithContext: mockRunWithContext,
+}
 
 vi.mock('nuxt/app', () => ({
-  useNuxtApp: vi.fn(() => ({
-    $skewConnection: {
-      buildId: 'client-v1',
-      cookie: { value: 'client-v1' },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    },
-    hooks: {
-      hook: mockHookFn,
-      callHook: mockCallHook,
-    },
-    hook: mockHookFn,
-    runWithContext: mockRunWithContext,
-  })),
+  useNuxtApp: vi.fn(() => mockNuxtApp),
   useRuntimeConfig: vi.fn(() => ({
     app: { buildId: 'client-v1' },
     public: {
@@ -58,7 +63,7 @@ vi.mock('@vueuse/core', () => ({
 vi.mock('vue', () => ({
   computed: vi.fn((fn: () => any) => ({ value: fn() })),
   onMounted: vi.fn((cb: () => void) => cb()),
-  onUnmounted: vi.fn(),
+  onUnmounted: mockOnUnmounted,
 }))
 
 vi.mock('#internal/nuxt/paths', () => ({
@@ -79,7 +84,9 @@ describe('useSkewProtection', () => {
     mockHooks.clear()
     mockCallHook.mockClear()
     mockHookFn.mockClear()
+    mockOnUnmounted.mockClear()
     mockFetch.mockReset()
+    mockNuxtApp._skewVersionDetection = undefined
   })
 
   afterEach(() => {
@@ -107,6 +114,36 @@ describe('useSkewProtection', () => {
   }
 
   describe('queue restart prevention on reconnection', () => {
+    it('keeps detecting version updates after the component unmounts', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+      await setup()
+
+      // Component unmounts, e.g. on client-side navigation
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // The connection stays open and reports a version mismatch after unmount
+      simulateMessage({ type: 'version', version: 'server-v2' })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('registers one version listener per app so remounts do not stack listeners', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+      await setup()
+      await setup()
+
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      simulateMessage({ type: 'version', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockHooks.get('skew:message')).toHaveLength(1)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {
       mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
       await setup()
@@ -144,6 +181,76 @@ describe('useSkewProtection', () => {
 
       await vi.advanceTimersByTimeAsync(0)
       expect(mockFetch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('pending update replay', () => {
+    it('replays a pending app-scoped update to consumers that mount after detection', async () => {
+      const manifest = { id: 'server-v2', timestamp: Date.now() }
+      mockFetch.mockResolvedValue(manifest)
+      await setup()
+
+      // The consumer unmounts before the update is detected
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // Update detected while no consumer is mounted
+      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // A consumer mounts later: it must learn about the pending update
+      mockFetch.mockClear()
+      const seen: any[] = []
+      const { result } = await setup()
+      result.onAppOutdated(m => seen.push(m))
+
+      expect(seen).toHaveLength(1)
+      expect(seen[0]?.id).toBe('server-v2')
+      expect(result.manifest.value?.id).toBe('server-v2')
+
+      // The pending update is not re-detected: no extra fetch, no extra hook fire
+      expect(mockFetch).toHaveBeenCalledTimes(0)
+      const manifestUpdateCalls = mockCallHook.mock.calls.filter(
+        ([name]) => name === 'app:manifest:update',
+      )
+      expect(manifestUpdateCalls).toHaveLength(1)
+    })
+  })
+
+  describe('dismiss persistence', () => {
+    it('does not replay an update the user dismissed until a new manifest id is detected', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+
+      // First consumer sees the update and dismisses it
+      const first = await setup()
+      const firstSeen: any[] = []
+      first.result.onAppOutdated(m => firstSeen.push(m))
+      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(firstSeen).toHaveLength(1)
+      first.result.dismissUpdate()
+
+      // The consumer unmounts, a fresh consumer mounts on the same app:
+      // the dismissed update must stay hidden
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+      const second = await setup()
+      const secondSeen: any[] = []
+      second.result.onAppOutdated(m => secondSeen.push(m))
+      expect(secondSeen).toHaveLength(0)
+
+      // A new manifest id re-enables the update for fresh consumers
+      mockFetch.mockResolvedValue({ id: 'server-v3', timestamp: Date.now() })
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+      simulateMessage({ type: 'version', version: 'server-v3' })
+      await vi.advanceTimersByTimeAsync(0)
+      const third = await setup()
+      const thirdSeen: any[] = []
+      third.result.onAppOutdated(m => thirdSeen.push(m))
+      expect(thirdSeen).toHaveLength(1)
+      expect(thirdSeen[0]?.id).toBe('server-v3')
     })
   })
 
