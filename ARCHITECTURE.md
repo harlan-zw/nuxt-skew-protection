@@ -8,6 +8,26 @@ This module provides version skew protection for Nuxt applications through:
 3. **Intelligent Notifications** - Only prompts users when their loaded modules become invalidated
 4. **Universal Storage** - Works on any platform using unstorage (filesystem, Cloudflare KV)
 
+## Notification UI ownership
+
+Users always provide their own notification template.
+The module provides detection logic through `SkewNotification` and `useSkewProtection()`.
+`SkewNotification` stays headless. Its slot renders the user's template.
+The default `reloadStrategy: 'prompt'` requires that template to display a notification.
+
+Provide a starter that users copy into their app and adapt.
+Keep starters in the [installation guide](docs/content/1.getting-started/1.installation.md)
+and [UI examples](docs/content/2.guides/4.ui-examples.md).
+Users own the markup, styles, wording, placement, and notification trigger.
+
+Do not ship or register a styled notification component, including an optional one.
+Do not inject notification UI automatically.
+Keep detection and dismissal fixes independent of starter styling.
+
+[PR #54](https://github.com/harlan-zw/nuxt-skew-protection/pull/54) proposed `SkewUpdateNotification`.
+That direction was rejected. Do not use its component or documentation as the product contract.
+Review its detection and dismissal changes separately before extracting fixes.
+
 ## Architecture
 
 ```text
@@ -355,7 +375,8 @@ Requires `connectionTracking: true` in module config.
 
 **SkewNotification** (src/runtime/app/components/SkewNotification.vue)
 
-Headless component that provides notification logic:
+Headless component that provides notification logic to a user-owned template.
+The following starter belongs in the consuming app:
 ```vue
 <template>
   <SkewNotification v-slot="{ isCurrentChunksOutdated, dismiss, reload }">
@@ -687,9 +708,8 @@ Polling Strategy (default)
 Component: SkewNotification.vue
 ├─► Calls useSkewProtection()
 ├─► Listens to onCurrentChunksOutdated()
-└─► Shows notification when modules invalidated
-    ├─► Provides isCurrentChunksOutdated, dismiss(), reload() to slot
-    └─► User sees: "New version available, please reload"
+└─► Provides isCurrentChunksOutdated, dismiss(), reload() to slot
+    └─► The user-owned template displays the notification
 
 User Flow:
 1. User visits site → Gets __nkpv cookie with buildId
@@ -699,7 +719,7 @@ User Flow:
 5. app:manifest:update fired → manifest.value updated
 6. SW plugin checks loaded modules vs deletedChunks
 7. If intersection found → skew:chunks-outdated fired
-8. SkewNotification shows → User sees notification
+8. SkewNotification updates slot state → User-owned template displays notification
 9. User clicks reload → window.location.reload()
 10. User gets new version → New __nkpv cookie set
 ```
