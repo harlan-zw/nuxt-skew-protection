@@ -264,6 +264,31 @@ describe('useSkewProtection', () => {
     await check
   })
 
+  describe('reduced broadcast manifest retention', () => {
+    it('upgrades a reduced cross-tab broadcast to the fetched full manifest without re-firing the hook', async () => {
+      const timestamp = Date.now()
+      const fullManifest = {
+        id: 'server-v2',
+        timestamp,
+        skewProtection: { versions: { 'server-v2': { timestamp } } },
+      }
+      const { result } = await setup()
+
+      // Another tab broadcasts the reduced payload; the retained hook stores it
+      await mockCallHook('app:manifest:update', { type: 'version-update', id: 'server-v2', timestamp })
+
+      // This tab's own check fetches the full manifest with the same id
+      mockFetch.mockResolvedValue(fullManifest)
+      await result.checkForUpdates()
+
+      expect(result.manifest.value).toEqual(fullManifest)
+      const manifestUpdateCalls = mockCallHook.mock.calls.filter(
+        ([name]) => name === 'app:manifest:update',
+      )
+      expect(manifestUpdateCalls).toHaveLength(1)
+    })
+  })
+
   describe('manifest update deduplication', () => {
     it('fires app:manifest:update only once for the same manifest version', async () => {
       const manifest = { id: 'server-v2', timestamp: Date.now(), skewProtection: { versions: {} } }

@@ -56,6 +56,11 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
         manifest.value = meta
         await nuxtApp.hooks.callHook('app:manifest:update', meta)
       }
+      else if (!manifest.value.skewProtection && meta.skewProtection) {
+        // A cross-tab broadcast retains a reduced payload; upgrade it to the
+        // fetched full manifest without notifying consumers again.
+        manifest.value = meta
+      }
     }
   }
 
