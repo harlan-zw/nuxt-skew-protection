@@ -20,23 +20,30 @@ const mockHookFn = vi.fn((name: string, cb: (...args: any[]) => any) => {
   }
 })
 
+const mockStates = new Map<string, { value: any }>()
+
 const mockRunWithContext = vi.fn((fn: () => any) => fn())
+const mockOnUnmounted = vi.fn()
+
+// One nuxtApp instance shared by every useSkewProtection() call, like a real app
+const mockNuxtApp = {
+  _skewVersionDetection: undefined as Record<string, unknown> | undefined,
+  $skewConnection: {
+    buildId: 'client-v1',
+    cookie: { value: 'client-v1' },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  },
+  hooks: {
+    hook: mockHookFn,
+    callHook: mockCallHook,
+  },
+  hook: mockHookFn,
+  runWithContext: mockRunWithContext,
+}
 
 vi.mock('nuxt/app', () => ({
-  useNuxtApp: vi.fn(() => ({
-    $skewConnection: {
-      buildId: 'client-v1',
-      cookie: { value: 'client-v1' },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    },
-    hooks: {
-      hook: mockHookFn,
-      callHook: mockCallHook,
-    },
-    hook: mockHookFn,
-    runWithContext: mockRunWithContext,
-  })),
+  useNuxtApp: vi.fn(() => mockNuxtApp),
   useRuntimeConfig: vi.fn(() => ({
     app: { buildId: 'client-v1' },
     public: {
@@ -46,8 +53,9 @@ vi.mock('nuxt/app', () => ({
     },
   })),
   useState: vi.fn((_key: string, init: () => any) => {
-    const state = { value: init() }
-    return state
+    if (!mockStates.has(_key))
+      mockStates.set(_key, { value: init() })
+    return mockStates.get(_key)
   }),
 }))
 
@@ -58,7 +66,7 @@ vi.mock('@vueuse/core', () => ({
 vi.mock('vue', () => ({
   computed: vi.fn((fn: () => any) => ({ value: fn() })),
   onMounted: vi.fn((cb: () => void) => cb()),
-  onUnmounted: vi.fn(),
+  onUnmounted: mockOnUnmounted,
 }))
 
 vi.mock('#internal/nuxt/paths', () => ({
@@ -77,9 +85,12 @@ describe('useSkewProtection', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     mockHooks.clear()
+    mockStates.clear()
     mockCallHook.mockClear()
     mockHookFn.mockClear()
+    mockOnUnmounted.mockClear()
     mockFetch.mockReset()
+    mockNuxtApp._skewVersionDetection = undefined
   })
 
   afterEach(() => {
@@ -107,6 +118,35 @@ describe('useSkewProtection', () => {
   }
 
   describe('queue restart prevention on reconnection', () => {
+    it('keeps detecting version updates after the component unmounts', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+      await setup()
+
+      // Component unmounts, e.g. on client-side navigation
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // The connection stays open and reports a version mismatch after unmount
+      simulateMessage({ type: 'version', version: 'server-v2' })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('registers one version listener per app so remounts do not stack listeners', async () => {
+      mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+      await setup()
+      await setup()
+
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      simulateMessage({ type: 'version', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {
       mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
       await setup()
@@ -145,6 +185,83 @@ describe('useSkewProtection', () => {
       await vi.advanceTimersByTimeAsync(0)
       expect(mockFetch).not.toHaveBeenCalled()
     })
+  })
+
+  describe('pending update replay', () => {
+    it('replays a pending app-scoped update to consumers that mount after detection', async () => {
+      const manifest = { id: 'server-v2', timestamp: Date.now() }
+      mockFetch.mockResolvedValue(manifest)
+      await setup()
+
+      // The consumer unmounts before the update is detected
+      for (const [callback] of mockOnUnmounted.mock.calls)
+        callback()
+
+      // Update detected while no consumer is mounted
+      simulateMessage({ type: 'connected', version: 'server-v2' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // A consumer mounts later: it must learn about the pending update
+      mockFetch.mockClear()
+      const seen: any[] = []
+      const { result } = await setup()
+      result.onAppOutdated(m => seen.push(m))
+
+      expect(seen).toHaveLength(1)
+      expect(seen[0]?.id).toBe('server-v2')
+      expect(result.manifest.value?.id).toBe('server-v2')
+
+      // The pending update is not re-detected: no extra fetch, no extra hook fire
+      expect(mockFetch).toHaveBeenCalledTimes(0)
+      const manifestUpdateCalls = mockCallHook.mock.calls.filter(
+        ([name]) => name === 'app:manifest:update',
+      )
+      expect(manifestUpdateCalls).toHaveLength(1)
+    })
+  })
+
+  it('replays polling updates to a later consumer without another fetch', async () => {
+    await setup()
+    const manifest = { id: 'polling-v2', timestamp: Date.now() }
+    await mockCallHook('app:manifest:update', manifest)
+    const { result } = await setup()
+    const callback = vi.fn()
+    result.onAppOutdated(callback)
+    expect(callback).toHaveBeenCalledWith(manifest)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('replays chunk invalidation to a later consumer', async () => {
+    await setup()
+    const payload = { deletedChunks: ['old.js'], invalidatedModules: ['old.js'], passedReleases: ['v2'] }
+    await mockCallHook('skew:chunks-outdated', payload)
+    const { result } = await setup()
+    const callback = vi.fn()
+    result.onCurrentChunksOutdated(callback)
+    expect(callback).toHaveBeenCalledWith(payload)
+  })
+
+  it('shares an in-flight manual check across consumers', async () => {
+    const first = await setup()
+    const second = await setup()
+    mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+    await Promise.all([first.result.checkForUpdates(), second.result.checkForUpdates()])
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows an update callback to check again without waiting on itself', async () => {
+    const { result } = await setup()
+    mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
+    const completed = vi.fn()
+    result.onAppOutdated(async () => {
+      await result.checkForUpdates()
+      completed()
+    })
+    const check = result.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(completed).toHaveBeenCalledOnce()
+    await check
   })
 
   describe('manifest update deduplication', () => {

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 
 const version = ref('v1')
+const showNotification = ref(true)
 </script>
 
 <template>
@@ -10,7 +11,10 @@ const version = ref('v1')
       App {{ version }}
     </h1>
 
-    <SkewNotification v-slot="{ isCurrentChunksOutdated, isAppOutdated, reload, dismiss, timeAgo }">
+    <button data-testid="toggle-notification" @click="showNotification = !showNotification">
+      Toggle notification
+    </button>
+    <SkewNotification v-if="showNotification" v-slot="{ isCurrentChunksOutdated, isAppOutdated, reload, dismiss, timeAgo }">
       <div
         v-if="isCurrentChunksOutdated || isAppOutdated"
         data-testid="skew-notification"
