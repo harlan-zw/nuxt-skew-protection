@@ -56,7 +56,7 @@ vi.mock('@vueuse/core', () => ({
 }))
 
 vi.mock('vue', () => ({
-  computed: vi.fn((fn: () => any) => ({ value: fn() })),
+  computed: vi.fn((fn: () => any) => ({ get value() { return fn() } })),
   onMounted: vi.fn((cb: () => void) => cb()),
   onUnmounted: vi.fn(),
 }))
@@ -105,6 +105,44 @@ describe('useSkewProtection', () => {
       hook(msg)
     }
   }
+
+  it('updates state without requiring an outdated callback', async () => {
+    const { result } = await setup()
+    const manifest = { id: 'server-v2', timestamp: Date.now() }
+    await mockCallHook('app:manifest:update', manifest)
+    expect(result.manifest.value).toEqual(manifest)
+    expect(result.isAppOutdated.value).toBe(true)
+  })
+
+  it('waits for async outdated callbacks', async () => {
+    const { result } = await setup()
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let settled = false
+    result.onAppOutdated(() => pending)
+    const update = mockCallHook('app:manifest:update', { id: 'server-v2' }).then(() => {
+      settled = true
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(settled).toBe(false)
+    release()
+    await update
+    expect(settled).toBe(true)
+  })
+
+  it('retries the same server version after all failed checks finish', async () => {
+    mockFetch.mockRejectedValue(new Error('offline'))
+    await setup()
+    simulateMessage({ type: 'connected', version: 'server-v2' })
+    await vi.advanceTimersByTimeAsync(300_000)
+    mockFetch.mockResolvedValue({ id: 'server-v2' })
+    mockFetch.mockClear()
+    simulateMessage({ type: 'connected', version: 'server-v2' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
 
   describe('queue restart prevention on reconnection', () => {
     it('does not restart the backoff queue when reconnection sends duplicate version mismatch', async () => {

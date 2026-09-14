@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const connectedState = { value: false }
+const appHook = vi.fn()
+
 let cookieConfig: false | Record<string, unknown> = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
 
 // Mock nuxt/app
 vi.mock('nuxt/app', () => ({
   useNuxtApp: vi.fn(() => ({
-    hook: vi.fn(),
+    hook: appHook,
+    hooks: { callHook: vi.fn() },
   })),
   useRuntimeConfig: vi.fn(() => ({
     app: { buildId: 'test-build-id' },
@@ -15,6 +19,7 @@ vi.mock('nuxt/app', () => ({
       },
     },
   })),
+  useState: vi.fn(() => connectedState),
   useCookie: vi.fn(() => ({ value: null })),
 }))
 
@@ -31,6 +36,7 @@ vi.mock('../../src/runtime/shared/logger', () => ({
 
 describe('createSkewConnection', () => {
   beforeEach(() => {
+    connectedState.value = false
     cookieConfig = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
     vi.clearAllMocks()
     vi.stubGlobal('window', { addEventListener: vi.fn() })
@@ -120,6 +126,52 @@ describe('createSkewConnection', () => {
 
     connection.connect()
     expect(setupFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('can retry after setup throws', async () => {
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn().mockImplementationOnce(() => {
+      throw new Error('setup failed')
+    }).mockReturnValue(undefined)
+    const connection = createSkewConnection({ name: 'Test', setup })
+    expect(() => connection.connect()).toThrow('setup failed')
+    connection.connect()
+    expect(setup).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not use the previous connection ID after reconnecting', async () => {
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const fetch = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('fetch', fetch)
+    const setup = vi.fn().mockImplementationOnce((onMessage) => {
+      onMessage({ type: 'connected', connectionId: 'old-connection' })
+    })
+    const connection = createSkewConnection({ name: 'Test', setup })
+    connection.connect()
+    connection.disconnect()
+    connection.connect()
+    connection.sendRoute('/next')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('updates connection state when an app error closes the transport', async () => {
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const connection = createSkewConnection({ name: 'Test', setup: vi.fn() })
+    connection.connect()
+    expect(connectedState.value).toBe(true)
+    appHook.mock.calls.find(([name]) => name === 'app:error')![1]()
+    expect(connectedState.value).toBe(false)
+    connection.connect()
+    expect(connectedState.value).toBe(true)
+  })
+
+  it('opens a new transport when restored app state says connected', async () => {
+    connectedState.value = true
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn()
+    const connection = createSkewConnection({ name: 'Test', setup })
+    connection.connect()
+    expect(setup).toHaveBeenCalledTimes(1)
   })
 
   it('returns buildId from runtime config', async () => {

@@ -693,7 +693,7 @@ export {}
           const assets = await assetManager.getAssetsFromBuild(publicDir)
 
           // Update versions manifest
-          const { isExistingVersion } = await assetManager.updateVersionsManifest(buildId, assets)
+          await assetManager.updateVersionsManifest(buildId, assets)
 
           if (options.bundleAssets) {
             // Get release info for logging
@@ -744,7 +744,7 @@ export {}
               logger.log(`Restoring build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
             }
 
-            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets, isExistingVersion)
+            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets)
           }
 
           // Augment Nuxt build metadata files with skew protection data

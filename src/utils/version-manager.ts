@@ -145,15 +145,7 @@ async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
         return manifest as VersionManifest
       return emptyManifest
     })
-    .catch((e: unknown) => {
-      const message = e instanceof Error ? e.message : String(e)
-      const cause = e instanceof Error ? (e.cause as Error | undefined)?.message || '' : ''
-      // Connection errors should throw, not return empty manifest
-      if (cause.includes('ENOTFOUND') || cause.includes('ECONNREFUSED') || message.includes('401') || message === 'fetch failed')
-        throw formatStorageError(e, 'read')
-      // Other errors (not found, etc.) return empty manifest
-      return emptyManifest
-    })
+    .catch((e: unknown) => { throw formatStorageError(e, 'read') })
 }
 
 // Update the manifest
@@ -243,7 +235,7 @@ export function createAssetManager(options: {
     const manifest = await getVersionManifest(storage)
     logger.debug(`updateVersionsManifest: loaded manifest in ${formatDuration(Date.now() - manifestStart)} (${Object.keys(manifest.versions).length} versions)`)
 
-    // Check if this version already exists (for skipping restoration later)
+    // Check if this version already exists.
     const isExistingVersion = !!manifest.versions[buildId]
     const previousVersionId = manifest.current && manifest.current !== buildId
       ? manifest.current
@@ -395,10 +387,7 @@ export function createAssetManager(options: {
 
       // Store the file in current build's storage
       const assetPath = join(publicDir, asset)
-      const assetData = await fs.readFile(assetPath).catch((error) => {
-        logger.debug(`Failed to read ${assetPath}: ${error}`)
-        return null
-      })
+      const assetData = await fs.readFile(assetPath)
 
       if (assetData) {
         totalBytes += assetData.byteLength
@@ -459,7 +448,7 @@ export function createAssetManager(options: {
     }))
   }
 
-  async function restoreOldAssetsToPublic(currentBuildId: string, publicDir: string, currentAssets: string[] = [], isExistingVersion = false) {
+  async function restoreOldAssetsToPublic(currentBuildId: string, publicDir: string, currentAssets: string[] = []) {
     const startTime = Date.now()
     logger.debug(`restoreOldAssetsToPublic: starting for ${currentBuildId}`)
 
@@ -469,13 +458,6 @@ export function createAssetManager(options: {
 
     if (!manifest || !manifest.versions) {
       logger.debug(`restoreOldAssetsToPublic: no manifest or versions, skipping`)
-      return
-    }
-
-    // If this build ID already existed before this build, no need to restore
-    // because the assets are already in place
-    if (isExistingVersion) {
-      logger.debug(`restoreOldAssetsToPublic: build ${currentBuildId} already exists, skipping restore`)
       return
     }
 

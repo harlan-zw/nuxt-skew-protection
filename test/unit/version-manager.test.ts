@@ -127,6 +127,21 @@ describe('version Manager', () => {
     })
   })
 
+  it('does not overwrite history when reading storage fails', async () => {
+    const driver = await resolveBuildTimeDriver({ driver: 'memory' })
+    driver.getItem = vi.fn().mockRejectedValue(new Error('WRONGPASS invalid credentials'))
+    driver.setItem = vi.fn()
+    const manager = createAssetManager({ driver })
+    await expect(manager.updateVersionsManifest('v2', [])).rejects.toThrow('Authentication failed')
+    expect(driver.setItem).not.toHaveBeenCalled()
+  })
+
+  it('fails when an asset disappears before storage', async () => {
+    const manager = createAssetManager({ driver: await resolveBuildTimeDriver({ driver: 'memory' }) })
+    await manager.updateVersionsManifest('v1', ['_nuxt/missing.js'])
+    await expect(manager.storeAssetsInStorage('v1', outputDir, ['_nuxt/missing.js'])).rejects.toThrow()
+  })
+
   describe('version Manifest Updates', () => {
     it('should create new version in manifest', async () => {
       const manager = createAssetManager({
@@ -621,31 +636,20 @@ describe('version Manager', () => {
       expect(v1Exists).toBe(true)
     })
 
-    it('should skip restoration when version already existed', async () => {
-      const manager = createAssetManager({
-        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: true, rootDir: testDir }),
-        debug: true,
-      })
-
-      const nuxtDir = join(outputDir, 'public', '_nuxt')
-      await mkdir(nuxtDir, { recursive: true })
-
-      const asset = '_nuxt/entry.ABC123.js'
-      await writeFile(join(outputDir, 'public', asset), 'content')
-
-      // First build
-      await manager.updateVersionsManifest('v1', [asset])
-      await manager.storeAssetsInStorage('v1', join(outputDir, 'public'), [asset])
-
-      // Rebuild same version
-      const result2 = await manager.updateVersionsManifest('v1', [asset])
-
-      // Should detect as existing version
-      expect(result2.isExistingVersion).toBe(true)
-
-      // Restoration should be skipped
-      await manager.restoreOldAssetsToPublic('v1', join(outputDir, 'public'), [asset], result2.isExistingVersion)
-      // No error should occur
+    it('restores old assets into a clean rebuild of an existing version', async () => {
+      const manager = createAssetManager({ driver: await resolveBuildTimeDriver({ driver: 'memory' }) })
+      const publicDir = join(outputDir, 'public')
+      const oldAsset = '_nuxt/old.js'
+      const currentAsset = '_nuxt/current.js'
+      await mkdir(join(publicDir, '_nuxt'), { recursive: true })
+      await writeFile(join(publicDir, oldAsset), 'old content')
+      await manager.updateVersionsManifest('v1', [oldAsset])
+      await manager.storeAssetsInStorage('v1', publicDir, [oldAsset])
+      await manager.updateVersionsManifest('v2', [currentAsset])
+      await rm(join(publicDir, oldAsset))
+      await manager.updateVersionsManifest('v2', [currentAsset])
+      await manager.restoreOldAssetsToPublic('v2', publicDir, [currentAsset])
+      expect(await readFile(join(publicDir, oldAsset), 'utf8')).toBe('old content')
     })
   })
 
@@ -806,6 +810,7 @@ describe('version Manager', () => {
 
       const assets = ['_nuxt/v2/entry.CURRENT.js']
       await manager.updateVersionsManifest(buildId, assets)
+      await writeFile(join(outputDir, 'public', assets[0]!), 'current chunk')
       await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
       await manager.augmentBuildMetadata(buildId, join(outputDir, 'public'))
 
@@ -858,6 +863,7 @@ describe('version Manager', () => {
 
       const assets = ['_nuxt/entry.ABC123.js']
       await manager.updateVersionsManifest(buildId, assets)
+      await writeFile(join(outputDir, 'public', assets[0]!), 'current chunk')
       await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
       await manager.augmentBuildMetadata(buildId, join(outputDir, 'public'))
 

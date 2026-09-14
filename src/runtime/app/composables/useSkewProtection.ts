@@ -53,15 +53,17 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     onTick: () => nuxtApp.runWithContext(checkForUpdates),
   })
 
+  const stopManifest = nuxtApp.hooks.hook('app:manifest:update', (meta) => {
+    manifest.value = meta
+  })
+
   // Auto-connect on mount unless lazy
   if (!lazy) {
-    onMounted(() => {
-      nuxtApp.$skewConnection?.connect()
-    })
+    onMounted(connect)
   }
 
   // Listen for version updates from connection
-  nuxtApp.hooks.hook('skew:message', (msg) => {
+  const stopMessages = nuxtApp.hooks.hook('skew:message', (msg) => {
     if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
       return
     if (msg.version) {
@@ -72,7 +74,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
 
     // Skip if we've already started checking for this server version
     // (e.g., SSE/WS reconnection resends the same CONNECTED message)
-    if (msg.version === lastDetectedServerVersion)
+    if (msg.version === lastDetectedServerVersion && (queue.isRunning() || msg.version === lastProcessedManifestId))
       return
 
     lastDetectedServerVersion = msg.version as string
@@ -80,17 +82,21 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     queue.start()
   })
 
+  onUnmounted(() => {
+    stopManifest()
+    stopMessages()
+    queue.clear()
+  })
+
   function connect() {
-    if (!import.meta.client || isConnected.value)
+    if (!import.meta.client || isConnected.value || !nuxtApp.$skewConnection)
       return
-    isConnected.value = true
-    nuxtApp.$skewConnection?.connect()
+    nuxtApp.$skewConnection.connect()
   }
 
   function disconnect() {
     if (!import.meta.client || !isConnected.value)
       return
-    isConnected.value = false
     queue.clear()
     nuxtApp.$skewConnection?.disconnect()
   }
@@ -114,7 +120,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
     const hook = nuxtApp.hooks.hook('app:manifest:update', (_manifest) => {
       manifest.value = _manifest
-      callback(_manifest)
+      return callback(_manifest)
     })
 
     onUnmounted(() => {

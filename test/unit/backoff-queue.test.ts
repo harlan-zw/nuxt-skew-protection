@@ -90,6 +90,13 @@ describe('createBackoffQueue', () => {
     expect(queue.isRunning()).toBe(false)
   })
 
+  it('stops running after the last timer fires', () => {
+    const queue = createBackoffQueue({ delays: [0, 100], onTick: vi.fn() })
+    queue.start()
+    vi.advanceTimersByTime(100)
+    expect(queue.isRunning()).toBe(false)
+  })
+
   it('handles empty delays array', () => {
     const onTick = vi.fn()
     const queue = createBackoffQueue({

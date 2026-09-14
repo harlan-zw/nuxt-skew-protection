@@ -59,6 +59,9 @@ describe('retained chunks on the node preset', () => {
     await writeFile(appPath, page('second deploy, entirely different'), 'utf-8')
     await build(fixtureDir, 'dpl-retained-2')
 
+    // Rebuilding the same deployment must restore assets into its fresh output.
+    await build(fixtureDir, 'dpl-retained-2')
+
     // A server left behind by an interrupted run answers 404 for everything.
     await execAsync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`)
     server = await startServer(fixtureDir, port)

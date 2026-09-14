@@ -1,7 +1,7 @@
 import type { CookieOptions } from 'nuxt/app'
 import type { SkewProtectionRuntimeConfig } from '../../types'
 import type { SkewConnection } from '../types'
-import { useCookie, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { useCookie, useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
 import { useBotDetection } from '#imports'
 import { SKEW_MESSAGE_TYPE } from '../../const'
 import { init, logger } from '../../shared/logger'
@@ -32,6 +32,8 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   // Skip connection for bots using @nuxtjs/robots detection
   const { isBot } = useBotDetection()
+  const isConnected = useState('skew-connected', () => false)
+  isConnected.value = false
 
   // Endpoint prefix for the SSE-fallback POST routes (`/route`,
   // `/subscribe-stats`). Mirrors the server route registration so a sub-path
@@ -59,7 +61,6 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   let cleanup: (() => void) | void
   let sendFn: ((data: unknown) => void) | undefined
-  let isConnected = false
   let connectionId: string | undefined
 
   const handleMessage = (msg: SkewMessage) => {
@@ -71,11 +72,11 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   }
 
   const connect = () => {
-    if (isConnected)
+    if (isConnected.value)
       return
-    isConnected = true
     logger.debug(`[${name}] Connecting`)
     const result = setup(handleMessage)
+    isConnected.value = true
     if (result && typeof result === 'object') {
       cleanup = result.cleanup
       sendFn = result.send
@@ -86,21 +87,25 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   }
 
   const disconnect = () => {
-    if (!isConnected)
+    if (!isConnected.value)
       return
-    isConnected = false
+    isConnected.value = false
     logger.debug(`[${name}] Disconnecting`)
-    cleanup?.()
+    const close = cleanup
+    cleanup = undefined
+    sendFn = undefined
+    connectionId = undefined
+    close?.()
   }
 
   const send = (data: unknown) => {
-    if (!isConnected || !sendFn)
+    if (!isConnected.value || !sendFn)
       return
     sendFn(data)
   }
 
   const sendRoute = (route: string) => {
-    if (!isConnected)
+    if (!isConnected.value)
       return
     // If we have a send function (WebSocket), use it directly
     if (sendFn) {
@@ -119,7 +124,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   }
 
   const subscribeStats = () => {
-    if (!isConnected || !connectionId)
+    if (!isConnected.value || !connectionId)
       return
     // Use WebSocket message if available (required for cloudflare-durable), fallback to POST for SSE
     if (sendFn) {
