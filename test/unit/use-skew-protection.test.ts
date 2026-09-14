@@ -265,7 +265,7 @@ describe('useSkewProtection', () => {
   })
 
   describe('reduced broadcast manifest retention', () => {
-    it('upgrades a reduced cross-tab broadcast to the fetched full manifest without re-firing the hook', async () => {
+    it('delivers the fetched full manifest to consumers that only saw the reduced broadcast', async () => {
       const timestamp = Date.now()
       const fullManifest = {
         id: 'server-v2',
@@ -277,15 +277,36 @@ describe('useSkewProtection', () => {
       // Another tab broadcasts the reduced payload; the retained hook stores it
       await mockCallHook('app:manifest:update', { type: 'version-update', id: 'server-v2', timestamp })
 
+      // A consumer (e.g. the service worker plugin) mounts in this tab
+      const seen: any[] = []
+      result.onAppOutdated(m => seen.push(m))
+
       // This tab's own check fetches the full manifest with the same id
       mockFetch.mockResolvedValue(fullManifest)
       await result.checkForUpdates()
 
+      // The consumer must receive the full manifest so chunk detection can run
+      expect(seen.at(-1)?.skewProtection?.versions).toEqual(fullManifest.skewProtection.versions)
       expect(result.manifest.value).toEqual(fullManifest)
-      const manifestUpdateCalls = mockCallHook.mock.calls.filter(
-        ([name]) => name === 'app:manifest:update',
-      )
-      expect(manifestUpdateCalls).toHaveLength(1)
+    })
+
+    it('does not downgrade a fetched full manifest when a same-id broadcast arrives later', async () => {
+      const timestamp = Date.now()
+      const fullManifest = {
+        id: 'server-v2',
+        timestamp,
+        skewProtection: { versions: { 'server-v2': { timestamp } } },
+      }
+      const { result } = await setup()
+
+      // This tab's own check fetched and stored the full manifest first
+      mockFetch.mockResolvedValue(fullManifest)
+      await result.checkForUpdates()
+
+      // A later cross-tab broadcast with the same id must not downgrade it
+      await mockCallHook('app:manifest:update', { type: 'version-update', id: 'server-v2', timestamp })
+
+      expect(result.manifest.value).toEqual(fullManifest)
     })
   })
 

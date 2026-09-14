@@ -57,9 +57,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
         await nuxtApp.hooks.callHook('app:manifest:update', meta)
       }
       else if (!manifest.value.skewProtection && meta.skewProtection) {
-        // A cross-tab broadcast retains a reduced payload; upgrade it to the
-        // fetched full manifest without notifying consumers again.
+        // Consumers only saw the reduced cross-tab broadcast; deliver the full
+        // manifest so chunk-invalidation detection can run.
         manifest.value = meta
+        await nuxtApp.hooks.callHook('app:manifest:update', meta)
       }
     }
   }
@@ -74,6 +75,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   // Connections outlive components. Retain update state even without a mounted consumer.
   if (firstConsumer) {
     nuxtApp.hooks.hook('app:manifest:update', (meta) => {
+      // A same-id payload is an echo of what consumers already received; a
+      // reduced cross-tab broadcast must not downgrade a stored full manifest.
+      if (!meta || meta.id === manifest.value?.id)
+        return
       manifest.value = meta
     })
     nuxtApp.hooks.hook('skew:chunks-outdated', (payload) => {
