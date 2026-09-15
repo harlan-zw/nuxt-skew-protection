@@ -1,5 +1,7 @@
 import type { UseEventSourceOptions, UseWebSocketOptions } from '@vueuse/core'
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import type { Ref } from 'vue'
+import type { BackoffQueue } from './utils/backoff-queue'
 
 export interface SkewWebSocketConfig {
   url: string
@@ -30,4 +32,11 @@ export interface SkewConnection {
   subscribeStats: () => void
   buildId: string
   cookie?: Ref<string | null | undefined>
+}
+
+/** Detection work belongs to the app, independently of mounted consumers. */
+export interface SkewVersionDetection {
+  queue: BackoffQueue
+  lastDetectedServerVersion: string | undefined
+  inFlight: Promise<NuxtAppManifestMeta | null> | undefined
 }

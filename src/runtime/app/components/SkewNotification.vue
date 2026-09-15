@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChunksOutdatedPayload } from '../../types'
 import { useTimeAgo } from '@vueuse/core'
-import { reloadNuxtApp, useNuxtApp } from 'nuxt/app'
+import { reloadNuxtApp, useNuxtApp, useState } from 'nuxt/app'
 import { computed, ref } from 'vue'
 import { useSkewProtection } from '../composables/useSkewProtection'
 
@@ -39,7 +39,13 @@ const isOnline = skewProtection.isOnline
 const chunksOutdated = ref(false)
 const appOutdated = ref(false)
 const outdatedPayload = ref<ChunksOutdatedPayload | null>(null)
-const dismissed = ref(false)
+// Share dismissal across remounts without hiding a later deployment.
+const dismissedUpdate = useState<string | undefined>('skew-dismissed-update', () => undefined)
+const updateKey = computed(() => JSON.stringify([
+  skewProtection.manifest.value?.id ?? version,
+  outdatedPayload.value?.passedReleases.at(-1),
+]))
+const dismissed = computed(() => dismissedUpdate.value === updateKey.value)
 
 // Listen for chunks outdated events
 skewProtection.onCurrentChunksOutdated((payload) => {
@@ -95,8 +101,7 @@ const timeAgo = useTimeAgo(releaseTimestamp, {
 })
 
 function handleDismiss() {
-  dismissed.value = true
-  chunksOutdated.value = false
+  dismissedUpdate.value = updateKey.value
   emit('dismiss')
 }
 

@@ -25,6 +25,41 @@ describe('skew-notification', () => {
       await stopServer(serverProc)
   })
 
+  it.each(['app:manifest:update', 'skew:chunks-outdated'])('preserves pending updates and dismissal across remounts for %s', async (event) => {
+    const browser = await chromium.launch({ headless: true })
+    const page = await browser.newPage({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    })
+    try {
+      await page.goto(`http://localhost:${port}`)
+      await page.waitForSelector('[data-testid="toggle-notification"]')
+      await page.click('[data-testid="toggle-notification"]')
+      await page.evaluate(async (event) => {
+        const app = (window as any).__TEST_NUXT_APP__
+        await app.hooks.callHook(event, event === 'app:manifest:update'
+          ? { id: 'pending-v2', timestamp: Date.now() }
+          : { deletedChunks: ['old.js'], invalidatedModules: ['old.js'], passedReleases: ['pending-v2'] })
+      }, event)
+      await page.click('[data-testid="toggle-notification"]')
+      await page.waitForSelector('[data-testid="skew-notification"]')
+      await page.click('[data-testid="dismiss-btn"]')
+      await page.waitForSelector('[data-testid="skew-notification"]', { state: 'detached' })
+      await page.click('[data-testid="toggle-notification"]')
+      await page.click('[data-testid="toggle-notification"]')
+      expect(await page.$('[data-testid="skew-notification"]')).toBeNull()
+      await page.evaluate(async (event) => {
+        const app = (window as any).__TEST_NUXT_APP__
+        await app.hooks.callHook(event, event === 'app:manifest:update'
+          ? { id: 'pending-v3', timestamp: Date.now() }
+          : { deletedChunks: ['other.js'], invalidatedModules: ['other.js'], passedReleases: ['pending-v3'] })
+      }, event)
+      await page.waitForSelector('[data-testid="skew-notification"]')
+    }
+    finally {
+      await browser.close()
+    }
+  }, 30000)
+
   it('shows notification when app:manifest:update hook fires', async () => {
     const browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({
