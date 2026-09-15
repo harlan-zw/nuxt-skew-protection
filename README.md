@@ -4,32 +4,32 @@
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-> Solve Nuxt version skew with persistent assets and instant updates.
+> Keep old build assets available and notify users when their app needs an update.
 
 ## Why Nuxt Skew Protection?
 
-**Version skew** is a mismatch between your deployed build and the chunks running in user browsers and crawler sessions. It can lead to several issues:
+**Version skew** happens when a browser or crawler still uses chunks from an older deployment. You may see:
 
-- 🕷️ **Crawlers 404 on stale chunks** - Googlebot requests `_nuxt/builds/abc123.js` which no longer exists post-deploy, logging 500s and potentially impacting indexing
-- 💥 **ChunkLoadError in production** - Users mid-session get `Failed to fetch dynamically imported module` when navigating to routes with invalidated chunks
-- 🔄 **Delayed rollout** - Your latest release sits unloaded until users hard refresh, sometimes hours or days later
+- 🕷️ **Crawlers 404 on stale chunks**: Googlebot requests a chunk that no longer exists after deployment.
+- 💥 **ChunkLoadError in production**: Users see `Failed to fetch dynamically imported module` when a route needs a deleted chunk.
+- 🔄 **Delayed rollout**: Users keep running an old version until they refresh.
 
-Nuxt's built-in behavior (hard-reload when it detects a new deployment) helps, but in many cases it's [not enough](https://github.com/nuxt/nuxt/issues/29624).
+Nuxt can reload the page after detecting a new deployment. It still has [limits](https://github.com/nuxt/nuxt/issues/29624).
 
-Nuxt Skew Protection solves this with proactive update prompts and persistent build assets across deploys.
+Nuxt Skew Protection keeps previous build assets available across deployments and provides update notification logic.
 
 ## Features
 
-- 🕷️ **Persistent Build Assets** - Previous build artifacts remain accessible, so crawlers and stale sessions never hit dead ends.
-- ⚡ **Instant Update Prompts** - Zero-config real-time notifications on deploy. Users adopt your latest build immediately.
-- 🎯 **Chunk-Aware Targeting** - Notifications fire only when the user's loaded chunks are invalidated. No noise for unrelated updates.
-- 🎨 **Headless UI** - Drop-in notification component with first-class Nuxt UI support.
-- 📊 **Live Connection Monitoring** - Track active users and version distribution in real-time for admin dashboards and rollout progress.
-- 🔌 **Third-Party Adapters** - Real-time updates on any platform (including static sites) via [Pusher](https://pusher.com) or [Ably](https://ably.com).
+- 🕷️ **Persistent Build Assets**: Keep previous build assets available for crawlers and users on old versions.
+- ⚡ **Instant Update Prompts**: Detect deployments through polling, SSE, WebSockets, or an external provider.
+- 🎯 **Chunk-Aware Targeting**: Prompt users when a deployment invalidates their loaded chunks.
+- 🎨 **Headless UI**: Use the headless notification component with your own template or a Nuxt UI example.
+- 📊 **Live Connection Monitoring**: Track active users and version distribution in real-time for admin dashboards and rollout progress.
+- 🔌 **Third-Party Adapters**: Real-time updates on any platform (including static sites) via [Pusher](https://pusher.com) or [Ably](https://ably.com).
 
 ## Installation
 
-Install `nuxt-skew-protection` dependency to your project:
+Add `nuxt-skew-protection` to your project:
 
 ```bash
 npx nuxi@latest module add nuxt-skew-protection
@@ -43,7 +43,7 @@ npx nuxi@latest module add nuxt-skew-protection
 
 ## Documentation
 
-[📖 Read the full documentation](https://nuxtseo.com/skew-protection) for more information.
+[📖 Read the documentation](https://nuxtseo.com/skew-protection).
 
 ## Sponsors
 
