@@ -17,6 +17,7 @@ export default defineNuxtPlugin({
     const nuxtApp = useNuxtApp()
     const config = useRuntimeConfig().public.skewProtection as {
       multiTab?: boolean
+      basePath?: string
       reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
     }
 
@@ -61,26 +62,24 @@ export default defineNuxtPlugin({
     if (config.multiTab === false || typeof BroadcastChannel === 'undefined')
       return
 
-    const channel = new BroadcastChannel(CHANNEL_NAME)
+    const channel = new BroadcastChannel(`${CHANNEL_NAME}:${config.basePath || '/__skew'}`)
 
     // Guard to prevent re-broadcasting messages received from other tabs
-    let receivedFromChannel = false
+    const receivedFromChannel = new WeakSet<object>()
 
     // When this tab detects an update, broadcast to other tabs
     const stopBroadcasting = nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
-      if (receivedFromChannel) {
-        receivedFromChannel = false
+      if (!manifest || receivedFromChannel.has(manifest))
         return
-      }
       logger.debug('[MultiTab] Broadcasting version update to other tabs')
-      channel.postMessage({ type: 'version-update', id: manifest?.id, timestamp: manifest?.timestamp })
+      channel.postMessage({ ...manifest, type: 'version-update' })
     })
 
     // When another tab broadcasts an update, trigger hooks locally
     channel.onmessage = (event) => {
       if (event.data?.type === 'version-update' && event.data.id) {
         logger.debug('[MultiTab] Received version update from another tab')
-        receivedFromChannel = true
+        receivedFromChannel.add(event.data)
         nuxtApp.hooks.callHook('app:manifest:update', event.data)
       }
     }

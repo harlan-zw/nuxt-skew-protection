@@ -54,6 +54,7 @@ function createMockNuxtApp() {
   }
 }
 
+let mockBasePath = '/__skew'
 let mockNuxtApp = createMockNuxtApp()
 
 vi.mock('nuxt/app', () => ({
@@ -63,6 +64,7 @@ vi.mock('nuxt/app', () => ({
   useRuntimeConfig: vi.fn(() => ({
     public: {
       skewProtection: {
+        basePath: mockBasePath,
         multiTab: true,
         reloadStrategy: 'prompt',
       },
@@ -76,6 +78,7 @@ vi.mock('../../src/runtime/shared/logger', () => ({
 
 describe('multi-tab plugin', () => {
   beforeEach(() => {
+    mockBasePath = '/__skew'
     mockHooks.clear()
     mockCallHook.mockClear()
     mockHookFn.mockClear()
@@ -110,6 +113,28 @@ describe('multi-tab plugin', () => {
     })
   })
 
+  it('broadcasts chunk metadata to other tabs', async () => {
+    await setupPlugin()
+    const manifest = {
+      id: 'v2',
+      timestamp: 12345,
+      skewProtection: { versions: { v2: { deletedChunks: ['_nuxt/old.js'] } } },
+    }
+    await mockCallHook('app:manifest:update', manifest)
+    expect(MockBroadcastChannel.instances[0].postMessage).toHaveBeenCalledWith({ type: 'version-update', ...manifest })
+  })
+
+  it('does not deliver updates to another app on the same origin', async () => {
+    await setupPlugin()
+    const first = MockBroadcastChannel.instances[0]
+    mockHooks.clear()
+    mockBasePath = '/dashboard/__skew'
+    await setupPlugin()
+    mockCallHook.mockClear()
+    first.postMessage({ type: 'version-update', id: 'v2' })
+    expect(mockCallHook).not.toHaveBeenCalled()
+  })
+
   it('triggers app:manifest:update when receiving broadcast from another tab', async () => {
     await setupPlugin()
 
@@ -136,6 +161,16 @@ describe('multi-tab plugin', () => {
     // This calls app:manifest:update, which should NOT re-broadcast
     channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
 
+    expect(channel.postMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not rebroadcast overlapping updates during async hooks', async () => {
+    mockHookFn('app:manifest:update', () => Promise.resolve())
+    await setupPlugin()
+    const channel = MockBroadcastChannel.instances[0]
+    channel.onmessage!({ data: { type: 'version-update', id: 'v2' } })
+    channel.onmessage!({ data: { type: 'version-update', id: 'v3' } })
+    await new Promise(resolve => setTimeout(resolve, 0))
     expect(channel.postMessage).not.toHaveBeenCalled()
   })
 

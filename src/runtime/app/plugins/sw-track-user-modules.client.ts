@@ -219,11 +219,6 @@ export default defineNuxtPlugin({
         await new Promise(resolve => setTimeout(resolve, 100))
         await checkDeletedChunks(allDeletedChunks, passedReleases)
       }
-
-      // Reset loaded modules in service worker on version change
-      // TODO: Disabled for testing - may not be needed if we track properly
-      logger.debug('[SW] Resetting modules in service worker')
-      swRegistration.then(reg => reg.active?.postMessage({ type: 'RESET_MODULES' }))
     })
   },
 })

@@ -134,15 +134,10 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
   describe('version Manager with Redis', () => {
     it('should create version manifest in Redis', async () => {
-      const { createStorage } = await import('unstorage')
       const redisDriver = await import('unstorage/drivers/redis')
 
-      const storage = createStorage({
-        driver: redisDriver.default(redisConfig),
-      })
-
       const manager = createAssetManager({
-        storage,
+        driver: redisDriver.default(redisConfig),
         retentionDays: 7,
         debug: false,
       })
@@ -171,7 +166,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
       })
 
       const manager = createAssetManager({
-        storage,
+        driver: redisDriver.default(redisConfig),
         debug: false,
       })
 
@@ -183,8 +178,10 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/chunk-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `chunk ${i} content`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
       }
+
+      expect(Buffer.from(await storage.getItemRaw('build-1/_nuxt/chunk-1.ABC1.js')).toString()).toBe('chunk 1 content')
 
       // Verify both versions exist
       const versions = await manager.listExistingVersions()
@@ -194,15 +191,10 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
     })
 
     it('should handle multiple versions in Redis', async () => {
-      const { createStorage } = await import('unstorage')
       const redisDriver = await import('unstorage/drivers/redis')
 
-      const storage = createStorage({
-        driver: redisDriver.default(redisConfig),
-      })
-
       const manager = createAssetManager({
-        storage,
+        driver: redisDriver.default(redisConfig),
         debug: false,
       })
 
@@ -214,7 +206,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `version ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -235,7 +227,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
       })
 
       const manager = createAssetManager({
-        storage,
+        driver: redisDriver.default(redisConfig),
         retentionDays: 7,
         maxNumberOfVersions: 2,
         debug: false,
@@ -249,7 +241,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `version ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, outputDir, [asset])
+        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -269,19 +261,14 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
       const asset4 = await storage.getItemRaw('build-4/_nuxt/version-4.ABC4.js')
 
       expect(asset1).toBeNull()
-      expect(asset4).toBeDefined()
+      expect(Buffer.from(asset4).toString()).toBe('version 4')
     })
 
     it('should handle deduplication with Redis', async () => {
-      const { createStorage } = await import('unstorage')
       const redisDriver = await import('unstorage/drivers/redis')
 
-      const storage = createStorage({
-        driver: redisDriver.default(redisConfig),
-      })
-
       const manager = createAssetManager({
-        storage,
+        driver: redisDriver.default(redisConfig),
         debug: false,
       })
 
@@ -293,11 +280,11 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       // Build 1 with shared vendor
       await manager.updateVersionsManifest('build-1', [sharedAsset])
-      await manager.storeAssetsInStorage('build-1', outputDir, [sharedAsset])
+      await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), [sharedAsset])
 
       // Build 2 with same shared vendor - this triggers deduplication
       await manager.updateVersionsManifest('build-2', [sharedAsset])
-      await manager.storeAssetsInStorage('build-2', outputDir, [sharedAsset])
+      await manager.storeAssetsInStorage('build-2', join(outputDir, 'public'), [sharedAsset])
 
       // Get the updated versions list to see final state
       const versions = await manager.listExistingVersions()

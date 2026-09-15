@@ -67,9 +67,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
 
   // Auto-connect on mount unless lazy
   if (!lazy) {
-    onMounted(() => {
-      nuxtApp.$skewConnection?.connect()
-    })
+    onMounted(connect)
   }
 
   // Connections outlive components. Retain update state even without a mounted consumer.
@@ -91,7 +89,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
         serverVersion.value = msg.version as string
       if (!msg.version || msg.version === clientVersion)
         return
-      if (msg.version === detection.lastDetectedServerVersion)
+      if (msg.version === detection.lastDetectedServerVersion && (detection.queue.isRunning() || msg.version === manifest.value?.id))
         return
 
       detection.lastDetectedServerVersion = msg.version as string
@@ -101,16 +99,14 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   }
 
   function connect() {
-    if (!import.meta.client || isConnected.value)
+    if (!import.meta.client || isConnected.value || !nuxtApp.$skewConnection)
       return
-    isConnected.value = true
-    nuxtApp.$skewConnection?.connect()
+    nuxtApp.$skewConnection.connect()
   }
 
   function disconnect() {
     if (!import.meta.client || !isConnected.value)
       return
-    isConnected.value = false
     detection.queue.clear()
     nuxtApp.$skewConnection?.disconnect()
   }
