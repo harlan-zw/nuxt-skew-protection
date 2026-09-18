@@ -1,3 +1,9 @@
+## 1.5.4
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.5.3...v1.5.4)
+
+- fix(server): send x-robots-tag noindex on skew asset recovery (#59) ([6442865](https://github.com/harlan-zw/nuxt-skew-protection/commit/6442865b83c6af0b24bdb331c0b1ae317d38be23))
+
 # Changelog
 
 
