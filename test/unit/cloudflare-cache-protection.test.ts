@@ -291,6 +291,61 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
     expect(assetRequest.cache).toBe('no-cache')
   })
 
+  it('tags recovered assets with an x-robots-tag that blocks indexing', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('chunk'))
+    const recoveryRequest = new Request(
+      'https://example.com/__skew/asset?url=https%3A%2F%2Fexample.com%2F_nuxt%2Fentry.js',
+    )
+
+    const response = await fetchCloudflareBuildAsset(
+      recoveryRequest,
+      { fetch },
+      '/_nuxt/',
+      '/__skew/asset',
+    )
+
+    expect(response?.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(await response?.text()).toBe('chunk')
+  })
+
+  it('tags rejected recovery requests with an x-robots-tag that blocks indexing', async () => {
+    const response = await fetchCloudflareBuildAsset(
+      new Request('https://example.com/__skew/asset'),
+      { fetch: vi.fn() },
+      '/_nuxt/',
+      '/__skew/asset',
+    )
+
+    expect(response?.status).toBe(400)
+    expect(response?.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+  })
+
+  it('tags recovery misses with an x-robots-tag that blocks indexing', async () => {
+    const response = await fetchCloudflareBuildAsset(
+      new Request('https://example.com/__skew/asset?url=https%3A%2F%2Fexample.com%2F_nuxt%2Fentry.js'),
+      undefined,
+      '/_nuxt/',
+      '/__skew/asset',
+    )
+
+    expect(response?.status).toBe(404)
+    expect(response?.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+  })
+
+  it('leaves direct build asset responses without an x-robots-tag', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('chunk'))
+
+    const response = await fetchCloudflareBuildAsset(
+      new Request('https://example.com/_nuxt/entry.js'),
+      { fetch },
+      '/_nuxt/',
+      '/__skew/asset',
+    )
+
+    expect(await response?.text()).toBe('chunk')
+    expect(response?.headers.get('x-robots-tag')).toBe(null)
+  })
+
   it('rejects recovery requests for assets outside the configured origin and prefix', async () => {
     const fetch = vi.fn()
 

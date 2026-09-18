@@ -26,7 +26,7 @@ function protectMutableAsset(request: Request, response: Response) {
 }
 
 type ParsedBuildAssetRequest
-  = | { _tag: 'asset', request: Request }
+  = | { _tag: 'asset', request: Request, viaRecovery: boolean }
     | { _tag: 'invalid-recovery' }
     | { _tag: 'unmatched' }
 
@@ -38,7 +38,7 @@ function parseBuildAssetRequest(
   const requestUrl = new URL(request.url)
 
   if (requestUrl.pathname.startsWith(buildAssetsPath)) {
-    return { _tag: 'asset', request }
+    return { _tag: 'asset', request, viaRecovery: false }
   }
 
   if (requestUrl.pathname !== recoveryPath) {
@@ -74,7 +74,19 @@ function parseBuildAssetRequest(
       cache: 'no-cache',
       headers: request.headers,
     }),
+    viaRecovery: true,
   }
+}
+
+function deindexResponse(response: Response) {
+  const headers = new Headers(response.headers)
+  headers.set('x-robots-tag', 'noindex, nofollow')
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
 }
 
 export async function fetchCloudflareAsset(
@@ -110,12 +122,14 @@ export function fetchCloudflareBuildAsset(
   }
 
   if (parsed._tag === 'invalid-recovery') {
-    return Promise.resolve(disableCaching(new Response(null, { status: 400 })))
+    return Promise.resolve(deindexResponse(disableCaching(new Response(null, { status: 400 }))))
   }
 
   if (!assets) {
-    return Promise.resolve(disableCaching(new Response(null, { status: 404 })))
+    const miss = disableCaching(new Response(null, { status: 404 }))
+    return Promise.resolve(parsed.viaRecovery ? deindexResponse(miss) : miss)
   }
 
-  return fetchCloudflareAsset(parsed.request, assets)
+  const response = fetchCloudflareAsset(parsed.request, assets)
+  return parsed.viaRecovery ? response.then(deindexResponse) : response
 }
