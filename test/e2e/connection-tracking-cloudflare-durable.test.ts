@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { isCI } from 'std-env'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
+import { stopServer } from './utils'
 
 const execAsync = promisify(exec)
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
@@ -38,6 +39,7 @@ async function startWrangler(): Promise<ChildProcess> {
       cwd: fixtureDir,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     })
 
     const timeout = setTimeout(() => reject(new Error('Wrangler start timeout')), 60000)
@@ -58,17 +60,6 @@ async function startWrangler(): Promise<ChildProcess> {
       clearTimeout(timeout)
       reject(e)
     })
-  })
-}
-
-function stopWrangler(proc: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
-    proc.on('exit', () => resolve())
-    proc.kill('SIGTERM')
-    setTimeout(() => {
-      proc.kill('SIGKILL')
-      resolve()
-    }, 3000)
   })
 }
 
@@ -153,7 +144,7 @@ describe.skipIf(isCI).sequential('connection-tracking-cloudflare-durable', () =>
 
   afterAll(async () => {
     if (wranglerProc)
-      await stopWrangler(wranglerProc)
+      await stopServer(wranglerProc)
   })
 
   it('broadcasts stats when connection opens', async () => {

@@ -43,6 +43,9 @@ export function startServer(fixtureDir: string, port: number): Promise<ChildProc
       cwd: fixtureDir,
       env: { ...process.env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Own process group: `node` may be a shell wrapper, so stopServer must
+      // signal the whole group or the real server keeps the port.
+      detached: true,
     })
 
     const timeout = setTimeout(() => reject(new Error('Server start timeout')), 30000)
@@ -68,11 +71,23 @@ export function startServer(fixtureDir: string, port: number): Promise<ChildProc
 }
 
 export function stopServer(proc: ChildProcess): Promise<void> {
+  const signalGroup = (signal: NodeJS.Signals) => {
+    if (proc.pid === undefined)
+      return
+    try {
+      process.kill(-proc.pid, signal)
+    }
+    catch (err) {
+      // ESRCH: the group already exited, which is the goal.
+      if ((err as NodeJS.ErrnoException).code !== 'ESRCH')
+        throw err
+    }
+  }
   return new Promise((resolve) => {
     proc.on('exit', () => resolve())
-    proc.kill('SIGTERM')
+    signalGroup('SIGTERM')
     setTimeout(() => {
-      proc.kill('SIGKILL')
+      signalGroup('SIGKILL')
       resolve()
     }, 3000)
   })
