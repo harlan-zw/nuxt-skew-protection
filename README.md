@@ -3,6 +3,13 @@
 [![npm version][npm-version-src]][npm-version-href]
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
 [![Nuxt][nuxt-src]][nuxt-href]
+<a href="https://skilld.dev/gh/harlan-zw/nuxt-skew-protection">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://skilld.dev/b/harlan-zw/nuxt-skew-protection?theme=dark">
+    <source media="(prefers-color-scheme: light)" srcset="https://skilld.dev/b/harlan-zw/nuxt-skew-protection?theme=light">
+    <img alt="Skill repository on skilld.dev" src="https://skilld.dev/b/harlan-zw/nuxt-skew-protection?theme=light">
+  </picture>
+</a>
 
 > Keep old build assets available and notify users when their app needs an update.
 
@@ -36,10 +43,7 @@ npx nuxi@latest module add nuxt-skew-protection
 ```
 
 > [!TIP]
-> Generate an Agent Skill for this package using [skilld](https://github.com/harlan-zw/skilld):
-> ```bash
-> npx skilld add nuxt-skew-protection
-> ```
+> Using an AI agent? Get the nuxt-skew-protection Skill on [skilld.dev/gh/harlan-zw/nuxt-skew-protection](https://skilld.dev/gh/harlan-zw/nuxt-skew-protection).
 
 ## Documentation
 

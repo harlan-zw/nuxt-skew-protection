@@ -62,7 +62,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "skills"
   ],
   "scripts": {
     "lint": "eslint .",
