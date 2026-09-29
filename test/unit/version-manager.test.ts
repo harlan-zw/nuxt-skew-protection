@@ -220,10 +220,37 @@ describe('version Manager', () => {
 
       await manager.augmentBuildMetadata('v2', publicDir)
 
-      const latest = JSON.parse(await readFile(join(buildsDir, 'latest.json'), 'utf-8'))
+      const skew = JSON.parse(await readFile(join(buildsDir, 'skew', 'v2.json'), 'utf-8'))
       const manifest = await manager.getManifest()
       expect(manifest.versions.v2.assets).toEqual([])
-      expect(latest.skewProtection.versions.v2.deletedChunks).toEqual([oldChunk])
+      expect(skew.deletedChunks.v2).toEqual([oldChunk])
+    })
+
+    it('keeps latest.json small when every build replaces every chunk', async () => {
+      const manager = createAssetManager({
+        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }, { debug: false, rootDir: testDir }),
+        persistAssets: false,
+        debug: false,
+      })
+      const publicDir = join(outputDir, 'public')
+      const buildsDir = join(publicDir, '_nuxt', 'builds')
+      await mkdir(join(buildsDir, 'meta'), { recursive: true })
+      const chunksFor = (build: number) => Array.from({ length: 261 }, (_, i) => `_nuxt/b${build}c${i}.AbCdEfGh.js`)
+      const ids = Array.from({ length: 11 }, (_, i) => `build-${i}`)
+      for (const [i, id] of ids.entries())
+        await manager.updateVersionsManifest(id, chunksFor(i))
+      const currentId = ids.at(-1)!
+      await writeFile(join(buildsDir, 'latest.json'), JSON.stringify({ id: currentId, timestamp: 1 }))
+      await writeFile(join(buildsDir, 'meta', `${currentId}.json`), JSON.stringify({ id: currentId }))
+
+      await manager.augmentBuildMetadata(currentId, publicDir)
+
+      const latest = await readFile(join(buildsDir, 'latest.json'), 'utf-8')
+      expect(Buffer.byteLength(latest)).toBeLessThan(2048)
+      expect(Object.keys(JSON.parse(latest).skewProtection.versions)).toEqual(ids)
+      const skew = JSON.parse(await readFile(join(buildsDir, 'skew', `${currentId}.json`), 'utf-8'))
+      expect(skew.deletedChunks['build-1']).toEqual(chunksFor(0))
+      expect(skew.deletedChunks[currentId]).toEqual(chunksFor(9))
     })
 
     it('should calculate deleted chunks between versions', async () => {
@@ -870,9 +897,7 @@ describe('version Manager', () => {
       const augmentedData = await readFile(metaPath, 'utf-8')
       const augmented = JSON.parse(augmentedData)
 
-      expect(augmented.skewProtection).toBeDefined()
-      expect(augmented.skewProtection.deletedChunks).toBeDefined()
-      expect(augmented.skewProtection.timestamp).toBeDefined()
+      expect(augmented.skewProtection).toEqual({ timestamp: expect.any(String) })
     })
   })
 

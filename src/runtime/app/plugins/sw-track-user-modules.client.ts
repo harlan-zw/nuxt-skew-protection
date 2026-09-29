@@ -1,4 +1,6 @@
 import { defineNuxtPlugin } from 'nuxt/app'
+// @ts-expect-error virtual file
+import { buildAssetsURL } from '#internal/nuxt/paths'
 import { logger } from '../../shared/logger'
 import { useRuntimeConfigSkewProtection } from '../composables/useRuntimeConfigSkewProtection'
 import { useSkewProtection } from '../composables/useSkewProtection'
@@ -168,49 +170,36 @@ export default defineNuxtPlugin({
 
       logger.debug(`[SW] Version indices - current: ${currentIdx}, new: ${newIdx}`)
 
-      // Collect deleted chunks and release IDs from all versions between current and new (inclusive of new)
-      const allDeletedChunks: string[] = []
+      // Collect release IDs from all versions between current and new (inclusive of new)
       const passedReleases: string[] = []
 
       // If current version is missing (cleaned up or never tracked), check ALL versions
       if (currentIdx === -1) {
         logger.debug('[SW] Current version not found in manifest, checking all versions')
-        for (const version of sortedVersions) {
-          passedReleases.push(version.id)
-          const versionData = versions[version.id]
-          if (versionData?.deletedChunks) {
-            allDeletedChunks.push(...versionData.deletedChunks)
-          }
-        }
+        passedReleases.push(...sortedVersions.map(v => v.id))
       }
       // If new version is not in manifest, it's newer than all tracked versions - check all versions from current onwards
       else if (newIdx === -1) {
         logger.debug('[SW] New version not in manifest, checking all versions after current')
-        for (let i = currentIdx + 1; i < sortedVersions.length; i++) {
-          const version = sortedVersions[i]
-          if (version) {
-            passedReleases.push(version.id)
-            const versionData = versions[version.id]
-            if (versionData?.deletedChunks) {
-              allDeletedChunks.push(...versionData.deletedChunks)
-            }
-          }
-        }
+        passedReleases.push(...sortedVersions.slice(currentIdx + 1).map(v => v.id))
       }
       // Otherwise only check versions between current and new
       else {
         logger.debug(`[SW] Checking versions between current (${currentIdx}) and new (${newIdx})`)
-        for (let i = currentIdx + 1; i <= newIdx; i++) {
-          const version = sortedVersions[i]
-          if (version) {
-            passedReleases.push(version.id)
-            const versionData = versions[version.id]
-            if (versionData?.deletedChunks) {
-              allDeletedChunks.push(...versionData.deletedChunks)
-            }
-          }
-        }
+        passedReleases.push(...sortedVersions.slice(currentIdx + 1, newIdx + 1).map(v => v.id))
       }
+
+      if (passedReleases.length === 0)
+        return
+
+      // latest.json carries only timestamps; the deleted chunk lists live in a per-build file
+      const skewFile = await ($fetch(buildAssetsURL(`builds/skew/${newVersionId}.json`)) as Promise<{ deletedChunks?: Record<string, string[]> }>)
+        .catch((error: unknown) => {
+          logger.warn(`[SW] Could not fetch deleted chunks for ${newVersionId}, so the chunk check is skipped:`, error)
+          return undefined
+        })
+      const deletedChunksByVersion = skewFile?.deletedChunks || {}
+      const allDeletedChunks = passedReleases.flatMap(id => deletedChunksByVersion[id] || [])
 
       logger.debug(`[SW] Collected ${allDeletedChunks.length} deleted chunks across ${passedReleases.length} releases`)
 

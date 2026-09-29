@@ -12,6 +12,7 @@ vi.mock('../../src/runtime/app/composables/useSkewProtection', () => ({
 vi.mock('../../src/runtime/app/composables/useRuntimeConfigSkewProtection', () => ({
   useRuntimeConfigSkewProtection: () => ({ assetRecovery: { _tag: 'none' } }),
 }))
+vi.mock('#internal/nuxt/paths', () => ({ buildAssetsURL: (path: string) => `/_nuxt/${path}` }))
 vi.mock('../../src/runtime/shared/logger', () => ({ logger: { debug: vi.fn() } }))
 
 beforeEach(() => {
@@ -51,15 +52,20 @@ it('keeps loaded chunks available for later deployment checks', async () => {
   const { default: plugin } = await import('../../src/runtime/app/plugins/sw-track-user-modules.client')
   plugin.setup({ hooks: { callHook: mocks.callHook } } as never)
   const update = mocks.onAppOutdated.mock.calls[0]![0]
+  const fetchSkew = vi.fn((url: string) => Promise.resolve(
+    url === '/_nuxt/builds/skew/v3.json' ? { deletedChunks: { v3: ['_nuxt/old.js'] } } : { deletedChunks: {} },
+  ))
+  vi.stubGlobal('$fetch', fetchSkew)
   const versions = {
-    v1: { timestamp: '2026-09-01', deletedChunks: [] },
-    v2: { timestamp: '2026-09-02', deletedChunks: [] },
-    v3: { timestamp: '2026-09-03', deletedChunks: ['_nuxt/old.js'] },
+    v1: { timestamp: '2026-09-01' },
+    v2: { timestamp: '2026-09-02' },
+    v3: { timestamp: '2026-09-03' },
   }
   await update({ id: 'v2', skewProtection: { versions } })
   const next = update({ id: 'v3', skewProtection: { versions } })
   await vi.advanceTimersByTimeAsync(100)
   await next
+  expect(fetchSkew).toHaveBeenLastCalledWith('/_nuxt/builds/skew/v3.json')
   expect(mocks.callHook).toHaveBeenCalledWith('skew:chunks-outdated', {
     deletedChunks: ['_nuxt/old.js'],
     invalidatedModules: ['http://localhost/_nuxt/old.js'],

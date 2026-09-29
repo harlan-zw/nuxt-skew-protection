@@ -125,7 +125,7 @@ interface VersionManifest {
 2. **updateVersionsManifest()** - Adds current build to manifest, calculates deletedChunks
 3. **storeAssetsInStorage()** - Stores assets with deduplication (same hash = same file)
 4. **restoreOldAssetsToPublic()** - Copies old version assets back to public/ folder
-5. **augmentBuildMetadata()** - Adds skewProtection data to builds/latest.json
+5. **augmentBuildMetadata()** - Adds version timestamps to builds/latest.json and writes deleted chunks to builds/skew/{buildId}.json
 6. **cleanupExpiredVersions()** - Removes old versions based on retention policy
 7. **listExistingVersions()** - Returns all versions with creation timestamps
 
@@ -285,8 +285,8 @@ export default defineNitroPlugin((nitroApp) => {
 - Listens to `app:manifest:update` hook
 - When new version detected:
   1. Gets list of loaded modules from service worker
-  2. Extracts deletedChunks from builds/latest.json manifest
-  3. Collects all passed release IDs
+  2. Collects all passed release IDs from the builds/latest.json timestamps
+  3. Fetches deletedChunks from builds/skew/{newBuildId}.json
   4. Checks if any loaded modules are in deletedChunks
   5. If yes, fires `skew:chunks-outdated` hook
 
@@ -549,8 +549,10 @@ Instead of platform-specific implementations, the module uses a **single univers
 ### 5. Integration with Nuxt's Native Mechanisms
 
 **Builds metadata:**
-- Augments `builds/latest.json` with skewProtection data
-- Augments `builds/meta/{buildId}.json` with version-specific data
+- Augments `builds/latest.json` with the timestamp of each retained version
+- Augments `builds/meta/{buildId}.json` with the build timestamp
+- Writes `builds/skew/{buildId}.json` with the deleted chunks of each retained version
+- Every client polls `builds/latest.json`, so it never carries chunk lists
 - Works with Nuxt's existing `app:manifest:update` hook
 
 **Why this matters:**
@@ -627,10 +629,11 @@ Instead of platform-specific implementations, the module uses a **single univers
    │       Result: public/_nuxt/ contains ALL versions
    │
    ├─► Asset Manager: augmentBuildMetadata()
-   │   ├─► Adds skewProtection data to builds/latest.json:
-   │   │   { versions: {...} }
-   │   └─► Adds version-specific data to builds/meta/{buildId}.json:
-   │       { assets: [...], deletedChunks: [...] }
+   │   ├─► Adds version timestamps to builds/latest.json:
+   │   │   { versions: { [id]: { timestamp } } }
+   │   ├─► Adds the build timestamp to builds/meta/{buildId}.json
+   │   └─► Writes builds/skew/{buildId}.json:
+   │       { deletedChunks: { [id]: [...] } }
    │
    └─► Asset Manager: cleanupExpiredVersions()
        ├─► Remove versions older than retentionDays
@@ -678,8 +681,8 @@ Plugin: sw-track-user-modules.client.ts (service worker plugin)
 ├─► Listens to app:manifest:update hook
 ├─► When new version detected:
 │   ├─► Gets list of loaded modules from SW
-│   ├─► Gets deletedChunks from manifest
 │   ├─► Collects all passed release IDs
+│   ├─► Fetches deletedChunks from builds/skew/{newBuildId}.json
 │   ├─► Checks intersection
 │   └─► If user's modules are deleted:
 │       └─► Fire skew:chunks-outdated hook

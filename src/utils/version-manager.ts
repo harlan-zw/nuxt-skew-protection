@@ -603,57 +603,52 @@ export function createAssetManager(options: {
     logger.debug(`restoreOldAssetsToPublic: total ${formatDuration(Date.now() - startTime)}`)
   }
 
+  /**
+   * Nuxt clients poll builds/latest.json, so it carries only version timestamps.
+   * The deleted chunk lists go to builds/skew/{buildId}.json, which a client
+   * fetches only after it detects a new build.
+   */
   async function augmentBuildMetadata(buildId: string, publicDir: string) {
     const manifest = await getVersionManifest(storage)
+    const buildsDir = join(publicDir, buildAssetsDir, 'builds')
 
-    // Augment builds/latest.json
-    const latestPath = join(publicDir, buildAssetsDir, 'builds', 'latest.json')
-    let newLatestContent: string | undefined
-    try {
-      const latestData = await fs.readFile(latestPath, 'utf-8')
-      const latestJson = JSON.parse(latestData)
-
-      // Clean up versions - only expose what client needs
-      const clientVersions: Record<string, { timestamp: string, deletedChunks?: string[] }> = {}
-      for (const [versionId, versionData] of Object.entries(manifest.versions)) {
-        clientVersions[versionId] = {
-          timestamp: versionData.timestamp,
-          deletedChunks: versionData.deletedChunks,
-        }
-      }
-
-      latestJson.skewProtection = {
-        versions: clientVersions,
-      }
-
-      newLatestContent = JSON.stringify(latestJson, null, 2)
-      await fs.writeFile(latestPath, newLatestContent, 'utf-8')
-    }
-    catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to augment builds/latest.json: ${message}`)
+    const versions: Record<string, { timestamp: string }> = {}
+    const deletedChunks: Record<string, string[]> = {}
+    for (const [versionId, versionData] of Object.entries(manifest.versions)) {
+      versions[versionId] = { timestamp: versionData.timestamp }
+      if (versionData.deletedChunks?.length)
+        deletedChunks[versionId] = versionData.deletedChunks
     }
 
-    // Augment builds/meta/{buildId}.json
-    const metaPath = join(publicDir, buildAssetsDir, 'builds', 'meta', `${buildId}.json`)
-    try {
-      const metaData = await fs.readFile(metaPath, 'utf-8')
-      const metaJson = JSON.parse(metaData)
+    const latestPath = join(buildsDir, 'latest.json')
+    await fs.readFile(latestPath, 'utf-8')
+      .then(async (latestData) => {
+        const latestJson = JSON.parse(latestData)
+        latestJson.skewProtection = { versions }
+        await fs.writeFile(latestPath, JSON.stringify(latestJson), 'utf-8')
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`Failed to augment builds/latest.json: ${message}`)
+      })
 
-      const versionData = manifest.versions[buildId]
-      if (versionData) {
-        metaJson.skewProtection = {
-          deletedChunks: versionData.deletedChunks,
-          timestamp: versionData.timestamp,
-        }
-      }
+    const metaPath = join(buildsDir, 'meta', `${buildId}.json`)
+    await fs.readFile(metaPath, 'utf-8')
+      .then(async (metaData) => {
+        const metaJson = JSON.parse(metaData)
+        const timestamp = versions[buildId]?.timestamp
+        if (timestamp)
+          metaJson.skewProtection = { timestamp }
+        await fs.writeFile(metaPath, JSON.stringify(metaJson), 'utf-8')
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`Failed to augment builds/meta/${buildId}.json: ${message}`)
+      })
 
-      await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), 'utf-8')
-    }
-    catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to augment builds/meta/${buildId}.json: ${message}`)
-    }
+    const skewPath = join(buildsDir, 'skew', `${buildId}.json`)
+    await fs.mkdir(dirname(skewPath), { recursive: true })
+    await fs.writeFile(skewPath, JSON.stringify({ deletedChunks }), 'utf-8')
   }
 
   return {

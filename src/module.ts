@@ -297,9 +297,6 @@ declare module '#app' {
     skewProtection?: {
       versions?: Record<string, {
         timestamp: string
-        expires: string
-        assets: string[]
-        deletedChunks?: string[]
       }>
     }
   }
@@ -322,9 +319,6 @@ declare module 'nuxt/app' {
     skewProtection?: {
       versions?: Record<string, {
         timestamp: string
-        expires: string
-        assets: string[]
-        deletedChunks?: string[]
       }>
     }
   }
