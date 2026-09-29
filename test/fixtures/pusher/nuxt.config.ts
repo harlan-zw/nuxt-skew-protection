@@ -1,7 +1,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { pusherAdapter } from '../../../src/adapters/pusher'
 import Module from '../../../src/module'
+import { pusherAdapter } from '../../../src/runtime/adapters/pusher'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 

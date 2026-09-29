@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from '../../src/resolve-base-path'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRoute } from '../../src/resolve-base-path'
 
 describe('resolveBasePath', () => {
   it('defaults to /__skew for a standard single-app at the root', () => {
@@ -70,5 +70,32 @@ describe('resolveCookieName', () => {
 
   it('namespaces a custom basePath that has no skew segment', () => {
     expect(resolveCookieName(undefined, '/foo')).toBe('__nkpv_foo')
+  })
+})
+
+describe('resolveBasePath under app.baseURL', () => {
+  it('keeps an absolute buildAssetsDir mount under app.baseURL', () => {
+    expect(resolveBasePath({ app: { baseURL: '/app/', buildAssetsDir: '/pro/_nuxt/' } })).toBe('/app/pro/__skew')
+  })
+
+  it('keeps an explicit basePath that is already under app.baseURL', () => {
+    expect(resolveBasePath({ basePath: '/app/custom', app: { baseURL: '/app/' } })).toBe('/app/custom')
+  })
+
+  it('moves an explicit basePath outside app.baseURL under it', () => {
+    expect(resolveBasePath({ basePath: '/__skew', app: { baseURL: '/app/' } })).toBe('/app/__skew')
+    expect(resolveBasePath({ basePath: '/application/__skew', app: { baseURL: '/app/' } })).toBe('/app/application/__skew')
+  })
+})
+
+describe('toServerRoute', () => {
+  it('strips app.baseURL because Nitro prefixes handler routes with it', () => {
+    expect(toServerRoute('/app/__skew/sse', '/app/')).toBe('/__skew/sse')
+    expect(toServerRoute('/app/pro/__skew/health', '/app')).toBe('/pro/__skew/health')
+  })
+
+  it('keeps the path for a root app', () => {
+    expect(toServerRoute('/pro/__skew/sse', '/')).toBe('/pro/__skew/sse')
+    expect(toServerRoute('/__skew/sse', undefined)).toBe('/__skew/sse')
   })
 })

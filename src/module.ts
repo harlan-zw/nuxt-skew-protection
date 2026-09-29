@@ -19,8 +19,8 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
-import { resolveBundleAssets } from './provider-defaults'
-import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName } from './resolve-base-path'
+import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRoute } from './resolve-base-path'
 import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
 import { isSkewAdapter } from './utils'
@@ -66,6 +66,9 @@ export interface ModuleOptions {
    * `/pro/*` on a host shared with a marketing app): use `/pro/__skew` so the
    * websocket/health requests resolve to this worker's deployment instead of
    * leaking to the sibling app that owns the host route.
+   *
+   * This is the full public path, including `app.baseURL`. When unset, it is
+   * auto-detected: `app.baseURL: '/app/'` gives `/app/__skew`.
    * @default '/__skew'
    */
   basePath?: string
@@ -123,7 +126,7 @@ export interface ModuleOptions {
    * How to handle outdated chunks.
    * - 'prompt': Show notification, let user decide (default)
    * - 'immediate': Reload immediately when chunks are invalidated
-   * - 'idle': Reload when user is idle (requestIdleCallback + visibility API)
+   * - 'idle': Reload once the tab is hidden (checked after requestIdleCallback)
    * - false: Disable automatic handling, use hooks for custom logic
    * @default 'prompt'
    */
@@ -192,10 +195,15 @@ export default defineNuxtModule<ModuleOptions>({
     // auto-detected from the app mount point (absolute `buildAssetsDir` parent,
     // then `app.baseURL`), so a path-routed worker like a `/pro/*` dashboard
     // gets `/pro/__skew` with zero config. See resolveBasePath.
-    const basePathExplicit = !!options.basePath
-    const basePath = resolveBasePath({ basePath: options.basePath, app: nuxt.options.app })
+    const explicitBasePath = options.basePath
+    const basePathExplicit = !!explicitBasePath
+    const basePath = resolveBasePath({ basePath: explicitBasePath, app: nuxt.options.app })
     options.basePath = basePath
+    if (explicitBasePath && basePath !== resolveBasePath({ basePath: explicitBasePath }))
+      logger.warn(`\`basePath\` ${explicitBasePath} is outside \`app.baseURL\`. The module uses ${basePath}.`)
     logger.debug(`Endpoints mounted at ${basePath}/* (${basePathExplicit ? 'explicit' : 'auto-detected'})`)
+    // Nitro mounts handlers relative to `app.baseURL`; `basePath` is the public path.
+    const skewRoute = (endpoint: string) => toServerRoute(`${basePath}${endpoint}`, nuxt.options.app.baseURL)
 
     // Derive a per-mount cookie name so path-routed apps sharing a host don't
     // clobber each other's version cookie (explicit `cookie.name` wins).
@@ -400,17 +408,17 @@ export {}
     if (nuxt.options.dev && options.connectionTracking) {
       if (nuxt.options.nitro?.experimental?.websocket) {
         addServerHandler({
-          route: `${basePath}/ws`,
+          route: skewRoute('/ws'),
           handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
         })
         addServerHandler({
-          route: `${basePath}/subscribe-stats`,
+          route: skewRoute('/subscribe-stats'),
           method: 'post',
           handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
         })
         if (options.routeTracking) {
           addServerHandler({
-            route: `${basePath}/route`,
+            route: skewRoute('/route'),
             method: 'post',
             handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
           })
@@ -551,7 +559,7 @@ export {}
           nitroConfig.cloudflare.wrangler.assets ||= {}
           nitroConfig.cloudflare.wrangler.assets.run_worker_first = withCloudflareBuildAssetRouting(
             nitroConfig.cloudflare.wrangler.assets.run_worker_first,
-            nuxt.options.app.buildAssetsDir,
+            buildAssetsPath,
           )
           nitroConfig.rollupConfig ||= {}
           const existingPlugins = nitroConfig.rollupConfig.plugins
@@ -587,8 +595,7 @@ export {}
         resolvedStrategy = 'sse'
       }
       else if (!options.updateStrategy) {
-        // Auto-detect: static = polling, cloudflare = ws, otherwise sse
-        resolvedStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
+        resolvedStrategy = resolveDefaultUpdateStrategy({ isStatic, nitroPreset })
       }
 
       // Validate strategy compatibility with static generation
@@ -620,7 +627,7 @@ export {}
       // Health check endpoint
       if (!isStatic) {
         addServerHandler({
-          route: `${basePath}/health`,
+          route: skewRoute('/health'),
           method: 'get',
           handler: resolver.resolve('./runtime/server/routes/__skew/health.get'),
         })
@@ -629,7 +636,7 @@ export {}
       // Admin stats endpoint for nuxtseo.com dashboard (requires connectionTracking)
       if (options.connectionTracking && !isStatic) {
         addServerHandler({
-          route: `${basePath}/admin/stats`,
+          route: skewRoute('/admin/stats'),
           method: 'get',
           handler: resolver.resolve('./runtime/server/routes/__skew/admin/stats.get'),
         })
@@ -767,14 +774,12 @@ export {}
         // @ts-expect-error extending runtime config
         nuxt.options.runtimeConfig.public.skewProtection.adapterName = adapter.name
 
-        // Validate adapter config at build time using zod schema
-        const result = adapter.schema.safeParse(adapter.config)
-        if (!result.success) {
-          const errors = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
-          throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
-        }
+        // Validate adapter config at build time
+        const result = adapter.parseConfig(adapter.config)
+        if (result._tag === 'Err')
+          throw new Error(`${adapter.name} adapter config invalid: ${result.issues.join(', ')}`)
 
-        const publicAdapterConfig = adapter.toPublicConfig(result.data)
+        const publicAdapterConfig = adapter.toPublicConfig(result.config)
 
         // Check for adapter dependencies at build time
         if (adapter.name === 'pusher') {
@@ -800,10 +805,12 @@ export {}
           }
         }
 
-        // Create template that imports from the actual adapter module (web build for client)
+        // Create template that imports from the actual adapter module (web build for client).
+        // Resolve by path: the app may not be able to resolve this package by name.
+        const adapterWebEntry = resolver.resolve(`./runtime/adapters/${adapter.name}/web`)
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
-          getContents: () => `import { subscribe } from 'nuxt-skew-protection/adapters/${adapter.name}/web'
+          getContents: () => `import { subscribe } from ${JSON.stringify(adapterWebEntry)}
 export const config = ${JSON.stringify(publicAdapterConfig)}
 export { subscribe }`,
         })
@@ -853,7 +860,7 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: `${basePath}/ws`,
+            route: skewRoute('/ws'),
             handler: resolver.resolve('./runtime/server/routes/__skew/ws'),
           })
           addPlugin(resolver.resolve('./runtime/app/plugins/check-updates-websocket.client'))
@@ -865,21 +872,21 @@ export { subscribe }`,
         }
         else {
           addServerHandler({
-            route: `${basePath}/sse`,
+            route: skewRoute('/sse'),
             handler: resolver.resolve('./runtime/server/routes/__skew/sse'),
           })
           // SSE is unidirectional so we need POST endpoints
           if (options.connectionTracking) {
             // Stats subscription endpoint
             addServerHandler({
-              route: `${basePath}/subscribe-stats`,
+              route: skewRoute('/subscribe-stats'),
               method: 'post',
               handler: resolver.resolve('./runtime/server/routes/__skew/subscribe-stats.post'),
             })
             // Route update endpoint
             if (options.routeTracking) {
               addServerHandler({
-                route: `${basePath}/route`,
+                route: skewRoute('/route'),
                 method: 'post',
                 handler: resolver.resolve('./runtime/server/routes/__skew/route.post'),
               })
