@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -44,5 +44,17 @@ describe.sequential('adapter in nuxt.config', () => {
     expect(output.server).toContain('"adapterName": "ably"')
     expect(output.client).toContain('/api/ably-token')
     expect(output.all).not.toContain('test.key:secret')
+  }, 300000)
+
+  it('builds a custom adapter and runs its broadcast', async () => {
+    const fixtureDir = resolve(__dirname, '../fixtures/adapter')
+    cleanFixture(fixtureDir)
+    rmSync(join(fixtureDir, '.broadcast'), { force: true })
+    await build(fixtureDir, 'file-v1')
+    const output = readOutput(fixtureDir)
+    expect(output.server).toContain('"adapterName": "file"')
+    expect(output.client).toContain('from=file-adapter-web')
+    expect(output.client).toContain('/file-adapter-events')
+    expect(readFileSync(join(fixtureDir, '.broadcast'), 'utf-8')).toBe('file-v1')
   }, 300000)
 })
