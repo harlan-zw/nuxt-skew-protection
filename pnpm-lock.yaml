@@ -300,6 +300,8 @@ importers:
 
   test/fixtures/adapter: {}
 
+  test/fixtures/base-url: {}
+
   test/fixtures/bot-detection: {}
 
   test/fixtures/chunk-error: {}
