@@ -19,7 +19,7 @@ import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nu
 import { readPackageJSON } from 'pkg-types'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
-import { resolveBundleAssets } from './provider-defaults'
+import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults'
 import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRoute } from './resolve-base-path'
 import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
 import { resolveBuildTimeDriver } from './unstorage/utils'
@@ -595,8 +595,7 @@ export {}
         resolvedStrategy = 'sse'
       }
       else if (!options.updateStrategy) {
-        // Auto-detect: static = polling, cloudflare = ws, otherwise sse
-        resolvedStrategy = isStatic ? 'polling' : isCloudflareRuntime ? 'ws' : 'sse'
+        resolvedStrategy = resolveDefaultUpdateStrategy({ isStatic, nitroPreset })
       }
 
       // Validate strategy compatibility with static generation
@@ -775,14 +774,12 @@ export {}
         // @ts-expect-error extending runtime config
         nuxt.options.runtimeConfig.public.skewProtection.adapterName = adapter.name
 
-        // Validate adapter config at build time using zod schema
-        const result = adapter.schema.safeParse(adapter.config)
-        if (!result.success) {
-          const errors = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
-          throw new Error(`${adapter.name} adapter config invalid: ${errors}`)
-        }
+        // Validate adapter config at build time
+        const result = adapter.parseConfig(adapter.config)
+        if (result._tag === 'Err')
+          throw new Error(`${adapter.name} adapter config invalid: ${result.issues.join(', ')}`)
 
-        const publicAdapterConfig = adapter.toPublicConfig(result.data)
+        const publicAdapterConfig = adapter.toPublicConfig(result.config)
 
         // Check for adapter dependencies at build time
         if (adapter.name === 'pusher') {
@@ -808,10 +805,12 @@ export {}
           }
         }
 
-        // Create template that imports from the actual adapter module (web build for client)
+        // Create template that imports from the actual adapter module (web build for client).
+        // Resolve by path: the app may not be able to resolve this package by name.
+        const adapterWebEntry = resolver.resolve(`./runtime/adapters/${adapter.name}/web`)
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
-          getContents: () => `import { subscribe } from 'nuxt-skew-protection/adapters/${adapter.name}/web'
+          getContents: () => `import { subscribe } from ${JSON.stringify(adapterWebEntry)}
 export const config = ${JSON.stringify(publicAdapterConfig)}
 export { subscribe }`,
         })

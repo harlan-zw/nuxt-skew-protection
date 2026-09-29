@@ -1,6 +1,10 @@
 {
   "name": "nuxt-skew-protection-pusher-fixture",
+  "type": "module",
   "private": true,
+  "scripts": {
+    "build": "nuxt build"
+  },
   "dependencies": {
     "laravel-echo": "catalog:",
     "pusher-js": "catalog:"

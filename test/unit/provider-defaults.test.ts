@@ -1,7 +1,7 @@
 import type { Nuxt } from '@nuxt/schema'
 import { describe, expect, it } from 'vitest'
 import skewProtectionModule from '../../src/module'
-import { resolveBundleAssets } from '../../src/provider-defaults'
+import { resolveBundleAssets, resolveDefaultUpdateStrategy } from '../../src/provider-defaults'
 
 describe('vercel asset defaults', () => {
   it('disables asset persistence when native Vercel protection is active', () => {
@@ -48,5 +48,22 @@ describe('vercel asset defaults', () => {
     } as Nuxt)
 
     expect(options?.bundleAssets).toBe(true)
+  })
+})
+
+describe('default update strategy', () => {
+  it.each([
+    ['node-server', 'sse'],
+    ['vercel', 'sse'],
+    ['cloudflare-durable', 'ws'],
+    ['cloudflare-module', 'polling'],
+    ['cloudflare-pages', 'polling'],
+    [undefined, 'sse'],
+  ] as const)('picks a strategy the %s preset supports', (nitroPreset, expected) => {
+    expect(resolveDefaultUpdateStrategy({ isStatic: false, nitroPreset })).toBe(expected)
+  })
+
+  it('polls for a static build', () => {
+    expect(resolveDefaultUpdateStrategy({ isStatic: true, nitroPreset: 'cloudflare-durable' })).toBe('polling')
   })
 })

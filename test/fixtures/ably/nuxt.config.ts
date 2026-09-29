@@ -1,7 +1,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ablyAdapter } from '../../../src/adapters/ably'
 import Module from '../../../src/module'
+import { ablyAdapter } from '../../../src/runtime/adapters/ably'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
