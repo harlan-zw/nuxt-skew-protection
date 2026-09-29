@@ -69,7 +69,7 @@ To preview the UI, pass `force-open`. There is no `open` prop.
 To reload without a prompt, set `reloadStrategy`:
 
 - `'immediate'`: reload when chunks go stale.
-- `'idle'`: reload only after the tab becomes hidden. A tab that stays visible never reloads.
+- `'idle'`: reload after 60 seconds without user input, or as soon as the tab is hidden.
 - `false`: do nothing. Handle `skew:chunks-outdated` yourself.
 
 ## React in code
@@ -138,7 +138,7 @@ export default defineEventHandler((event) => {
 - `bundleAssets` (`true`): set `false` when your CDN already keeps old `/_nuxt/` files.
 - `cookie`: set `false` to drop the cookie. `isClientOutdated` then always returns `false`.
 - `basePath` (`/__skew`): the full public endpoint prefix, including `app.baseURL`. Auto-detected; set it only for custom routing.
-- `updateStrategy`: pass `pusherAdapter({ key, cluster, appId, secret })` from `nuxt-skew-protection/adapters/pusher`, or `ablyAdapter({ key, authUrl })` from `nuxt-skew-protection/adapters/ably`, for a hosted realtime provider. Install `pusher-js` or `ably`. The build validates the config and broadcasts each new build id.
+- `updateStrategy`: pass `pusherAdapter({ key, cluster, appId, secret })` from `nuxt-skew-protection/adapters/pusher`, or `ablyAdapter({ key, authUrl })` from `nuxt-skew-protection/adapters/ably`, for a hosted realtime provider. Install `pusher-js` or `ably`. The build validates the config and broadcasts each new build id. For another provider, write one with `defineAdapter` from `nuxt-skew-protection/adapters`: https://nuxtseo.com/docs/skew-protection/providers/external
 - Other options: https://nuxtseo.com/docs/skew-protection/api/config
 
 ## Debug
