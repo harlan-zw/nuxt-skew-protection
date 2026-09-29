@@ -30,3 +30,23 @@ export function resolveBundleAssets(
     bundleAssets: true,
   }
 }
+
+export interface DefaultUpdateStrategyInput {
+  isStatic: boolean
+  nitroPreset: string | undefined
+}
+
+/**
+ * Pick the update strategy when the user sets none. Only `cloudflare-durable`
+ * holds WebSockets on Cloudflare, and Workers cannot hold SSE streams, so every
+ * other Cloudflare preset polls.
+ */
+export function resolveDefaultUpdateStrategy(input: DefaultUpdateStrategyInput): 'polling' | 'sse' | 'ws' {
+  if (input.isStatic)
+    return 'polling'
+  if (input.nitroPreset === 'cloudflare-durable')
+    return 'ws'
+  if (input.nitroPreset?.includes('cloudflare'))
+    return 'polling'
+  return 'sse'
+}

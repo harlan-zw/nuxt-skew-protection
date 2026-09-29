@@ -1,6 +1,10 @@
 {
   "name": "nuxt-skew-protection-ably-fixture",
+  "type": "module",
   "private": true,
+  "scripts": {
+    "build": "nuxt build"
+  },
   "dependencies": {
     "ably": "catalog:"
   }
