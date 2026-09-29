@@ -1,7 +1,10 @@
+import { until, useDocumentVisibility, useIdle } from '@vueuse/core'
 import { defineNuxtPlugin, reloadNuxtApp, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
 import { logger } from '../../shared/logger'
 
 const CHANNEL_NAME = 'nuxt-skew-protection'
+/** No input for this long counts as idle. */
+const IDLE_TIMEOUT_MS = 60_000
 
 /**
  * Multi-tab coordination via BroadcastChannel.
@@ -25,35 +28,21 @@ export default defineNuxtPlugin({
 
     // Auto-reload handler for 'immediate' and 'idle' strategies
     if (reloadStrategy === 'immediate' || reloadStrategy === 'idle') {
+      let waitingForIdle = false
       nuxtApp.hooks.hook('skew:chunks-outdated', () => {
         if (reloadStrategy === 'immediate') {
           logger.debug('[AutoReload] Chunks outdated, reloading immediately')
           reloadNuxtApp({ force: true, persistState: true })
         }
-        else if (reloadStrategy === 'idle') {
-          logger.debug('[AutoReload] Chunks outdated, waiting for idle')
-          const reload = () => {
-            // Only reload if page is hidden (user switched tab) or idle
-            if (document.hidden) {
-              reloadNuxtApp({ force: true, persistState: true })
-            }
-            else {
-              // Wait for page to become hidden, then reload
-              const onVisibilityChange = () => {
-                if (document.hidden) {
-                  document.removeEventListener('visibilitychange', onVisibilityChange)
-                  reloadNuxtApp({ force: true, persistState: true })
-                }
-              }
-              document.addEventListener('visibilitychange', onVisibilityChange)
-            }
-          }
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(reload, { timeout: 10000 })
-          }
-          else {
-            setTimeout(reload, 5000)
-          }
+        else if (reloadStrategy === 'idle' && !waitingForIdle) {
+          logger.debug('[AutoReload] Chunks outdated, waiting for idle or a hidden tab')
+          waitingForIdle = true
+          const { idle, stop } = useIdle(IDLE_TIMEOUT_MS)
+          const visibility = useDocumentVisibility()
+          until(() => idle.value || visibility.value === 'hidden').toBe(true).then(() => {
+            stop()
+            reloadNuxtApp({ force: true, persistState: true })
+          })
         }
       })
     }
