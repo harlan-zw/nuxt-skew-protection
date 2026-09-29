@@ -21,6 +21,21 @@ function normalizePath(pathOrUrl: string): string {
   }
 }
 
+function parseSkewFile(value: unknown): Record<string, string[]> {
+  const deletedChunks = typeof value === 'object' && value !== null && 'deletedChunks' in value
+    ? value.deletedChunks
+    : undefined
+  if (
+    typeof deletedChunks !== 'object'
+    || deletedChunks === null
+    || Array.isArray(deletedChunks)
+    || !Object.values(deletedChunks).every(chunks => Array.isArray(chunks) && chunks.every(chunk => typeof chunk === 'string'))
+  ) {
+    throw new Error('Invalid skew file')
+  }
+  return deletedChunks as Record<string, string[]>
+}
+
 export default defineNuxtPlugin({
   name: 'skew-protection:service-worker',
   setup(nuxtApp) {
@@ -112,7 +127,9 @@ export default defineNuxtPlugin({
      * Check if any deleted chunks intersect with currently loaded modules
      * and trigger the chunks-outdated hook if so
      */
-    async function checkDeletedChunks(deletedChunks: string[], passedReleases: string[]) {
+    let activeSkewVersionId: string | undefined
+
+    async function checkDeletedChunks(deletedChunks: string[], passedReleases: string[], versionId: string) {
       if (deletedChunks.length === 0) {
         logger.debug('[SW] No deleted chunks to check')
         return
@@ -121,6 +138,8 @@ export default defineNuxtPlugin({
       logger.debug(`[SW] Checking ${deletedChunks.length} deleted chunks against loaded modules`)
 
       const loadedModules = await getLoadedModules()
+      if (activeSkewVersionId !== versionId)
+        return
       if (loadedModules.length === 0) {
         logger.debug('[SW] No loaded modules to check against')
         return
@@ -147,6 +166,8 @@ export default defineNuxtPlugin({
         })
       }
     }
+
+    const checkedSkewVersions = new Set<string>()
 
     // Listen for app:manifest:update to check for deleted chunks
     onAppOutdated(async (_manifest) => {
@@ -189,25 +210,54 @@ export default defineNuxtPlugin({
         passedReleases.push(...sortedVersions.slice(currentIdx + 1, newIdx + 1).map(v => v.id))
       }
 
+      if (checkedSkewVersions.has(newVersionId))
+        return
+      activeSkewVersionId = newVersionId
       if (passedReleases.length === 0)
         return
+      checkedSkewVersions.add(newVersionId)
 
-      // latest.json carries only timestamps; the deleted chunk lists live in a per-build file
-      const skewFile = await ($fetch(buildAssetsURL(`builds/skew/${newVersionId}.json`)) as Promise<{ deletedChunks?: Record<string, string[]> }>)
-        .catch((error: unknown) => {
-          logger.warn(`[SW] Could not fetch deleted chunks for ${newVersionId}, so the chunk check is skipped:`, error)
-          return undefined
-        })
-      const deletedChunksByVersion = skewFile?.deletedChunks || {}
-      const allDeletedChunks = passedReleases.flatMap(id => deletedChunksByVersion[id] || [])
+      async function checkChunks(deletedChunksByVersion: Record<string, string[]>) {
+        const allDeletedChunks = passedReleases.flatMap(id => deletedChunksByVersion[id] || [])
+        logger.debug(`[SW] Collected ${allDeletedChunks.length} deleted chunks across ${passedReleases.length} releases`)
+        if (allDeletedChunks.length === 0)
+          return
 
-      logger.debug(`[SW] Collected ${allDeletedChunks.length} deleted chunks across ${passedReleases.length} releases`)
-
-      if (allDeletedChunks.length > 0) {
         // Small delay to ensure SW has received module list
         await new Promise(resolve => setTimeout(resolve, 100))
-        await checkDeletedChunks(allDeletedChunks, passedReleases)
+        if (activeSkewVersionId !== newVersionId)
+          return
+        await checkDeletedChunks(allDeletedChunks, passedReleases, newVersionId)
       }
+
+      // Older deployments include deleted chunks in latest.json, including rollback targets.
+      const legacyVersions = versions as Record<string, { timestamp: string, deletedChunks?: string[] }>
+      if (passedReleases.every(id => Array.isArray(legacyVersions[id]?.deletedChunks))) {
+        await checkChunks(Object.fromEntries(passedReleases.map(id => [id, legacyVersions[id]!.deletedChunks!])))
+        return
+      }
+
+      // latest.json carries only timestamps in new builds. Its skew file may arrive later.
+      async function checkSkewFile(attempt: number): Promise<void> {
+        if (activeSkewVersionId !== newVersionId)
+          return
+        const deletedChunksByVersion = await ($fetch(buildAssetsURL(`builds/skew/${newVersionId}.json`)) as Promise<unknown>)
+          .then(parseSkewFile)
+          .catch((error: unknown) => {
+            if (activeSkewVersionId !== newVersionId)
+              return undefined
+            const delay = Math.min(5000 * 2 ** attempt, 300000)
+            logger.warn(`[SW] Could not fetch deleted chunks for ${newVersionId}; retrying in ${delay}ms:`, error)
+            setTimeout(() => {
+              void checkSkewFile(attempt + 1).catch(error => logger.error('[SW] Chunk check failed:', error))
+            }, delay)
+            return undefined
+          })
+        if (deletedChunksByVersion && activeSkewVersionId === newVersionId)
+          await checkChunks(deletedChunksByVersion)
+      }
+
+      await checkSkewFile(0)
     })
   },
 })
