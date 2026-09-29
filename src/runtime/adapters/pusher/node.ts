@@ -1,9 +1,10 @@
+import type { BroadcastFn } from '../types'
 import type { PusherAdapterConfig } from './types'
 import { createHash, createHmac } from 'node:crypto'
 import { SKEW_DEFAULT_CHANNEL, SKEW_MESSAGE_TYPE } from '../../const'
 import { defineNodeBroadcast } from '../types'
 
-export const broadcast = defineNodeBroadcast<PusherAdapterConfig>(async (config, version) => {
+export const broadcast: BroadcastFn<PusherAdapterConfig> = defineNodeBroadcast<PusherAdapterConfig>(async (config, version) => {
   const channelName = config.channel || SKEW_DEFAULT_CHANNEL
   const eventName = config.event || SKEW_MESSAGE_TYPE.VERSION
 

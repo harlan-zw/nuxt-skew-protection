@@ -1,31 +1,8 @@
-import type { SkewAdapter } from '../../../src/runtime/adapters/types'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fileAdapter } from './adapter'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-// Mock adapter for testing - stores messages in memory
-const messages: Array<{ version: string }> = []
-const subscribers: Array<(msg: { version: string }) => void> = []
-
-export const mockAdapter: SkewAdapter = {
-  name: 'mock',
-  subscribe(onMessage) {
-    subscribers.push(onMessage)
-    // Deliver any pending messages
-    messages.forEach(msg => onMessage(msg))
-    return () => {
-      const idx = subscribers.indexOf(onMessage)
-      if (idx > -1)
-        subscribers.splice(idx, 1)
-    }
-  },
-  async broadcast(version) {
-    const msg = { version }
-    messages.push(msg)
-    subscribers.forEach(sub => sub(msg))
-  },
-}
 
 export default defineNuxtConfig({
   modules: ['../../../src/module'],
@@ -33,7 +10,10 @@ export default defineNuxtConfig({
 
   skewProtection: {
     debug: true,
-    updateStrategy: mockAdapter,
+    updateStrategy: fileAdapter({
+      endpoint: '/file-adapter-events',
+      outFile: join(__dirname, '.broadcast'),
+    }),
     storage: {
       driver: 'fs',
       base: join(__dirname, '.skew-storage'),
