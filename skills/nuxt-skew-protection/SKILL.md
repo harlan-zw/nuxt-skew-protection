@@ -33,8 +33,8 @@ Add a notification. Nothing shows until you render `<SkewNotification>` or call 
 - **Cookie:** `__nkpv` holds the build id, for 7 days, `SameSite=Lax`. The server sets it only on requests with `sec-fetch-dest: document`. With `app.baseURL: '/app/'` the name becomes `__nkpv_app`.
 - **Server context:** every request gets `event.context.skewVersion` from the cookie.
 - **Service worker:** `/_nuxt-skew-sw.js` records which chunks the tab loaded.
-- **Update strategy:** static output uses `polling`, a Cloudflare preset tries `ws`, and everything else uses `sse`. The client opens the connection when a component that uses the composable mounts.
-- **Endpoints:** `/__skew/health`, `/__skew/sse`, and `/__skew/ws`, under `basePath`. A static build has none.
+- **Update strategy:** static output and Cloudflare Workers use `polling`, `cloudflare-durable` uses `ws`, and everything else uses `sse`. The client opens the connection when a component that uses the composable mounts.
+- **Endpoints:** `/__skew/health`, `/__skew/sse`, and `/__skew/ws`, under `basePath`. With `app.baseURL: '/app/'` they sit at `/app/__skew/*`. A static build has none.
 - **Multi tab:** a `BroadcastChannel` shares a detected deploy across tabs. Set `multiTab: false` to turn it off.
 
 ## Show an update prompt
@@ -107,7 +107,7 @@ export default defineEventHandler((event) => {
 
 ## Cloudflare
 
-- `cloudflare-module` without `nitro.experimental.websocket` logs `You need to enable experimental.websocket` and falls back to polling. To remove the warning, set `updateStrategy: 'polling'`.
+- `cloudflare-module` polls by default. Workers hold no SSE stream and no WebSocket.
 - Real time needs `nitro.preset: 'cloudflare-durable'` and `nitro.experimental.websocket: true`.
 - For KV storage, set `storage: { driver: 'cloudflare-kv-binding' }`. The build reads the `SKEW_PROTECTION` binding id from `nitro.cloudflare.wrangler.kv_namespaces` or `wrangler.json(c)`/`wrangler.toml`. With `@nuxthub/core`, set `storage.namespaceId`, or the build throws.
 - On `cloudflare-module` and `cloudflare-durable`, the module adds your build asset path to `assets.run_worker_first`. Those requests count as Worker invocations.
@@ -115,7 +115,6 @@ export default defineEventHandler((event) => {
 ## Traps
 
 - **A headless browser test sees no updates.** Bot detection from `@nuxtjs/robots` matches `HeadlessChrome` and skips the SSE or WebSocket connection. Override the user agent in the test.
-- **`app.baseURL` doubles the endpoint prefix on the server.** With `baseURL: '/app/'` the client opens `/app/__skew/sse`, but the server mounts it at `/app/app/__skew/sse`. The client gets a 404. Real-time updates fail silently.
 - **`useActiveConnections()` exists only with `connectionTracking: true`.** It needs `sse` or `ws`, and stats reach only connections that call `authorize()` in the Nitro hook `skew:authorize-stats`. See https://nuxtseo.com/docs/skew-protection/guides/live-connections
 - **`sse` or `ws` on `nuxt generate` falls back to polling** with a warning. Polling uses Nuxt `experimental.checkOutdatedBuildInterval`, which defaults to one hour.
 - **Vercel native skew protection turns off asset storage.** When `VERCEL_SKEW_PROTECTION_ENABLED=1` and `VERCEL_DEPLOYMENT_ID` are set, `bundleAssets` defaults to `false`.
@@ -134,13 +133,12 @@ export default defineEventHandler((event) => {
 | `/_skew/*` routes | `/__skew/*` |
 | `import { checkForUpdates } from '#skew-protection'` | `useSkewProtection().checkForUpdates` |
 
-In 1.5.5 on Nuxt 4.5.2 with zod 4.6, `pusherAdapter()` or `ablyAdapter()` in `nuxt.config.ts` stops the build with `Cannot read properties of undefined (reading 'checks')`. Nuxt deep clones the config, and the clone breaks the adapter's zod schema. Until a fix ships, use `sse`, `ws`, or `polling`.
-
 ## Config
 
 - `bundleAssets` (`true`): set `false` when your CDN already keeps old `/_nuxt/` files.
 - `cookie`: set `false` to drop the cookie. `isClientOutdated` then always returns `false`.
-- `basePath` (`/__skew`): the endpoint prefix.
+- `basePath` (`/__skew`): the full public endpoint prefix, including `app.baseURL`. Auto-detected; set it only for custom routing.
+- `updateStrategy`: pass `pusherAdapter({ key, cluster, appId, secret })` from `nuxt-skew-protection/adapters/pusher`, or `ablyAdapter({ key, authUrl })` from `nuxt-skew-protection/adapters/ably`, for a hosted realtime provider. Install `pusher-js` or `ably`. The build validates the config and broadcasts each new build id.
 - Other options: https://nuxtseo.com/docs/skew-protection/api/config
 
 ## Debug
