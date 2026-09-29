@@ -123,7 +123,7 @@ export interface ModuleOptions {
    * How to handle outdated chunks.
    * - 'prompt': Show notification, let user decide (default)
    * - 'immediate': Reload immediately when chunks are invalidated
-   * - 'idle': Reload when user is idle (requestIdleCallback + visibility API)
+   * - 'idle': Reload once the tab is hidden (checked after requestIdleCallback)
    * - false: Disable automatic handling, use hooks for custom logic
    * @default 'prompt'
    */
