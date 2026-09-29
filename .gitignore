@@ -57,6 +57,7 @@ Temporary Items
 
 # Skew protection storage
 .skew-storage
+.broadcast
 .test-output
 nuxt-skew-protection-1.0.0.tgz
 .wrangler

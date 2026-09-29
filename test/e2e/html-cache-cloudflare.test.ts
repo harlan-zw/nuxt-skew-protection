@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { stopServer } from './utils'
 
 const execAsync = promisify(exec)
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
@@ -37,7 +38,7 @@ async function startWrangler(): Promise<ChildProcess> {
     // Nitro emits today's date, which a slightly older local workerd refuses.
     '--compatibility-date',
     '2026-08-01',
-  ], { cwd: fixtureDir, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
+  ], { cwd: fixtureDir, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
 
   for (let attempt = 0; attempt < 30; attempt++) {
     const ready = await fetch(`http://localhost:${port}/`).then(() => true).catch(() => false)
@@ -60,7 +61,8 @@ describe('html caching on cloudflare', () => {
   }, 300000)
 
   afterAll(async () => {
-    server?.kill('SIGTERM')
+    if (server)
+      await stopServer(server)
     rmSync(resolve(fixtureDir, '.output'), { recursive: true, force: true })
     rmSync(resolve(fixtureDir, '.nuxt'), { recursive: true, force: true })
     rmSync(resolve(fixtureDir, '.skew-storage'), { recursive: true, force: true })

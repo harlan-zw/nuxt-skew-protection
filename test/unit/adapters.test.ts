@@ -49,77 +49,29 @@ afterEach(() => {
 
 describe('adapters', () => {
   describe('isSkewAdapter', () => {
-    it('should return true for valid adapter', () => {
-      const adapter = {
-        name: 'test',
-        toPublicConfig: () => ({}),
-        subscribe: () => () => {},
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(true)
+    const valid = {
+      name: 'test',
+      web: '~/adapter/web',
+      parseConfig: () => ({ _tag: 'Ok', config: {} }),
+      toPublicConfig: () => ({}),
+      broadcast: async () => {},
+    }
+
+    it('accepts a complete adapter', () => {
+      expect(isSkewAdapter(valid)).toBe(true)
     })
 
-    it('should return false for null', () => {
-      expect(isSkewAdapter(null)).toBe(false)
+    it.each([null, undefined, 'polling'])('rejects %s', (value) => {
+      expect(isSkewAdapter(value)).toBe(false)
     })
 
-    it('should return false for undefined', () => {
-      expect(isSkewAdapter(undefined)).toBe(false)
-    })
-
-    it('should return false for string', () => {
-      expect(isSkewAdapter('polling')).toBe(false)
-    })
-
-    it('should return false for object missing name', () => {
-      const adapter = {
-        subscribe: () => () => {},
-        broadcast: async () => {},
-      }
+    it.each(['name', 'web', 'parseConfig', 'toPublicConfig', 'broadcast'])('rejects an adapter without %s', (key) => {
+      const { [key as keyof typeof valid]: _, ...adapter } = valid
       expect(isSkewAdapter(adapter)).toBe(false)
     })
 
-    it('should return false for object missing subscribe', () => {
-      const adapter = {
-        name: 'test',
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object missing broadcast', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object missing public config mapping', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object with non-function subscribe', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: 'not a function',
-        broadcast: async () => {},
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
-    })
-
-    it('should return false for object with non-function broadcast', () => {
-      const adapter = {
-        name: 'test',
-        subscribe: () => () => {},
-        broadcast: 'not a function',
-      }
-      expect(isSkewAdapter(adapter)).toBe(false)
+    it('rejects a broadcast that is not a function', () => {
+      expect(isSkewAdapter({ ...valid, broadcast: 'nope' })).toBe(false)
     })
   })
 

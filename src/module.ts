@@ -1,5 +1,5 @@
 import type { CookieSerializeOptions } from 'cookie-es'
-import type { BroadcastFn, SkewAdapter } from './runtime/adapters/types'
+import type { SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionPrivateRuntimeConfig, NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
 import {
@@ -12,6 +12,7 @@ import {
   createResolver,
   defineNuxtModule,
   hasNuxtModule,
+  resolvePath,
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
@@ -126,7 +127,7 @@ export interface ModuleOptions {
    * How to handle outdated chunks.
    * - 'prompt': Show notification, let user decide (default)
    * - 'immediate': Reload immediately when chunks are invalidated
-   * - 'idle': Reload once the tab is hidden (checked after requestIdleCallback)
+   * - 'idle': Reload after 60 seconds without user input, or when the tab is hidden
    * - false: Disable automatic handling, use hooks for custom logic
    * @default 'prompt'
    */
@@ -781,33 +782,17 @@ export {}
 
         const publicAdapterConfig = adapter.toPublicConfig(result.config)
 
-        // Check for adapter dependencies at build time
-        if (adapter.name === 'pusher') {
-          if (!await tryResolveModule('pusher-js', nuxt.options.rootDir)) {
-            const msg = `The pusher adapter requires \`pusher-js\`. Install with: npx nypm add pusher-js`
-            if (!nuxt.options.dev && !nuxt.options._prepare) {
-              throw new Error(msg)
-            }
-            else {
-              logger.warn(msg)
-            }
-          }
-        }
-        else if (adapter.name === 'ably') {
-          if (!await tryResolveModule('ably', nuxt.options.rootDir)) {
-            const msg = `The ably adapter requires \`ably\`. Install with: npx nypm add ably`
-            if (!nuxt.options.dev && !nuxt.options._prepare) {
-              throw new Error(msg)
-            }
-            else {
-              logger.warn(msg)
-            }
-          }
+        // Every adapter loads the same way: check its packages, bundle its web module, run its broadcast.
+        for (const dependency of adapter.dependencies) {
+          if (await tryResolveModule(dependency, nuxt.options.rootDir))
+            continue
+          const msg = `The ${adapter.name} adapter requires \`${dependency}\`. Install with: npx nypm add ${dependency}`
+          if (!nuxt.options.dev && !nuxt.options._prepare)
+            throw new Error(msg)
+          logger.warn(msg)
         }
 
-        // Create template that imports from the actual adapter module (web build for client).
-        // Resolve by path: the app may not be able to resolve this package by name.
-        const adapterWebEntry = resolver.resolve(`./runtime/adapters/${adapter.name}/web`)
+        const adapterWebEntry = await resolvePath(adapter.web)
         const template = addTemplate({
           filename: 'skew-adapter.mjs',
           getContents: () => `import { subscribe } from ${JSON.stringify(adapterWebEntry)}
@@ -825,27 +810,9 @@ export { subscribe }`,
         if (!nuxt.options.dev && !nuxt.options._prepare) {
           nuxt.hook('close', async () => {
             const buildId = nuxt.options.runtimeConfig.app.buildId || nuxt.options.buildId
-            const channel = (adapter.config as { channel?: string }).channel || 'skew-protection'
+            const channel = (result.config as { channel?: string }).channel || 'skew-protection'
             logger.log(`Broadcasting update ${colors.cyan(buildId.slice(0, 8))} via ${colors.green(adapter.name)} (channel: ${colors.gray(channel)})`)
-
-            let broadcastFn: BroadcastFn<any>
-            switch (adapter.name) {
-              case 'pusher': {
-                const { broadcast } = await import('./runtime/adapters/pusher/node')
-                broadcastFn = broadcast
-                break
-              }
-              case 'ably': {
-                const { broadcast } = await import('./runtime/adapters/ably/node')
-                broadcastFn = broadcast
-                break
-              }
-              default:
-                logger.warn(`No broadcast implementation for adapter: ${adapter.name}`)
-                return
-            }
-
-            await broadcastFn(adapter.config, buildId)
+            await adapter.broadcast(result.config, buildId)
               .then(() => logger.success(`Broadcast complete`))
               .catch((err: Error) => logger.error(`Broadcast failed: ${err.message}`))
           })
