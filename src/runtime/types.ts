@@ -18,6 +18,7 @@ export interface NuxtSkewProtectionRuntimeConfig {
    * `/route`, `/subscribe-stats`, `/admin/stats`). Defaults to `/__skew`. Set a
    * sub-path (e.g. `/pro/__skew`) when the app is path-routed behind a worker
    * that only owns part of the host, so the endpoints resolve to this app.
+   * It is the full public path, including `app.baseURL`.
    */
   basePath: string
   assetRecovery: AssetRecoveryConfig
