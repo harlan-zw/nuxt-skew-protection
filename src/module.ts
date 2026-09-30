@@ -712,7 +712,10 @@ export {}
             const storageInfo = options.storage!.base
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
-            if (totalReleases === 1) {
+            if (totalReleases === 1 && options.storage!.driver === 'fs') {
+              logger.info('Initialized local storage with its first release.')
+            }
+            else if (totalReleases === 1) {
               logger.warn(`No previous versions found in storage. This is either the first deployment or storage is misconfigured. https://nuxtseo.com/docs/skew-protection/storage-configuration`)
             }
             else {
