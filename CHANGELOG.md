@@ -1,3 +1,9 @@
+## 1.6.1
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.0...v1.6.1)
+
+- fix: report first local release at info level (#72) ([d893267](https://github.com/harlan-zw/nuxt-skew-protection/commit/d89326722d926332dd819be5698b4065b676ee3b))
+
 ## 1.5.4
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.5.3...v1.5.4)
