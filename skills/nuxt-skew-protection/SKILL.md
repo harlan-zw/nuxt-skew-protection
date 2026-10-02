@@ -1,11 +1,11 @@
 ---
 name: nuxt-skew-protection
-description: Keep old Nuxt build chunks available after a deploy and prompt open tabs to reload, with the nuxt-skew-protection module. Use when a task mentions version skew, ChunkLoadError, "Failed to fetch dynamically imported module", stale chunks 404 after deploy, update notifications, SkewNotification, useSkewProtection, isClientOutdated, the __nkpv cookie, /__skew routes, or the skewProtection config key.
+description: Keep old Nuxt build chunks available after a deploy and prompt open tabs to reload, with the nuxt-skew-protection module. Use when a task mentions version skew, ChunkLoadError, "Failed to fetch dynamically imported module", stale chunks 404 after deploy, update notifications, SkewNotification, useSkewProtection, isClientOutdated, isRollback, serverVersion, the __nkpv cookie, /__skew routes, or the skewProtection config key.
 ---
 
 # nuxt-skew-protection
 
-Tested against `nuxt-skew-protection` 1.5.5 on Nuxt 4.5.2 (requires Nuxt `>=4.0.0`).
+Tested against `nuxt-skew-protection` 1.6.1 on Nuxt 4.5.2 (requires Nuxt `>=4.0.0`).
 At build time the module stores every build's assets, then copies the chunks of earlier builds back into `.output/public`.
 In the browser it detects a new deploy and tells you when the chunks the tab loaded are gone. Docs: https://nuxtseo.com/docs/skew-protection
 
@@ -77,12 +77,25 @@ To reload without a prompt, set `reloadStrategy`:
 `useSkewProtection()` is auto-imported. It returns refs and registers callbacks that the module removes on unmount.
 
 ```ts
-const { onCurrentChunksOutdated, onAppOutdated, isAppOutdated, clientVersion } = useSkewProtection()
+const {
+  onCurrentChunksOutdated,
+  onAppOutdated,
+  isAppOutdated,
+  isRollback,
+  serverVersion,
+  clientVersion,
+  checkForUpdates,
+} = useSkewProtection()
 
 onCurrentChunksOutdated(({ invalidatedModules, passedReleases }) => {
   // the tab runs deleted code; save state, then reload
 })
 ```
+
+- `isRollback`: `true` when the server's detected version is older than the client's build, based on the timestamps in `skewProtection.versions`. Requires `bundleAssets` storage so those timestamps are present.
+- `serverVersion`: the last version id received from the SSE/WS connection. `undefined` until the first message arrives.
+- `checkForUpdates()`: fetch `builds/latest.json` immediately. The module calls it automatically on a backoff schedule after a version mismatch.
+- `simulateUpdate()` (dev only): fires `skew:chunks-outdated` without a real deploy. Use it to test the notification UI in development.
 
 If the update was already detected, a callback runs at registration.
 `useSkewProtection({ lazy: true })` does not connect on mount. Call `connect()` yourself.
@@ -92,7 +105,7 @@ If the update was already detected, a callback runs at registration.
 The server helpers are not auto-imported. Import them from `nuxt-skew-protection/server`:
 
 ```ts
-import { isClientOutdated } from 'nuxt-skew-protection/server'
+import { isClientOutdated, getClientVersion, getSkewProtectionCookieName } from 'nuxt-skew-protection/server'
 
 export default defineEventHandler((event) => {
   if (isClientOutdated(event)) {
@@ -103,7 +116,9 @@ export default defineEventHandler((event) => {
 })
 ```
 
-`isClientOutdated` is `false` when the request has no cookie. The same entry exports `getClientVersion`, `getSkewProtectionCookie`, and `setSkewProtectionCookie`.
+`isClientOutdated` is `false` when the request has no cookie. The same entry also exports `getSkewProtectionCookie`, `setSkewProtectionCookie`, and `getRuntimeConfigSkewProtection`.
+
+`getSkewProtectionCookieName(event?)` returns the configured cookie name, or `undefined` when cookies are disabled (`cookie: false`).
 
 ## Cloudflare
 
@@ -115,11 +130,12 @@ export default defineEventHandler((event) => {
 ## Traps
 
 - **A headless browser test sees no updates.** Bot detection from `@nuxtjs/robots` matches `HeadlessChrome` and skips the SSE or WebSocket connection. Override the user agent in the test.
-- **`useActiveConnections()` exists only with `connectionTracking: true`.** It needs `sse` or `ws`, and stats reach only connections that call `authorize()` in the Nitro hook `skew:authorize-stats`. See https://nuxtseo.com/docs/skew-protection/guides/live-connections
+- **`useActiveConnections()` exists only with `connectionTracking: true`.** It needs `sse` or `ws`, and stats reach only connections that call `authorize()` in the Nitro hook `skew:authorize-stats`. Returns `{ authorized, total, versions, routes, connections, yourId }`. See https://nuxtseo.com/docs/skew-protection/guides/live-connections
 - **`sse` or `ws` on `nuxt generate` falls back to polling** with a warning. Polling uses Nuxt `experimental.checkOutdatedBuildInterval`, which defaults to one hour.
 - **Vercel native skew protection turns off asset storage.** When `VERCEL_SKEW_PROTECTION_ENABLED=1` and `VERCEL_DEPLOYMENT_ID` are set, `bundleAssets` defaults to `false`.
 - **A route rule that caches HTML with `max-age` and no `s-maxage` drops the cookie** for that route. The build warns. Use `s-maxage` for a CDN, or `private` for the browser only.
 - **The cookie lasts 7 days.** It is not a session cookie. Use that duration in a cookie consent list.
+- **`isRollback` is always `false` without stored version timestamps.** It requires `bundleAssets` and at least two stored builds so both `serverVersion` and `clientVersion` appear in `skewProtection.versions`.
 
 ## Version limits
 
@@ -135,9 +151,13 @@ export default defineEventHandler((event) => {
 
 ## Config
 
+- `enabled` (`true`): set `false` to skip all module setup.
 - `bundleAssets` (`true`): set `false` when your CDN already keeps old `/_nuxt/` files.
 - `cookie`: set `false` to drop the cookie. `isClientOutdated` then always returns `false`.
 - `basePath` (`/__skew`): the full public endpoint prefix, including `app.baseURL`. Auto-detected; set it only for custom routing.
+- `connectionTracking` (`false`): enables `useActiveConnections()` and the stats endpoint.
+- `routeTracking` (`false`): track which route each connection is viewing. Requires `connectionTracking: true`.
+- `ipTracking` (`false`): store client IPs in the in-memory stats. Requires `connectionTracking: true`. IPs are never persisted.
 - `updateStrategy`: pass `pusherAdapter({ key, cluster, appId, secret })` from `nuxt-skew-protection/adapters/pusher`, or `ablyAdapter({ key, authUrl })` from `nuxt-skew-protection/adapters/ably`, for a hosted realtime provider. Install `pusher-js` or `ably`. The build validates the config and broadcasts each new build id. For another provider, write one with `defineAdapter` from `nuxt-skew-protection/adapters`: https://nuxtseo.com/docs/skew-protection/providers/external
 - Other options: https://nuxtseo.com/docs/skew-protection/api/config
 
