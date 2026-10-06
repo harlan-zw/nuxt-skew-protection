@@ -5,7 +5,7 @@ description: Keep old Nuxt build chunks available after a deploy and prompt open
 
 # nuxt-skew-protection
 
-Tested against `nuxt-skew-protection` 1.5.5 on Nuxt 4.5.2 (requires Nuxt `>=4.0.0`).
+Tested against `nuxt-skew-protection` 1.6.2 on Nuxt 4.5.2 (requires Nuxt `>=4.0.0`).
 At build time the module stores every build's assets, then copies the chunks of earlier builds back into `.output/public`.
 In the browser it detects a new deploy and tells you when the chunks the tab loaded are gone. Docs: https://nuxtseo.com/docs/skew-protection
 
@@ -36,6 +36,7 @@ Add a notification. Nothing shows until you render `<SkewNotification>` or call 
 - **Update strategy:** static output and Cloudflare Workers use `polling`, `cloudflare-durable` uses `ws`, and everything else uses `sse`. The client opens the connection when a component that uses the composable mounts.
 - **Endpoints:** `/__skew/health`, `/__skew/sse`, and `/__skew/ws`, under `basePath`. With `app.baseURL: '/app/'` they sit at `/app/__skew/*`. A static build has none.
 - **Multi tab:** a `BroadcastChannel` shares a detected deploy across tabs. Set `multiTab: false` to turn it off.
+- **HTML cache capability:** when `bundleAssets` and `storage` are set, the module publishes `runtimeConfig.htmlCacheCapabilities` so sibling modules (such as a Cloudflare CDN module) can read how long a cached document safely outlives its build.
 
 ## Show an update prompt
 
@@ -77,12 +78,21 @@ To reload without a prompt, set `reloadStrategy`:
 `useSkewProtection()` is auto-imported. It returns refs and registers callbacks that the module removes on unmount.
 
 ```ts
-const { onCurrentChunksOutdated, onAppOutdated, isAppOutdated, clientVersion } = useSkewProtection()
+const {
+  onCurrentChunksOutdated,
+  onAppOutdated,
+  isAppOutdated,
+  isRollback,
+  clientVersion,
+} = useSkewProtection()
 
 onCurrentChunksOutdated(({ invalidatedModules, passedReleases }) => {
   // the tab runs deleted code; save state, then reload
 })
 ```
+
+- `isRollback`: `true` when the server version is older than the client version (a deployment rollback). Requires version timestamps in `skewProtection.versions` from `latest.json`.
+- `simulateUpdate()`: dev-only helper that fires `skew:chunks-outdated` with empty arrays so you can test the notification UI without deploying.
 
 If the update was already detected, a callback runs at registration.
 `useSkewProtection({ lazy: true })` does not connect on mount. Call `connect()` yourself.
@@ -120,6 +130,7 @@ export default defineEventHandler((event) => {
 - **Vercel native skew protection turns off asset storage.** When `VERCEL_SKEW_PROTECTION_ENABLED=1` and `VERCEL_DEPLOYMENT_ID` are set, `bundleAssets` defaults to `false`.
 - **A route rule that caches HTML with `max-age` and no `s-maxage` drops the cookie** for that route. The build warns. Use `s-maxage` for a CDN, or `private` for the browser only.
 - **The cookie lasts 7 days.** It is not a session cookie. Use that duration in a cookie consent list.
+- **`isRollback` requires version timestamps.** It reads `skewProtection.versions` from `latest.json`. If storage is not configured or `bundleAssets` is `false`, it always returns `false`.
 
 ## Version limits
 
@@ -146,3 +157,4 @@ export default defineEventHandler((event) => {
 - `GET /__skew/health` returns `{ ok, version, uptime }`. Compare `version` with the client build id.
 - `/_nuxt/builds/latest.json` lists every stored version under `skewProtection.versions`. One entry after a second deploy means storage did not persist.
 - `debug: true` logs detection, service worker, and storage steps. Nuxt DevTools has a Skew Protection tab.
+- In dev, call `useSkewProtection().simulateUpdate()` from the browser console to fire `skew:chunks-outdated` and preview the notification without deploying.
