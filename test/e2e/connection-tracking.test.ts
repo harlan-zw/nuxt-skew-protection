@@ -67,7 +67,7 @@ function createWs(version?: string): Promise<WsConn> {
   })
 }
 
-describe.sequential('connection-tracking', () => {
+describe('connection-tracking', { concurrent: false }, () => {
   let serverProc: ChildProcess | null = null
   let activeConns: WsConn[] = []
 

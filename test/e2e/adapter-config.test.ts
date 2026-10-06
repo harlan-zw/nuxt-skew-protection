@@ -21,7 +21,7 @@ function readOutput(fixtureDir: string) {
 // Nuxt deep clones nuxt.config while loading it. An adapter set in
 // `updateStrategy` must survive that clone, validate, and ship only its
 // public config to the client.
-describe.sequential('adapter in nuxt.config', () => {
+describe('adapter in nuxt.config', { concurrent: false }, () => {
   it('builds with pusherAdapter()', async () => {
     const fixtureDir = resolve(__dirname, '../fixtures/pusher')
     cleanFixture(fixtureDir)

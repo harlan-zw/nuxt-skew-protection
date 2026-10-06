@@ -131,7 +131,7 @@ function createWs(version?: string): Promise<WsConn> {
 }
 
 // Skip in CI - requires CLOUDFLARE_API_TOKEN
-describe.skipIf(isCI).sequential('connection-tracking-cloudflare-durable', () => {
+describe.skipIf(isCI)('connection-tracking-cloudflare-durable', { concurrent: false }, () => {
   let wranglerProc: ChildProcess | null = null
   let activeConns: WsConn[] = []
 

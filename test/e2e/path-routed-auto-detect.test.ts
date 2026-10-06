@@ -14,7 +14,7 @@ const DEPLOYMENT_ID = 'path-routed-v1'
 // `basePath` or `cookie.name`. Both must be auto-detected from the mount point
 // so a worker that only owns `/pro/*` on a shared host gets endpoints + a cookie
 // that resolve to itself, not the app that owns the root route.
-describe.sequential('path-routed auto-detection', () => {
+describe('path-routed auto-detection', { concurrent: false }, () => {
   let serverProc: ChildProcess | null = null
 
   beforeAll(async () => {

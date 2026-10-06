@@ -14,7 +14,7 @@ const RE_BASE_PATH = /basePath:"([^"]+)"/
 // The fixture sets `app.baseURL: '/app/'`. The client reads `basePath` from the
 // public runtime config and requests it verbatim, so every endpoint the client
 // can call must answer at exactly that path.
-describe.sequential('app.baseURL', () => {
+describe('app.baseURL', { concurrent: false }, () => {
   let serverProc: ChildProcess | null = null
   let basePath = ''
 
