@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig, defineProject } from 'vitest/config'
 
 export default defineConfig({
@@ -5,6 +6,9 @@ export default defineConfig({
     projects: [
       // Unit tests
       defineProject({
+        resolve: {
+          alias: { '#skew-protection/bot-detection': resolve('./src/runtime/app/utils/bot-detection-none.ts') },
+        },
         test: {
           name: 'unit',
           environment: 'node',

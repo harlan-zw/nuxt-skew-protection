@@ -2,22 +2,24 @@ import type { CookieSerializeOptions } from 'cookie-es'
 import type { SkewAdapter } from './runtime/adapters/types'
 import type { NuxtSkewProtectionPrivateRuntimeConfig, NuxtSkewProtectionRuntimeConfig } from './runtime/types'
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import {
   addComponent,
   addImports,
+  addNitroPlugin,
   addPlugin,
   addServerHandler,
   addTemplate,
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
+  getNitroVersion,
   hasNuxtModule,
   resolvePath,
   tryResolveModule,
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
-import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility } from 'nuxtseo-shared/kit'
-import { readPackageJSON } from 'pkg-types'
+import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility, setupRuntimeAliases } from 'nuxtseo-shared/kit'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults'
@@ -148,19 +150,21 @@ export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: 'nuxt-skew-protection',
     compatibility: {
-      nuxt: '>=4.0.0',
+      nuxt: '^4.6.0 || ^5.0.0',
     },
     configKey: 'skewProtection',
   },
   moduleDependencies: {
     '@nuxtjs/robots': {
-      version: '>=5.6.7',
+      version: '>=7.0.0',
+      optional: true,
     },
     'nuxt-site-config': {
-      version: '>=4.0',
+      version: '>=5.0.0',
+      optional: true,
     },
     'nuxtseo-shared': {
-      version: '>=0.8.0',
+      version: '>=6.0.0',
     },
   },
   defaults: {
@@ -175,7 +179,7 @@ export default defineNuxtModule<ModuleOptions>({
       maxAge: 60 * 60 * 24 * 7, // 7 days
     },
     storage: {
-      driver: 'fs',
+      driver: 'fs-lite',
       base: 'node_modules/.cache/nuxt-seo/skew-protection',
     },
     debug: false,
@@ -184,13 +188,34 @@ export default defineNuxtModule<ModuleOptions>({
   },
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
-    const { version } = await readPackageJSON(resolver.resolve('../package.json'))
+    const { version } = JSON.parse(await readFile(resolver.resolve('../package.json'), 'utf8')) as { version: string }
     logger.level = (options.debug || nuxt.options.debug) ? 4 : 3
     if (options.enabled === false) {
       logger.debug('The module is disabled, skipping setup.')
       return
     }
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
+    setupRuntimeAliases({ namespace: '#skew-protection', app: resolver.resolve('./runtime/app'), server: resolver.resolve('./runtime/server') }, nuxt)
+    nuxt.hook('nitro:config', (nitroConfig) => {
+      if (getNitroVersion(nuxt) === 3) {
+        const nativeConfig = nitroConfig as unknown as { noExternals?: boolean | (string | RegExp)[] }
+        if (nativeConfig.noExternals !== true)
+          nativeConfig.noExternals = [...nativeConfig.noExternals || [], 'nuxt-skew-protection']
+      }
+      else {
+        const externals = nitroConfig.externals ||= {}
+        externals.inline ||= []
+        externals.inline.push(resolver.resolve('./runtime'))
+      }
+    })
+    nuxt.options.alias['#skew-protection/bot-detection'] = resolver.resolve('./runtime/app/utils/bot-detection-none')
+    nuxt.options.alias['#skew-protection/site-config'] = resolver.resolve('./runtime/server/utils/site-config-none')
+    nuxt.hook('modules:done', () => {
+      if (hasNuxtModule('@nuxtjs/robots'))
+        nuxt.options.alias['#skew-protection/bot-detection'] = resolver.resolve('./runtime/app/utils/bot-detection-robots')
+      if (hasNuxtModule('nuxt-site-config'))
+        nuxt.options.alias['#skew-protection/site-config'] = resolver.resolve('./runtime/server/utils/site-config-installed')
+    })
 
     // Resolve the endpoint prefix. When `basePath` isn't set explicitly it's
     // auto-detected from the app mount point (absolute `buildAssetsDir` parent,
@@ -350,23 +375,26 @@ skewVersion?: string`,
       route?: string
       ip?: string
       send: (data: unknown) => void
+      peer?: unknown
     }) => void
-    'skew:connection:route-update': (payload: { id: string, route: string }) => void
-    'skew:connection:close': (payload: { id: string }) => void
+    'skew:connection:route-update': (payload: { id: string, route: string, peer?: unknown }) => void
+    'skew:connection:close': (payload: { id: string, peer?: unknown }) => void
     /** event is an HTTP event for SSE, or headers for WebSocket connections. */
-    'skew:subscribe-stats': (payload: { id: string, event?: ${nitroCompatibility.eventType} | { headers?: Headers } }) => void
+    'skew:subscribe-stats': (payload: { id: string, peer?: unknown, event?: RequestEvent | ${nitroCompatibility.eventType} | { headers?: Headers } }) => void
     /** event is an HTTP event for SSE, or headers for WebSocket connections. */
-    'skew:authorize-stats': (payload: { event?: ${nitroCompatibility.eventType} | { headers?: Headers }, authorize: () => void }) => void
+    'skew:authorize-stats': (payload: { id?: string, event?: RequestEvent | ${nitroCompatibility.eventType} | { headers?: Headers }, authorize: () => void }) => void
     'skew:stats': (callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => void`,
         })
         return `// Generated by nuxt-skew-protection
+
+import type { RequestEvent } from 'nuxt/server'
 
 ${nitroTypes}
 
 export {}
 `
       },
-    }, { nitro: true })
+    }, { nuxt: true, nitro: true })
 
     addComponent({
       name: 'SkewNotification',
@@ -387,12 +415,10 @@ export {}
       })
 
       // Add Nitro plugin for connection tracking (tree-shakable)
-      nuxt.options.nitro = nuxt.options.nitro || {}
-      nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
       const connectionTrackingPlugin = nitroPreset === 'cloudflare-durable'
         ? './runtime/server/plugins/connection-tracking-cloudflare-durable'
         : './runtime/server/plugins/connection-tracking'
-      nuxt.options.nitro.plugins.push(resolver.resolve(connectionTrackingPlugin))
+      addNitroPlugin(resolver.resolve(connectionTrackingPlugin))
     }
 
     // add aliases for nuxt-skew-protection types and server
@@ -477,9 +503,9 @@ export {}
         // reads the response, so it also covers a `cache-control` set by a
         // handler or a nitro plugin, which nothing here can see. It costs two
         // header reads on responses that are not documents.
-        nuxt.options.nitro = nuxt.options.nitro || {}
-        nuxt.options.nitro.plugins = nuxt.options.nitro.plugins || []
-        nuxt.options.nitro.plugins.push(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+        addNitroPlugin(resolver.resolve(getNitroVersion(nuxt) === 3
+          ? './runtime/server/plugins/html-cache-headers-nitro3'
+          : './runtime/server/plugins/html-cache-headers'))
 
         if (caching.length) {
           // Mirrors `version-manager.ts`, which falls back to 7 rather than to
@@ -718,7 +744,7 @@ export {}
             const storageInfo = options.storage!.base
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
-            if (totalReleases === 1 && options.storage!.driver === 'fs') {
+            if (totalReleases === 1 && ['fs', 'fs-lite'].includes(options.storage!.driver)) {
               logger.info('Initialized local storage with its first release.')
             }
             else if (totalReleases === 1) {

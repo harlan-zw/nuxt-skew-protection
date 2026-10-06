@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { readdir, readFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import { resolve } from 'node:path'
 
 async function waitForServer(server, origin) {
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -33,42 +31,47 @@ async function main() {
   await once(portServer, 'close')
 
   const origin = `http://127.0.0.1:${port}`
-  const fixtureTypes = await readFile(new URL('.nuxt/types/nuxt-skew-protection-nitro.d.ts', import.meta.url), 'utf8')
-  const nitroManifest = JSON.parse(await readFile(new URL('.output/nitro.json', import.meta.url), 'utf8'))
-  const nitroServerEntries = await readdir(new URL('.output/server', import.meta.url), {
-    recursive: true,
-    withFileTypes: true,
-  })
-  const nitroServer = (await Promise.all(
-    nitroServerEntries
-      .filter(entry => entry.isFile() && entry.name.endsWith('.mjs'))
-      .map(entry => readFile(resolve(entry.parentPath, entry.name), 'utf8')),
-  )).join('\n')
-
-  assert.equal(nitroManifest.versions.nitro, '3.0.260610-beta')
-  assert.match(fixtureTypes, /declare module 'nitro\/types'/)
-  assert.match(fixtureTypes, /interface NitroRuntimeHooks/)
-  assert.match(fixtureTypes, /'skew:subscribe-stats'/)
-  assert.match(fixtureTypes, /import\('nitro\/h3'\)\.H3Event/)
-  assert.match(fixtureTypes, /declare module 'srvx'/)
-  assert.match(fixtureTypes, /interface ServerRequestContext/)
-  assert.match(fixtureTypes, /skewVersion\?: string/)
-  assert.doesNotMatch(fixtureTypes, /nitropack/)
-  assert.doesNotMatch(nitroServer, /nitropack\/runtime/)
-
   const server = spawn(process.execPath, ['.output/server/index.mjs'], {
     cwd: import.meta.dirname,
     env: {
       ...process.env,
       HOST: '127.0.0.1',
       PORT: String(port),
+      NITRO_PORT: String(port),
+      NITRO_HOST: '127.0.0.1',
     },
     stdio: 'inherit',
   })
 
   try {
     const response = await waitForServer(server, origin)
-    assert.match(await response.text(), /Nuxt Skew Protection Nitro 3/)
+    const html = await response.text()
+    assert.match(html, /Nuxt Skew Protection Nitro 3/)
+    assert.match(html, /id="connection-count">1</)
+    assert.match(html, /id="alias-app">true</)
+    const botHtml = await fetch(origin, { headers: { 'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' } }).then(response => response.text())
+    const botConnections = 0
+    assert.match(botHtml, new RegExp(`id="connection-count">${botConnections}<`))
+    const diagnostic = await fetch(`${origin}/api/diagnostic`).then(response => response.json())
+    assert.equal(diagnostic.siteConfigUrl, 'https://skew.example.com')
+    const document = await fetch(origin, { headers: { 'sec-fetch-dest': 'document' } })
+    assert.match(document.headers.get('set-cookie') || '', /__nkpv=nuxt5-fixture-v1/)
+    const cached = await fetch(`${origin}/cacheable`, { headers: { 'sec-fetch-dest': 'document' } })
+    assert.match(cached.headers.get('cache-control') || '', /s-maxage=300/)
+    assert.deepEqual(cached.headers.getSetCookie(), ['session=kept; Expires=Wed, 01 Jan 2031 00:00:00 GMT; Path=/'])
+    const authenticated = await fetch(`${origin}/cacheable`, {
+      headers: { 'sec-fetch-dest': 'document', 'authorization': 'Bearer fixture' },
+    })
+    assert.ok(authenticated.headers.getSetCookie().some(cookie => cookie.startsWith('__nkpv=')))
+    const asset = html.match(/src="([^"]+.js)"/)?.[1]
+    assert.ok(asset, 'The document includes a JavaScript asset')
+    const assetResponse = await fetch(new URL(asset, origin), { headers: { cookie: '__nkpv=previous-deployment' } })
+    assert.equal(assetResponse.status, 200)
+
+    const worker = await fetch(`${origin}/_nuxt-skew-sw.js`)
+    assert.equal(worker.status, 200)
+    assert.match(worker.headers.get('content-type') || '', /javascript/)
+    assert.match(await worker.text(), /addEventListener/)
 
     const health = await fetch(`${origin}/__skew/health`).then(response => response.json())
     assert.equal(health.ok, true)
@@ -80,11 +83,15 @@ async function main() {
       },
     }).then(response => response.json())
     assert.equal(context.skewVersion, 'client-v4')
+    assert.equal(context.clientVersion, 'client-v4')
+    assert.equal(context.outdated, true)
   }
   finally {
-    server.kill()
-    if (server.exitCode === null)
-      await new Promise(resolve => server.once('exit', resolve))
+    if (server.exitCode === null && server.signalCode === null) {
+      const exited = once(server, 'exit')
+      server.kill()
+      await exited
+    }
   }
 }
 

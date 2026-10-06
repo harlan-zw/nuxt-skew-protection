@@ -23,7 +23,7 @@ describe('version Management Integration', () => {
   describe('multi-Build Lifecycle', () => {
     it('should handle complete multi-build workflow', async () => {
       const manager = createAssetManager({
-        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }),
+        driver: await resolveBuildTimeDriver({ driver: 'fs-lite', base: storageDir }),
         retentionDays: 7,
         maxNumberOfVersions: 5,
         debug: false,

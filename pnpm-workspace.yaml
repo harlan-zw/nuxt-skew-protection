@@ -1,92 +1,80 @@
+blockExoticSubdeps: false
+
+minimumReleaseAgeExcludePrune: true
 minimumReleaseAgeExclude:
-  - '@nuxtjs/robots@6.1.3'
-  - '@vue/compiler-core@3.5.38'
-  - '@vue/compiler-dom@3.5.38'
-  - '@vue/compiler-sfc@3.5.38'
-  - '@vue/compiler-ssr@3.5.38'
-  - '@vue/reactivity@3.5.38'
-  - '@vue/runtime-core@3.5.38'
-  - '@vue/runtime-dom@3.5.38'
-  - '@vue/server-renderer@3.5.38'
-  - '@vue/shared@3.5.38'
-  - nuxt-site-config-kit@4.1.0 || 4.1.3 || 4.1.4
-  - nuxt-site-config@4.1.0 || 4.1.3 || 4.1.4
-  - nuxtseo-layer-devtools@5.2.3 || 5.2.6 || 5.3.0
-  - nuxtseo-shared@5.2.3 || 5.2.6 || 5.3.0 || 5.3.4 || 5.3.7 || 5.3.8 || 5.3.9 || 5.3.11
-  - site-config-stack@4.1.0 || 4.1.3 || 4.1.4
-  - vue@3.5.38
-  - '@nuxt/kit@4.5.0'
-  - '@nuxt/nitro-server@4.5.0'
-  - '@nuxt/schema@4.5.0'
-  - '@nuxt/vite-builder@4.5.0'
-  - nuxt@4.5.0
-  - eslint-plugin-harlanzw@0.20.0
+  - '@nuxt/kit@4.6.0'
+  - '@nuxt/nitro-server@4.6.0'
+  - '@nuxt/schema@4.6.0'
+  - '@nuxt/vite-builder@4.6.0'
+  - nuxt@4.6.0
+  - '@nuxt/cli@4.0.0'
+  - '@nuxt/vite-server@4.6.0'
+
+trustLockfile: true
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 262800
+
+trustPolicyExclude:
+  - stylehacks@9.0.7
+  - postcss-normalize-timing-functions@9.0.5
+  - postcss-normalize-display-values@9.0.5
+  - postcss-normalize-repeat-style@9.0.5
+  - postcss-normalize-positions@9.0.6
+  - postcss-normalize-whitespace@9.0.5
+  - postcss-minify-font-values@9.0.7
+  - postcss-discard-overridden@9.0.5
+  - postcss-discard-duplicates@9.0.5
+  - postcss-reduce-transforms@9.0.4
+  - postcss-normalize-unicode@9.0.5
+  - postcss-normalize-charset@9.0.5
+  - postcss-unique-selectors@9.0.5
+  - postcss-normalize-string@9.0.5
+  - postcss-minify-selectors@9.0.6
+  - postcss-minify-gradients@9.0.6
+  - postcss-discard-comments@9.0.6
+  - postcss-reduce-initial@9.0.6
+  - postcss-ordered-values@9.0.6
+  - postcss-merge-longhand@9.2.0
+  - postcss-convert-values@9.0.7
+  - postcss-normalize-url@9.0.5
+  - postcss-minify-params@9.0.6
+  - postcss-merge-rules@9.0.8
+  - postcss-discard-empty@9.0.5
+  - postcss-colormin@9.0.6
+  - cssnano-utils@8.1.0
+  - postcss-svgo@9.0.4
+  - cssnano@9.2.2
+  - cssnano-preset-default@9.2.2
 
 shellEmulator: true
 
-trustPolicy: no-downgrade
-trustLockfile: true
 packages:
   - playground
   - devtools
   - test/fixtures/*
   - '!test/fixtures/nuxt5'
-catalog:
-  '@antfu/eslint-config': ^9.3.0
-  '@arethetypeswrong/cli': ^0.18.5
-  '@nuxt/kit': ^4.5.2
-  '@nuxt/module-builder': ^1.0.3
-  '@nuxt/test-utils': ^4.1.0
-  '@nuxt/ui': ^4.10.0
-  '@nuxthub/core': latest
-  '@nuxtjs/robots': ^6.1.4
-  '@types/ws': ^8.18.1
-  '@upstash/redis': ^1.38.2
-  '@vueuse/core': ^14.4.0
-  '@vueuse/nuxt': latest
-  ably: ^2.27.0
-  better-sqlite3: ^13.0.3
-  bumpp: ^12.2.0
-  consola: ^3.4.2
-  cookie-es: ^3.1.1
-  eslint: ^10.8.1
-  eslint-plugin-harlanzw: ^0.20.0
-  eventsource: ^5.0.0
-  happy-dom: ^20.11.2
-  ioredis: ^6.0.0
-  laravel-echo: ^2.4.0
-  nuxt: ^4.5.2
-  nuxt-auth-utils: ^0.5.30
-  nuxt-site-config: ^4.2.2
-  nuxtseo-layer-devtools: ^5.3.12
-  nuxtseo-shared: ^5.3.12
-  ofetch: ^1.5.1
-  pathe: ^2.0.3
-  pkg-types: ^2.3.1
-  playwright-core: ^1.62.1
-  pusher-js: ^8.6.0
-  std-env: ^4.2.0
-  tinyexec: ^1.3.0
-  tsx: ^4.23.12
-  typescript: 6.0.3
-  unbuild: ^3.6.1
-  unstorage: ^1.17.5
-  vitest: ^4.1.10
-  vue: ^3.5.41
-  vue-router: ^5.2.0
-  vue-tsc: ^3.3.9
-  wrangler: ^4.121.0
-  ws: ^8.21.3
-  zod: ^4.4.3
-trustPolicyIgnoreAfter: 262800
+
+# Local migration proof overrides
+overrides:
+  '@nuxtjs/robots': https://pkg.pr.new/nuxt-modules/robots/@nuxtjs/robots@24f4dcdbf3cd8d4c19a210b62eec8295eb4772a7
+  '@nuxtjs/sitemap': https://pkg.pr.new/nuxt-modules/sitemap/@nuxtjs/sitemap@7879681b68064274eea0be819003669b9422b60d
+  nuxt-site-config: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config@59e27b8dc55b21407ce19dfdbb7be0c6571e9490
+  nuxt-site-config-kit: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config-kit@59e27b8dc55b21407ce19dfdbb7be0c6571e9490
+  nuxtseo-shared: https://pkg.pr.new/harlan-zw/nuxt-seo/nuxtseo-shared@226c091a0744b7286ef721ac035eed53856bfaa5
+  site-config-stack: https://pkg.pr.new/harlan-zw/nuxt-site-config/site-config-stack@59e27b8dc55b21407ce19dfdbb7be0c6571e9490
 
 allowBuilds:
+  '@firebase/util': false
   '@parcel/watcher': true
   better-sqlite3: true
   esbuild: true
+  protobufjs: false
   sharp: true
+  simple-git-hooks: false
+  unrs-resolver: false
   vue-demi: true
   workerd: true
+
 onlyBuiltDependencies:
   - '@firebase/util'
   - '@parcel/watcher'
@@ -96,3 +84,47 @@ onlyBuiltDependencies:
   - unrs-resolver
   - vue-demi
   - workerd
+
+catalog:
+  '@antfu/eslint-config': ^9.5.1
+  '@arethetypeswrong/cli': ^0.18.5
+  '@nuxt/kit': ^4.6.0
+  '@nuxt/module-builder': ^1.0.3
+  '@nuxt/test-utils': ^4.3.3
+  '@nuxt/ui': ^4.11.3
+  '@nuxthub/core': 0.10.8
+  '@nuxtjs/robots': ^7.0.0
+  '@types/ws': ^8.18.2
+  '@upstash/redis': ^1.39.0
+  '@vueuse/core': ^15.0.0
+  '@vueuse/nuxt': 15.0.0
+  ably: ^2.29.0
+  better-sqlite3: ^13.0.3
+  bumpp: ^12.3.0
+  consola: ^3.4.2
+  cookie-es: ^3.1.1
+  eslint: ^10.12.0
+  eslint-plugin-harlanzw: ^0.23.0
+  eventsource: ^5.1.2
+  happy-dom: ^20.14.5
+  ioredis: ^6.0.0
+  laravel-echo: ^2.5.0
+  nuxt: 4.6.0
+  nuxt-auth-utils: ^0.5.30
+  nuxtseo-layer-devtools: ^5.3.16
+  nuxtseo-shared: ^6.0.0
+  pathe: ^2.0.3
+  playwright-core: ^1.63.0
+  pusher-js: ^8.6.0
+  std-env: ^4.3.0
+  tsx: ^4.23.15
+  typescript: 6.0.3
+  unbuild: ^3.6.1
+  unstorage: ^1.17.5
+  vitest: ^5.0.3
+  vue: ^3.5.43
+  vue-router: ^5.3.1
+  vue-tsc: ^3.3.12
+  wrangler: ^4.147.0
+  ws: ^8.22.0
+  zod: ^4.6.5

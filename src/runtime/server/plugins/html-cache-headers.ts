@@ -26,12 +26,15 @@ import {
  * on purpose.
  */
 export default defineNitroPlugin((nitroApp) => {
-  nitroApp.hooks.hook('beforeResponse', (event) => {
-    const cacheControl = sharedCacheControlHeader(name => getResponseHeader(event, name))
+  nitroApp.hooks.hook('beforeResponse', (event, response) => {
+    // Nitro 2 calls this hook before it copies a returned Web Response into
+    // the Node response. Read its final status and headers at that boundary.
+    const nativeResponse = response?.body instanceof Response ? response.body : undefined
+    const cacheControl = sharedCacheControlHeader(name => nativeResponse?.headers.get(name) ?? getResponseHeader(event, name))
     const decision = resolveHtmlCachePolicy(
       htmlCacheRequestFromEvent(event, getHeader),
       {
-        status: getResponseStatus(event),
+        status: nativeResponse?.status ?? getResponseStatus(event),
         cacheControl: cacheControl?.value,
       },
     )
@@ -41,6 +44,16 @@ export default defineNitroPlugin((nitroApp) => {
     const name = getSkewProtectionCookieName()
     if (!name)
       return
+
+    if (nativeResponse) {
+      const nativeCookies = nativeResponse.headers.getSetCookie()
+      const remainingNativeCookies = withoutCookie(nativeCookies, name)
+      if (remainingNativeCookies.length !== nativeCookies.length) {
+        nativeResponse.headers.delete('set-cookie')
+        for (const cookie of remainingNativeCookies)
+          nativeResponse.headers.append('set-cookie', cookie)
+      }
+    }
 
     const cookies = readSetCookies(
       event as never,

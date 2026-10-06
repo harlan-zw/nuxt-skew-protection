@@ -29,7 +29,7 @@ function getConnectionCount(): Promise<number> {
   })
 }
 
-describe.sequential('bot-detection', () => {
+describe('bot-detection', { concurrent: false }, () => {
   let serverProc: ChildProcess | null = null
 
   beforeAll(async () => {

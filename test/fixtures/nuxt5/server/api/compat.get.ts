@@ -1,5 +1,6 @@
-import { useNitroApp } from 'nitro/app'
-import { defineEventHandler } from 'nitro/h3'
+import { defineEventHandler } from 'nuxt/server'
+import { useNitroApp } from '#nuxtseo/nitro'
+import { getClientVersion, isClientOutdated } from '#skew-protection/server'
 
 export default defineEventHandler(async (event) => {
   const skewVersion: string | undefined = event.context.skewVersion
@@ -18,5 +19,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     skewVersion: skewVersion ?? null,
+    clientVersion: getClientVersion(event),
+    outdated: isClientOutdated(event),
   }
 })

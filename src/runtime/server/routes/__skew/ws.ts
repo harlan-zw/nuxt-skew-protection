@@ -30,8 +30,6 @@ export default defineWebSocketHandler({
       || forwarded?.split(',')[0]?.trim()
       || peer.request?.headers?.get('x-real-ip')
       || undefined
-
-    // @ts-expect-error custom hook
     useNitroApp().hooks.callHook('skew:connection:open', {
       id: peer.id,
       version: clientVersion,
@@ -58,7 +56,6 @@ export default defineWebSocketHandler({
     }
 
     if (data.type === SKEW_MESSAGE_TYPE.ROUTE_UPDATE && data.route) {
-      // @ts-expect-error custom hook
       useNitroApp().hooks.callHook('skew:connection:route-update', {
         id: peer.id,
         route: data.route,
@@ -66,7 +63,6 @@ export default defineWebSocketHandler({
       })
     }
     else if (data.type === SKEW_MESSAGE_TYPE.SUBSCRIBE_STATS) {
-      // @ts-expect-error custom hook
       useNitroApp().hooks.callHook('skew:subscribe-stats', {
         id: peer.id,
         event: { headers: peer.request?.headers },
@@ -76,7 +72,6 @@ export default defineWebSocketHandler({
   },
 
   close(peer) {
-    // @ts-expect-error custom hook
     useNitroApp().hooks.callHook('skew:connection:close', { id: peer.id, peer })
   },
 })

@@ -1,18 +1,16 @@
-import { defineEventHandler } from '#nuxtseo/h3'
-import { useRuntimeConfig } from '#nuxtseo/nitro'
-import { getSiteConfig } from '#site-config/server/composables'
+import { defineEventHandler, useRuntimeConfig } from 'nuxt/server'
+import { getSkewSiteConfigUrl } from '#skew-protection/site-config'
 
 /**
  * Devtools debug endpoint returning module configuration and resolved state.
  */
 export default defineEventHandler((event) => {
-  const config = useRuntimeConfig(event)
-  const siteConfig = getSiteConfig(event as any)
+  const config = useRuntimeConfig()
   const skewConfig = config.public?.skewProtection as Record<string, unknown> || {}
 
   return {
     version: skewConfig.version || 'unknown',
-    siteConfigUrl: siteConfig?.url || '',
+    siteConfigUrl: getSkewSiteConfigUrl(event),
     config: {
       cookie: skewConfig.cookie,
       debug: skewConfig.debug,

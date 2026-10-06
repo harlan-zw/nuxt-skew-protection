@@ -2,7 +2,7 @@
   "name": "nuxt-skew-protection",
   "type": "module",
   "version": "1.6.2",
-  "packageManager": "pnpm@11.21.0",
+  "packageManager": "pnpm@12.8.1",
   "description": "Solve Nuxt version skews with persistent assets and instant updates.",
   "author": {
     "name": "Harlan Wilton",
@@ -21,7 +21,8 @@
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
-      "import": "./dist/module.mjs"
+      "import": "./dist/module.mjs",
+      "default": "./dist/module.mjs"
     },
     "./server": {
       "types": "./dist/runtime/server/index.d.ts",
@@ -65,6 +66,9 @@
     "dist",
     "skills"
   ],
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -75,7 +79,7 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && nuxi prepare playground && pnpm run build:devtools",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "test": "vitest && pnpm test:nuxt5",
+    "test": "vitest run && pnpm test:nuxt5",
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
     "test:e2e": "vitest run test/e2e",
@@ -86,18 +90,26 @@
     "test:node-polling": "node --experimental-strip-types scripts/test-node-polling.ts",
     "test:node-ws": "node --experimental-strip-types scripts/test-node-ws.ts",
     "test:static-polling": "node --experimental-strip-types scripts/test-static-polling.ts",
-    "test:nuxt5": "pnpm pack --out test/fixtures/nuxt5/module.tgz && node test/fixtures/nuxt5/run.mjs",
+    "test:nuxt5": "pnpm build && pnpm --dir test/fixtures/nuxt5 install --frozen-lockfile && pnpm --dir test/fixtures/nuxt5 test",
     "test:vercel-sse": "node --experimental-strip-types scripts/test-vercel-sse.ts",
     "typecheck": "nuxt typecheck",
     "test:attw": "attw --pack"
   },
   "peerDependencies": {
-    "@nuxtjs/robots": ">=5.6.7",
+    "@nuxtjs/robots": "^7.0.0",
     "ably": ">=2",
+    "nuxt": "^4.6.0 || ^5.0.0",
+    "nuxt-site-config": "^5.0.0",
     "pusher-js": ">=8"
   },
   "peerDependenciesMeta": {
+    "@nuxtjs/robots": {
+      "optional": true
+    },
     "ably": {
+      "optional": true
+    },
+    "nuxt-site-config": {
       "optional": true
     },
     "pusher-js": {
@@ -109,12 +121,8 @@
     "@vueuse/core": "catalog:",
     "consola": "catalog:",
     "cookie-es": "catalog:",
-    "nuxt-site-config": "catalog:",
     "nuxtseo-shared": "catalog:",
-    "ofetch": "catalog:",
     "pathe": "catalog:",
-    "pkg-types": "catalog:",
-    "tinyexec": "catalog:",
     "unstorage": "catalog:",
     "zod": "catalog:"
   },
@@ -153,5 +161,10 @@
   "resolutions": {
     "nuxt-skew-protection": "workspace:*",
     "reka-ui": "2.6.1"
+  },
+  "build": {
+    "externals": [
+      "nuxt/server"
+    ]
   }
 }

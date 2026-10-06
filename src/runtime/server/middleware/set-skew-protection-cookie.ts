@@ -1,5 +1,4 @@
-import { defineEventHandler, getHeader } from '#nuxtseo/h3'
-import { useRuntimeConfig } from '#nuxtseo/nitro'
+import { defineEventHandler, getRequestHeader, useRuntimeConfig } from 'nuxt/server'
 import { getSkewProtectionCookie, setSkewProtectionCookie } from '../imports/cookie'
 
 /**
@@ -15,11 +14,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // Only set cookie on document requests
-  const secFetchDest = getHeader(event, 'sec-fetch-dest')
+  const secFetchDest = getRequestHeader(event, 'sec-fetch-dest')
   if (secFetchDest !== 'document')
     return
 
-  const buildId = useRuntimeConfig(event).app.buildId
+  const buildId = useRuntimeConfig().app.buildId
   if (!buildId)
     return
 

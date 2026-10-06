@@ -1,6 +1,6 @@
 import type { CookieSerializeOptions } from 'cookie-es'
 import type { SkewProtectionEvent } from './getRuntimeConfigSkewProtection'
-import { getCookie, setCookie } from '#nuxtseo/h3'
+import { getCookie, setCookie } from 'nuxt/server'
 import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection'
 
 /**
@@ -32,7 +32,7 @@ export function getSkewProtectionCookie(event: SkewProtectionEvent): string | un
   const cookieName = getSkewProtectionCookieName(event)
   if (!cookieName)
     return undefined
-  return getCookie(event as Parameters<typeof getCookie>[0], cookieName)
+  return getCookie(event, cookieName)
 }
 
 /**
@@ -53,5 +53,5 @@ export function setSkewProtectionCookie(event: SkewProtectionEvent, value: strin
   if (cookieConfig === false)
     return
   const { name: cookieName, ...cookieOptions } = cookieConfig
-  setCookie(event as Parameters<typeof setCookie>[0], cookieName, value, cookieOptions as CookieSerializeOptions)
+  setCookie(event, cookieName, value, cookieOptions as CookieSerializeOptions)
 }

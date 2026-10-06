@@ -1,3 +1,5 @@
+import type { RequestEvent } from 'nuxt/server'
+import type { H3Event } from '#nuxtseo/h3'
 import { defineNitroPlugin } from '#nuxtseo/nitro'
 
 interface DurableAttachment {
@@ -27,23 +29,34 @@ interface ConnectionPayload {
   version?: string
   route?: string
   ip?: string
-  peer?: Peer
+  peer?: unknown
 }
 
 interface RouteUpdatePayload {
   id: string
   route: string
-  peer?: Peer
+  peer?: unknown
 }
 
 interface SubscribeStatsPayload {
   id: string
-  event?: { headers?: Headers }
-  peer?: Peer
+  event?: RequestEvent | H3Event | { headers?: Headers }
+  peer?: unknown
 }
 
-function getCtx(peer?: Peer): DurableContext | null {
-  return peer?._internal?.durable?.ctx || null
+function getInternal(peer: unknown): Peer['_internal'] {
+  if (!peer || typeof peer !== 'object' || !('_internal' in peer))
+    return undefined
+  const internal = peer._internal
+  if (!internal || typeof internal !== 'object')
+    return undefined
+  // CrossWS hides its adapter internals. This boundary reads the installed
+  // Cloudflare adapter's trusted attachment and Durable Object interfaces.
+  return internal as NonNullable<Peer['_internal']>
+}
+
+function getCtx(peer?: unknown): DurableContext | null {
+  return getInternal(peer)?.durable?.ctx || null
 }
 
 function getStats(ctx: DurableContext, forId?: string) {
@@ -80,9 +93,8 @@ function broadcastToSubscribers(ctx: DurableContext) {
 }
 
 export default defineNitroPlugin((nitroApp) => {
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, peer }: ConnectionPayload) => {
-    const ws = peer?._internal?.ws
+    const ws = getInternal(peer)?.ws
     if (ws?.serializeAttachment) {
       ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), id, v: version, r: route || '/', ip })
     }
@@ -91,10 +103,8 @@ export default defineNitroPlugin((nitroApp) => {
     if (ctx)
       broadcastToSubscribers(ctx)
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:route-update', ({ route, peer }: RouteUpdatePayload) => {
-    const ws = peer?._internal?.ws
+    const ws = getInternal(peer)?.ws
     if (ws?.serializeAttachment) {
       ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), r: route })
     }
@@ -103,24 +113,19 @@ export default defineNitroPlugin((nitroApp) => {
     if (ctx)
       broadcastToSubscribers(ctx)
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:close', ({ peer }: ConnectionPayload) => {
     const ctx = getCtx(peer)
     if (ctx)
       broadcastToSubscribers(ctx)
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event, peer }: SubscribeStatsPayload) => {
-    const ws = peer?._internal?.ws
+    const ws = getInternal(peer)?.ws
     const ctx = getCtx(peer)
     if (!ws || !ctx)
       return
 
     // Call auth hook
     let authorized = false
-    // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:authorize-stats', {
       event,
       authorize: () => { authorized = true },

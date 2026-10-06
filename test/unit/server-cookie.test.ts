@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let cookieConfig: false | { name: string, path: string } = false
 
-vi.mock('#nuxtseo/h3', () => ({
+vi.mock('nuxt/server', () => ({
   getCookie: vi.fn(),
   setCookie: vi.fn(),
 }))
@@ -24,18 +24,18 @@ describe('server cookie helpers', () => {
   })
 
   it('does not read a cookie when cookies are disabled', async () => {
-    const { getCookie } = await import('#nuxtseo/h3')
+    const { getCookie } = await import('nuxt/server')
     const { getSkewProtectionCookie } = await import('../../src/runtime/server/imports/cookie')
 
-    expect(getSkewProtectionCookie({ context: {} })).toBeUndefined()
+    expect(getSkewProtectionCookie({ context: {}, req: new Request('http://localhost'), res: { status: 200, statusText: '', headers: new Headers() } })).toBeUndefined()
     expect(getCookie).not.toHaveBeenCalled()
   })
 
   it('does not set a cookie when cookies are disabled', async () => {
-    const { setCookie } = await import('#nuxtseo/h3')
+    const { setCookie } = await import('nuxt/server')
     const { setSkewProtectionCookie } = await import('../../src/runtime/server/imports/cookie')
 
-    setSkewProtectionCookie({ context: {} }, 'build-id')
+    setSkewProtectionCookie({ context: {}, req: new Request('http://localhost'), res: { status: 200, statusText: '', headers: new Headers() } }, 'build-id')
 
     expect(setCookie).not.toHaveBeenCalled()
   })
