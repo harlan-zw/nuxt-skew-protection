@@ -79,7 +79,7 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && nuxi prepare playground && pnpm run build:devtools",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "test": "vitest run && pnpm test:nuxt-lanes",
+    "test": "vitest run && pnpm test:nuxt5",
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
     "test:e2e": "vitest run test/e2e",
@@ -90,11 +90,10 @@
     "test:node-polling": "node --experimental-strip-types scripts/test-node-polling.ts",
     "test:node-ws": "node --experimental-strip-types scripts/test-node-ws.ts",
     "test:static-polling": "node --experimental-strip-types scripts/test-static-polling.ts",
-    "test:nuxt5": "node scripts/test-nuxt-lanes.ts nuxt5",
+    "test:nuxt5": "pnpm build && pnpm --dir test/fixtures/nuxt5 install --frozen-lockfile && pnpm --dir test/fixtures/nuxt5 test",
     "test:vercel-sse": "node --experimental-strip-types scripts/test-vercel-sse.ts",
     "typecheck": "nuxt typecheck",
-    "test:attw": "attw --pack",
-    "test:nuxt-lanes": "node scripts/test-nuxt-lanes.ts"
+    "test:attw": "attw --pack"
   },
   "peerDependencies": {
     "@nuxtjs/robots": "^7.0.0",

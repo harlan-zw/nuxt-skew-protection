@@ -156,15 +156,15 @@ export default defineNuxtModule<ModuleOptions>({
   },
   moduleDependencies: {
     '@nuxtjs/robots': {
-      version: '^7.0.0',
+      version: '>=7.0.0',
       optional: true,
     },
     'nuxt-site-config': {
-      version: '^5.0.0',
+      version: '>=5.0.0',
       optional: true,
     },
     'nuxtseo-shared': {
-      version: '^6.0.0',
+      version: '>=6.0.0',
     },
   },
   defaults: {

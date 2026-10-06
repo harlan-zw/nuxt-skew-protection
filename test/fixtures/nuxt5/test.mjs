@@ -50,10 +50,10 @@ async function main() {
     assert.match(html, /id="connection-count">1</)
     assert.match(html, /id="alias-app">true</)
     const botHtml = await fetch(origin, { headers: { 'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' } }).then(response => response.text())
-    const botConnections = process.env.NUXT_TEST_INTEGRATIONS === 'installed' ? 0 : 1
+    const botConnections = 0
     assert.match(botHtml, new RegExp(`id="connection-count">${botConnections}<`))
     const diagnostic = await fetch(`${origin}/api/diagnostic`).then(response => response.json())
-    assert.equal(diagnostic.siteConfigUrl, process.env.NUXT_TEST_INTEGRATIONS !== 'absent' ? 'https://skew.example.com' : origin)
+    assert.equal(diagnostic.siteConfigUrl, 'https://skew.example.com')
     const document = await fetch(origin, { headers: { 'sec-fetch-dest': 'document' } })
     assert.match(document.headers.get('set-cookie') || '', /__nkpv=nuxt5-fixture-v1/)
     const cached = await fetch(`${origin}/cacheable`, { headers: { 'sec-fetch-dest': 'document' } })

@@ -29,6 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 async function setupWorker(existingScriptURL?: string | Error) {
@@ -47,7 +48,7 @@ async function setupWorker(existingScriptURL?: string | Error) {
     },
   }
   vi.stubGlobal('window', { location: { origin: 'http://localhost' } })
-  vi.stubGlobal('performance', { getEntriesByType: () => [] })
+  vi.spyOn(performance, 'getEntriesByType').mockReturnValue([])
   vi.stubGlobal('navigator', {
     serviceWorker: {
       getRegistration: () => existingScriptURL instanceof Error
