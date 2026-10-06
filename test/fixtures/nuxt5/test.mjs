@@ -56,6 +56,13 @@ async function main() {
     assert.equal(diagnostic.siteConfigUrl, process.env.NUXT_TEST_INTEGRATIONS !== 'absent' ? 'https://skew.example.com' : origin)
     const document = await fetch(origin, { headers: { 'sec-fetch-dest': 'document' } })
     assert.match(document.headers.get('set-cookie') || '', /__nkpv=nuxt5-fixture-v1/)
+    const cached = await fetch(`${origin}/cacheable`, { headers: { 'sec-fetch-dest': 'document' } })
+    assert.match(cached.headers.get('cache-control') || '', /s-maxage=300/)
+    assert.deepEqual(cached.headers.getSetCookie(), ['session=kept; Expires=Wed, 01 Jan 2031 00:00:00 GMT; Path=/'])
+    const authenticated = await fetch(`${origin}/cacheable`, {
+      headers: { 'sec-fetch-dest': 'document', authorization: 'Bearer fixture' },
+    })
+    assert.ok(authenticated.headers.getSetCookie().some(cookie => cookie.startsWith('__nkpv=')))
     const asset = html.match(/src="([^"]+.js)"/)?.[1]
     assert.ok(asset, 'The document includes a JavaScript asset')
     const assetResponse = await fetch(new URL(asset, origin), { headers: { cookie: '__nkpv=previous-deployment' } })

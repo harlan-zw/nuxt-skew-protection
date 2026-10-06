@@ -503,7 +503,9 @@ export {}
         // reads the response, so it also covers a `cache-control` set by a
         // handler or a nitro plugin, which nothing here can see. It costs two
         // header reads on responses that are not documents.
-        addNitroPlugin(resolver.resolve('./runtime/server/plugins/html-cache-headers'))
+        addNitroPlugin(resolver.resolve(getNitroVersion(nuxt) === 3
+          ? './runtime/server/plugins/html-cache-headers-nitro3'
+          : './runtime/server/plugins/html-cache-headers'))
 
         if (caching.length) {
           // Mirrors `version-manager.ts`, which falls back to 7 rather than to
