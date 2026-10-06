@@ -14,8 +14,10 @@ async function fetchDebugJson<T>(url: string): Promise<T> {
       await first.response.body?.cancel()
     response = await request()
   }
-  if (!response.ok)
+  if (!response.ok) {
+    await response.body?.cancel()
     throw new Error(`HTTP ${response.status} ${response.statusText}`)
+  }
   return response.json() as Promise<T>
 }
 
