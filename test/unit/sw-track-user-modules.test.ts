@@ -3,9 +3,14 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   onAppOutdated: vi.fn(),
   callHook: vi.fn(),
+  register: vi.fn(),
+  runtimeConfig: { app: { baseURL: '/' } },
 }))
 
-vi.mock('nuxt/app', () => ({ defineNuxtPlugin: (plugin: unknown) => plugin }))
+vi.mock('nuxt/app', () => ({
+  defineNuxtPlugin: (plugin: unknown) => plugin,
+  useRuntimeConfig: () => mocks.runtimeConfig,
+}))
 vi.mock('../../src/runtime/app/composables/useSkewProtection', () => ({
   useSkewProtection: () => ({ clientVersion: 'v1', onAppOutdated: mocks.onAppOutdated }),
 }))
@@ -18,6 +23,7 @@ vi.mock('../../src/runtime/shared/logger', () => ({ logger: { debug: vi.fn(), wa
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  mocks.runtimeConfig.app.baseURL = '/'
 })
 
 afterEach(() => {
@@ -25,7 +31,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function setupWorker() {
+async function setupWorker(existingScriptURL?: string | Error) {
   const modules = new Set(['http://localhost/_nuxt/old.js'])
   const listeners = new Set<(event: unknown) => void>()
   const worker = {
@@ -44,15 +50,39 @@ async function setupWorker() {
   vi.stubGlobal('performance', { getEntriesByType: () => [] })
   vi.stubGlobal('navigator', {
     serviceWorker: {
-      register: () => Promise.resolve({ active: worker }),
+      getRegistration: () => existingScriptURL instanceof Error
+        ? Promise.reject(existingScriptURL)
+        : Promise.resolve(existingScriptURL ? { active: { scriptURL: existingScriptURL } } : undefined),
+      register: mocks.register.mockResolvedValue({ active: worker }),
       addEventListener: (_name: string, listener: (event: unknown) => void) => listeners.add(listener),
       removeEventListener: (_name: string, listener: (event: unknown) => void) => listeners.delete(listener),
     },
   })
   const { default: plugin } = await import('../../src/runtime/app/plugins/sw-track-user-modules.client')
-  plugin.setup({ hooks: { callHook: mocks.callHook } } as never)
-  return mocks.onAppOutdated.mock.calls[0]![0] as (manifest: unknown) => Promise<void>
+  await plugin.setup({ hooks: { callHook: mocks.callHook } } as never)
+  return mocks.onAppOutdated.mock.calls[0]?.[0] as (manifest: unknown) => Promise<void>
 }
+
+it('preserves an existing PWA service worker', async () => {
+  await setupWorker('http://localhost/sw.js')
+  expect(mocks.register).not.toHaveBeenCalled()
+})
+
+it('skips registration when browser permissions block inspection', async () => {
+  await setupWorker(new Error('Service worker access denied'))
+  expect(mocks.register).not.toHaveBeenCalled()
+})
+
+it('registers inside the app base URL', async () => {
+  mocks.runtimeConfig.app.baseURL = '/app/'
+  await setupWorker()
+  expect(mocks.register).toHaveBeenCalledWith('http://localhost/app/_nuxt-skew-sw.js')
+})
+
+it('can update its own service worker', async () => {
+  await setupWorker('http://localhost/_nuxt-skew-sw.js')
+  expect(mocks.register).toHaveBeenCalledWith('http://localhost/_nuxt-skew-sw.js')
+})
 
 it('keeps loaded chunks available for later deployment checks', async () => {
   const update = await setupWorker()

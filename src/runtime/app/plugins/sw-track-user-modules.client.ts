@@ -1,4 +1,4 @@
-import { defineNuxtPlugin } from 'nuxt/app'
+import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app'
 // @ts-expect-error virtual file
 import { buildAssetsURL } from '#internal/nuxt/paths'
 import { logger } from '../../shared/logger'
@@ -38,7 +38,7 @@ function parseSkewFile(value: unknown): Record<string, string[]> {
 
 export default defineNuxtPlugin({
   name: 'skew-protection:service-worker',
-  setup(nuxtApp) {
+  async setup(nuxtApp) {
     if (import.meta.prerender)
       return
 
@@ -47,12 +47,27 @@ export default defineNuxtPlugin({
       return
     }
 
+    const appUrl = new URL(useRuntimeConfig().app.baseURL, window.location.origin)
+    const serviceWorkerUrl = new URL('_nuxt-skew-sw.js', appUrl)
+    const inspection = await navigator.serviceWorker.getRegistration(appUrl.href)
+      .then(registration => ({ _tag: 'Ok' as const, registration }))
+      .catch((error: unknown) => ({ _tag: 'Err' as const, error }))
+    if (inspection._tag === 'Err') {
+      logger.warn('[SW] Could not inspect service workers. Chunk tracking is disabled:', inspection.error)
+      return
+    }
+    const registration = inspection.registration
+    const existingWorker = registration?.active || registration?.installing || registration?.waiting
+    if (existingWorker && new URL(existingWorker.scriptURL).pathname !== serviceWorkerUrl.pathname) {
+      logger.debug('[SW] Keeping the existing service worker. Chunk tracking is disabled.')
+      return
+    }
+
     const { assetRecovery } = useRuntimeConfigSkewProtection()
     const { clientVersion, onAppOutdated } = useSkewProtection()
     logger.debug('[SW] Initializing service worker tracking')
 
     // Register service worker and sync already-loaded modules once ready
-    const serviceWorkerUrl = new URL('/_nuxt-skew-sw.js', window.location.origin)
     if (assetRecovery._tag === 'cloudflare') {
       serviceWorkerUrl.searchParams.set('buildAssetsPath', assetRecovery.buildAssetsPath)
       serviceWorkerUrl.searchParams.set('recoveryPath', assetRecovery.recoveryPath)

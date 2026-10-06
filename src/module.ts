@@ -643,9 +643,15 @@ export {}
         })
       }
 
-      addPlugin({
-        src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
-        mode: 'client',
+      nuxt.hook('modules:done', () => {
+        // PWA workers can register during the same first page load. Waiting for
+        // all modules avoids that race regardless of module installation order.
+        if (hasNuxtModule('@vite-pwa/nuxt') || hasNuxtModule('@nuxtjs/pwa'))
+          return
+        addPlugin({
+          src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
+          mode: 'client',
+        })
       })
 
       // Multi-tab coordination and auto-reload handling
