@@ -5,6 +5,14 @@ export default antfu({
   // This repo lints `test/fixtures/**` on purpose, so the shared ignore set is
   // off and the repo keeps its own list. A global ignore cannot be undone.
   ignores: [
+    '.migration-sources/**',
+    '.migration-checkouts/**',
+    '.migration-artifacts/**',
+    '.migration-*.json',
+    'migration-sources.json',
+    'migration-artifacts.json',
+    '.benchmark/**',
+    'scripts/migration-lock.yaml',
     '.eslintignore',
     'test/fixtures/*/node_modules',
     'test/fixtures/*/.nuxt',
