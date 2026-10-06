@@ -43,7 +43,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
       return
 
     // Share only the fetch. A notification callback may call checkForUpdates again.
-    detection.inFlight ??= ($fetch(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`) as Promise<NuxtAppManifestMeta>).catch(() => {
+    detection.inFlight ??= $fetch<NuxtAppManifestMeta, string>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
       // A deployment may not have propagated the manifest yet; the backoff queue retries.
       return null
     }).finally(() => {

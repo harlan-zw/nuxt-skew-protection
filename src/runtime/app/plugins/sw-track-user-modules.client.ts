@@ -256,7 +256,7 @@ export default defineNuxtPlugin({
       async function checkSkewFile(attempt: number): Promise<void> {
         if (activeSkewVersionId !== newVersionId)
           return
-        const deletedChunksByVersion = await ($fetch(buildAssetsURL(`builds/skew/${newVersionId}.json`)) as Promise<unknown>)
+        const deletedChunksByVersion = await $fetch<unknown, string>(buildAssetsURL(`builds/skew/${newVersionId}.json`))
           .then(parseSkewFile)
           .catch((error: unknown) => {
             if (activeSkewVersionId !== newVersionId)
