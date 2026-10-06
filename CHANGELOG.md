@@ -1,3 +1,9 @@
+## 1.6.2
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.1...v1.6.2)
+
+- fix: preserve existing service workers (#75) ([361d2a2](https://github.com/harlan-zw/nuxt-skew-protection/commit/361d2a2875b73b137dfacadd266c9a6e3b9fe93f))
+
 ## 1.6.1
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.0...v1.6.1)
