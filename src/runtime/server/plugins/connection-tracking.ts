@@ -1,3 +1,5 @@
+import type { RequestEvent } from 'nuxt/server'
+import type { H3Event } from '#nuxtseo/h3'
 import { defineNitroPlugin } from '#nuxtseo/nitro'
 
 interface Connection {
@@ -28,7 +30,7 @@ interface RouteUpdatePayload {
 interface SubscribeStatsPayload {
   id: string
   // H3Event for SSE (via POST), { headers } for WebSocket
-  event?: { headers?: Headers } | unknown
+  event?: RequestEvent | H3Event | { headers?: Headers }
 }
 
 export default defineNitroPlugin((nitroApp) => {
@@ -57,18 +59,13 @@ export default defineNitroPlugin((nitroApp) => {
   }
 
   // Expose stats via hook for server-side access (API endpoints)
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:stats', (callback: (stats: { total: number, versions: Record<string, number>, routes: Record<string, number> }) => void) => {
     callback(getStats())
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, send }: ConnectionOpenPayload) => {
     connections.set(id, { version, route: route || '/', ip, send })
     broadcastToSubscribers()
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:route-update', ({ id, route }: RouteUpdatePayload) => {
     const conn = connections.get(id)
     if (conn) {
@@ -76,8 +73,6 @@ export default defineNitroPlugin((nitroApp) => {
       broadcastToSubscribers()
     }
   })
-
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:connection:close', ({ id }: ConnectionClosePayload) => {
     connections.delete(id)
     statsSubscribers.delete(id)
@@ -85,10 +80,8 @@ export default defineNitroPlugin((nitroApp) => {
   })
 
   // Subscribe to stats updates - requires auth via skew:authorize-stats hook
-  // @ts-expect-error custom hook
   nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event }: SubscribeStatsPayload) => {
     let authorized = false
-    // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:authorize-stats', {
       id,
       event,

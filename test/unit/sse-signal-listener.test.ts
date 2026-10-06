@@ -12,6 +12,7 @@ vi.mock('#nuxtseo/h3', () => ({
   createEventStream: vi.fn(() => stream),
   defineEventHandler: vi.fn((handler: unknown) => handler),
   getQuery: vi.fn(() => ({})),
+  getHeader: vi.fn(),
   getRequestIP: vi.fn(),
 }))
 
@@ -21,7 +22,7 @@ vi.mock('#nuxtseo/nitro', () => ({
 }))
 
 vi.mock('../../src/runtime/server/imports/cookie', () => ({
-  getSkewProtectionCookie: vi.fn(),
+  getSkewProtectionCookieName: vi.fn(() => '__nkpv'),
 }))
 
 describe('sse connection cleanup', () => {

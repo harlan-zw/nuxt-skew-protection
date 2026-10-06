@@ -1,5 +1,5 @@
 import type { SkewProtectionEvent } from './getRuntimeConfigSkewProtection'
-import { useRuntimeConfig } from '#nuxtseo/nitro'
+import { useRuntimeConfig } from 'nuxt/server'
 import { getSkewProtectionCookie } from './cookie'
 
 /**
@@ -14,7 +14,7 @@ export function getClientVersion(event: SkewProtectionEvent): string | undefined
  * Check if the client is outdated based on cookie version vs current build ID
  */
 export function isClientOutdated(event: SkewProtectionEvent) {
-  const config = useRuntimeConfig(event as Parameters<typeof useRuntimeConfig>[0])
+  const config = useRuntimeConfig()
   const currentBuildId = config.app.buildId
   const clientVersion = getSkewProtectionCookie(event)
   return !!(clientVersion && currentBuildId && clientVersion !== currentBuildId)

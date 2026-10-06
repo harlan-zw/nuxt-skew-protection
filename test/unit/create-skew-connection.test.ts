@@ -24,8 +24,8 @@ vi.mock('nuxt/app', () => ({
 }))
 
 // Mock #imports
-vi.mock('#imports', () => ({
-  useBotDetection: vi.fn(() => ({ isBot: { value: false } })),
+vi.mock('#skew-protection/bot-detection', () => ({
+  useSkewBotDetection: vi.fn(() => false),
 }))
 
 // Mock logger

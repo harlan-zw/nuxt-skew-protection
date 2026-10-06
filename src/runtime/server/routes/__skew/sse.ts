@@ -1,7 +1,8 @@
-import { createEventStream, defineEventHandler, getQuery, getRequestIP } from '#nuxtseo/h3'
+import { parse } from 'cookie-es'
+import { createEventStream, defineEventHandler, getHeader, getQuery, getRequestIP } from '#nuxtseo/h3'
 import { useNitroApp, useRuntimeConfig } from '#nuxtseo/nitro'
 import { SKEW_MESSAGE_TYPE } from '../../../const'
-import { getSkewProtectionCookie } from '../../imports/cookie'
+import { getSkewProtectionCookieName } from '../../imports/cookie'
 
 export default defineEventHandler(async (event) => {
   const nitroApp = useNitroApp()
@@ -23,12 +24,11 @@ export default defineEventHandler(async (event) => {
     timestamp: Date.now(),
   })
 
-  const clientVersion = getSkewProtectionCookie(event) || serverVersion
+  const cookieName = getSkewProtectionCookieName()
+  const clientVersion = (cookieName && parse(getHeader(event, 'cookie') || '')[cookieName]) || serverVersion
   const query = getQuery(event)
   const initialRoute = (query.route as string) || '/'
   const ip = getRequestIP(event, { xForwardedFor: true }) || undefined
-
-  // @ts-expect-error custom hook
   await nitroApp.hooks.callHook('skew:connection:open', {
     id: connectionId,
     version: clientVersion,
@@ -52,7 +52,6 @@ export default defineEventHandler(async (event) => {
       return
     cleanupDone = true
     clearTimeout(keepaliveTimeout)
-    // @ts-expect-error custom hook
     await nitroApp.hooks.callHook('skew:connection:close', { id: connectionId })
     await stream.close()
   }

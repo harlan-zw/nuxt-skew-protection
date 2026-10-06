@@ -1,4 +1,4 @@
-import { createError, defineEventHandler, readBody } from '#nuxtseo/h3'
+import { createError, defineEventHandler, readBody } from 'nuxt/server'
 import { useNitroApp } from '#nuxtseo/nitro'
 
 /**
@@ -9,10 +9,8 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ connectionId?: string }>(event)
 
   if (!body.connectionId) {
-    throw createError({ statusCode: 400, message: 'Missing connectionId' })
+    throw createError({ status: 400, message: 'Missing connectionId' })
   }
-
-  // @ts-expect-error custom hook
   await useNitroApp().hooks.callHook('skew:subscribe-stats', {
     id: body.connectionId,
     event,

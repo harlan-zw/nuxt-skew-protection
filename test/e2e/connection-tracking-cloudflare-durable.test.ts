@@ -1,6 +1,8 @@
 import type { ChildProcess } from 'node:child_process'
+import type { AddressInfo } from 'node:net'
 import { exec, spawn } from 'node:child_process'
 import { rmSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -12,7 +14,7 @@ import { stopServer } from './utils'
 const execAsync = promisify(exec)
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const fixtureDir = resolve(__dirname, '../fixtures/cloudflare-durable')
-const port = 3337
+let port = 0
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -22,30 +24,33 @@ function cleanFixture() {
   rmSync(resolve(fixtureDir, '.wrangler'), { recursive: true, force: true })
 }
 
-async function killPort() {
-  await execAsync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`)
-  await sleep(500)
-}
-
 async function build() {
   await execAsync('pnpm build', { cwd: fixtureDir })
 }
 
 async function startWrangler(): Promise<ChildProcess> {
-  await killPort()
+  const portProbe = createServer()
+  await new Promise<void>(resolve => portProbe.listen(0, '127.0.0.1', resolve))
+  port = (portProbe.address() as AddressInfo).port
+  await new Promise<void>((resolve, reject) => portProbe.close(error => error ? reject(error) : resolve()))
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('npx', ['wrangler', 'dev', '.output/server/index.mjs', '--site', '.output/public', '--port', String(port)], {
+    const proc = spawn('pnpm', ['exec', 'wrangler', 'dev', '--port', String(port)], {
       cwd: fixtureDir,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     })
 
-    const timeout = setTimeout(() => reject(new Error('Wrangler start timeout')), 60000)
+    let outputLog = ''
+    const timeout = setTimeout(() => {
+      stopServer(proc)
+      reject(new Error(`Wrangler start timeout: ${outputLog}`))
+    }, 60000)
 
     const onData = (data: Buffer) => {
       const output = data.toString()
+      outputLog = `${outputLog}${output}`.slice(-12000)
       // Wrangler outputs "[wrangler:info] Ready on http://..."
       if (output.includes('Ready on')) {
         clearTimeout(timeout)
@@ -59,6 +64,10 @@ async function startWrangler(): Promise<ChildProcess> {
     proc.on('error', (e) => {
       clearTimeout(timeout)
       reject(e)
+    })
+    proc.once('exit', (code, signal) => {
+      clearTimeout(timeout)
+      reject(new Error(`Wrangler exited: ${signal || code}. ${outputLog}`))
     })
   })
 }

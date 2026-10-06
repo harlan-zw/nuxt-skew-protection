@@ -9,4 +9,9 @@ describe('resolveVercelCookiePath', () => {
   it('uses the configured app mount path', () => {
     expect(resolveVercelCookiePath({ vercelCookiePath: '/pro/' })).toBe('/pro/')
   })
+
+  it('defaults when runtime configuration has no string path', () => {
+    expect(resolveVercelCookiePath({ vercelCookiePath: 42 })).toBe('/')
+    expect(resolveVercelCookiePath(null)).toBe('/')
+  })
 })
