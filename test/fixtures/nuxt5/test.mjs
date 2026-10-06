@@ -60,13 +60,18 @@ async function main() {
     assert.match(cached.headers.get('cache-control') || '', /s-maxage=300/)
     assert.deepEqual(cached.headers.getSetCookie(), ['session=kept; Expires=Wed, 01 Jan 2031 00:00:00 GMT; Path=/'])
     const authenticated = await fetch(`${origin}/cacheable`, {
-      headers: { 'sec-fetch-dest': 'document', authorization: 'Bearer fixture' },
+      headers: { 'sec-fetch-dest': 'document', 'authorization': 'Bearer fixture' },
     })
     assert.ok(authenticated.headers.getSetCookie().some(cookie => cookie.startsWith('__nkpv=')))
     const asset = html.match(/src="([^"]+.js)"/)?.[1]
     assert.ok(asset, 'The document includes a JavaScript asset')
     const assetResponse = await fetch(new URL(asset, origin), { headers: { cookie: '__nkpv=previous-deployment' } })
     assert.equal(assetResponse.status, 200)
+
+    const worker = await fetch(`${origin}/_nuxt-skew-sw.js`)
+    assert.equal(worker.status, 200)
+    assert.match(worker.headers.get('content-type') || '', /javascript/)
+    assert.match(await worker.text(), /addEventListener/)
 
     const health = await fetch(`${origin}/__skew/health`).then(response => response.json())
     assert.equal(health.ok, true)

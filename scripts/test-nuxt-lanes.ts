@@ -24,6 +24,8 @@ function run(args: string[], cwd: string, lane: Lane): Promise<void> {
   })
 }
 
+await run(['build'], root, selected ? selected as Lane : lanes[0]!)
+
 for (const lane of selected ? [selected as Lane] : lanes) {
   for (const integration of ['absent', 'installed', 'installed-disabled']) {
     process.env.NUXT_TEST_INTEGRATIONS = integration
