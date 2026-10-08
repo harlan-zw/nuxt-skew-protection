@@ -53,12 +53,12 @@ describe('vercel asset defaults', () => {
 
 describe('default update strategy', () => {
   it.each([
-    ['node-server', 'sse'],
-    ['vercel', 'sse'],
-    ['cloudflare-durable', 'ws'],
+    ['node-server', 'polling'],
+    ['vercel', 'polling'],
+    ['cloudflare-durable', 'polling'],
     ['cloudflare-module', 'polling'],
     ['cloudflare-pages', 'polling'],
-    [undefined, 'sse'],
+    [undefined, 'polling'],
   ] as const)('picks a strategy the %s preset supports', (nitroPreset, expected) => {
     expect(resolveDefaultUpdateStrategy({ isStatic: false, nitroPreset })).toBe(expected)
   })

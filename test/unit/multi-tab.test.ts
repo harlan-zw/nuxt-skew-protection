@@ -54,6 +54,7 @@ function createMockNuxtApp() {
   }
 }
 
+let mockManifestState: { value: unknown } = { value: undefined }
 let mockBasePath = '/__skew'
 let mockNuxtApp = createMockNuxtApp()
 
@@ -61,7 +62,9 @@ vi.mock('nuxt/app', () => ({
   defineNuxtPlugin: vi.fn((opts: any) => opts),
   reloadNuxtApp: vi.fn(),
   useNuxtApp: vi.fn(() => mockNuxtApp),
+  useState: vi.fn(() => mockManifestState),
   useRuntimeConfig: vi.fn(() => ({
+    app: { baseURL: '/' },
     public: {
       skewProtection: {
         basePath: mockBasePath,
@@ -78,6 +81,7 @@ vi.mock('../../src/runtime/shared/logger', () => ({
 
 describe('multi-tab plugin', () => {
   beforeEach(() => {
+    mockManifestState = { value: undefined }
     mockBasePath = '/__skew'
     mockHooks.clear()
     mockCallHook.mockClear()

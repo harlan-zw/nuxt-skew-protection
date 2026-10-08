@@ -31,6 +31,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   const firstConsumer = !nuxtApp._skewVersionDetection
   const detection = nuxtApp._skewVersionDetection ??= {
     lastDetectedServerVersion: undefined,
+    revision: 0,
     inFlight: undefined,
     queue: createBackoffQueue({
       delays: [0, 5000, 30000, 300000],
@@ -42,14 +43,29 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     if (import.meta.client && !useOnline().value)
       return
 
+    const revision = detection.revision
     // Share only the fetch. A notification callback may call checkForUpdates again.
     detection.inFlight ??= $fetch<NuxtAppManifestMeta, string>(`${buildAssetsURL('builds/latest.json')}?${Date.now()}`).catch(() => {
       // A deployment may not have propagated the manifest yet; the backoff queue retries.
       return null
     }).finally(() => {
-      detection.inFlight = undefined
+      if (revision === detection.revision)
+        detection.inFlight = undefined
     })
     const meta = await detection.inFlight
+    if (revision !== detection.revision)
+      return
+    if (meta?.id === clientVersion) {
+      // A push notification can arrive before the deployment manifest propagates.
+      if (detection.lastDetectedServerVersion && detection.lastDetectedServerVersion !== clientVersion)
+        return
+      detection.queue.clear()
+      detection.lastDetectedServerVersion = clientVersion
+      serverVersion.value = clientVersion
+      manifest.value = undefined
+      chunks.value = undefined
+      return
+    }
     if (meta && meta.id !== clientVersion) {
       detection.queue.clear()
       if (meta.id !== manifest.value?.id) {
@@ -75,7 +91,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     nuxtApp.hooks.hook('app:manifest:update', (meta) => {
       // A same-id payload is an echo of what consumers already received; a
       // reduced cross-tab broadcast must not downgrade a stored full manifest.
-      if (!meta || meta.id === manifest.value?.id)
+      if (!meta)
+        return
+      serverVersion.value = meta.id
+      if (meta.id === manifest.value?.id)
         return
       manifest.value = meta
     })
@@ -85,10 +104,22 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
     nuxtApp.hooks.hook('skew:message', (msg) => {
       if (msg.type !== SKEW_MESSAGE_TYPE.VERSION && msg.type !== SKEW_MESSAGE_TYPE.CONNECTED)
         return
-      if (msg.version)
+      if (msg.version) {
+        if (msg.version !== serverVersion.value) {
+          detection.revision++
+          detection.inFlight = undefined
+        }
         serverVersion.value = msg.version as string
-      if (!msg.version || msg.version === clientVersion)
+      }
+      if (!msg.version)
         return
+      if (msg.version === clientVersion) {
+        detection.queue.clear()
+        detection.lastDetectedServerVersion = clientVersion
+        manifest.value = undefined
+        chunks.value = undefined
+        return
+      }
       if (msg.version === detection.lastDetectedServerVersion && (detection.queue.isRunning() || msg.version === manifest.value?.id))
         return
 
@@ -105,7 +136,7 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   }
 
   function disconnect() {
-    if (!import.meta.client || !isConnected.value)
+    if (!import.meta.client)
       return
     detection.queue.clear()
     nuxtApp.$skewConnection?.disconnect()
@@ -131,7 +162,10 @@ export function useSkewProtection(options: UseSkewProtectionOptions = {}) {
   }
 
   function onAppOutdated(callback: (manifest?: NuxtAppManifestMeta) => void | Promise<void>) {
-    const hook = nuxtApp.hooks.hook('app:manifest:update', callback)
+    const hook = nuxtApp.hooks.hook('app:manifest:update', (meta) => {
+      if (meta && meta.id !== clientVersion)
+        return callback(meta)
+    })
     if (manifest.value && manifest.value.id !== clientVersion) {
       Promise.resolve(callback(manifest.value)).catch(error => logger.error('App update callback failed', error))
     }

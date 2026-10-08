@@ -57,7 +57,7 @@ export interface ModuleOptions {
    * - 'sse': Use Server-Sent Events for real-time updates
    * - 'ws': Use WebSocket (requires cloudflare-durable preset or experimental.websocket)
    * - SkewAdapter: Third-party WebSocket provider (Pusher, Ably)
-   * @default Static: 'polling', Node: 'sse', Cloudflare: 'ws'
+   * @default 'polling'
    */
   updateStrategy?: 'polling' | 'sse' | 'ws' | SkewAdapter
   /**
@@ -137,6 +137,7 @@ export interface ModuleOptions {
   /**
    * Coordinate version updates across browser tabs via BroadcastChannel.
    * When enabled, a version update detected in one tab notifies all others.
+   * Visible tabs share one push connection when connection tracking is disabled.
    * @default true
    */
   multiTab?: boolean
@@ -194,6 +195,8 @@ export default defineNuxtModule<ModuleOptions>({
       logger.debug('The module is disabled, skipping setup.')
       return
     }
+    if (nuxt.options.experimental.appManifest === false)
+      throw new Error('nuxt-skew-protection requires experimental.appManifest. Enable it or disable the module.')
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
     setupRuntimeAliases({ namespace: '#skew-protection', app: resolver.resolve('./runtime/app'), server: resolver.resolve('./runtime/server') }, nuxt)
     nuxt.hook('nitro:config', (nitroConfig) => {

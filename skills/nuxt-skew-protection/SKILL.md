@@ -33,9 +33,9 @@ Add a notification. Nothing shows until you render `<SkewNotification>` or call 
 - **Cookie:** `__nkpv` holds the build id, for 7 days, `SameSite=Lax`. The server sets it only on requests with `sec-fetch-dest: document`. With `app.baseURL: '/app/'` the name becomes `__nkpv_app`.
 - **Server context:** every request gets `event.context.skewVersion` from the cookie.
 - **Service worker:** `/_nuxt-skew-sw.js` records which chunks the tab loaded.
-- **Update strategy:** static output and Cloudflare Workers use `polling`, `cloudflare-durable` uses `ws`, and everything else uses `sse`. The client opens the connection when a component that uses the composable mounts.
+- **Update strategy:** every platform defaults to native Nuxt `polling`, once per hour. Explicit `sse`, `ws`, or adapters enable push. The client subscribes when a component using the composable mounts. Native polling needs appManifest and checkOutdatedBuildInterval enabled.
 - **Endpoints:** `/__skew/health`, `/__skew/sse`, and `/__skew/ws`, under `basePath`. With `app.baseURL: '/app/'` they sit at `/app/__skew/*`. A static build has none.
-- **Multi tab:** a `BroadcastChannel` shares a detected deploy across tabs. Set `multiTab: false` to turn it off.
+- **Multi tab:** BroadcastChannel shares complete manifests within the app/base path. Web Locks select one push owner without heartbeats. Closing, hiding, or navigating the owner releases it; visible or restored pages resubscribe unless explicitly disconnected. Unsupported APIs and connectionTracking keep per-tab transports. Set multiTab: false for independent detection. Visible subscribers share VERSION hints without connection identifiers. The owner receives other transport messages and sends commands. Every tab receives onAppOutdated updates. Disable sharing or enable connectionTracking for independent commands.
 - **HTML cache capability:** when `bundleAssets` and `storage` are set, the module publishes `runtimeConfig.htmlCacheCapabilities` so sibling modules (such as a Cloudflare CDN module) can read how long a cached document safely outlives its build.
 
 ## Show an update prompt
