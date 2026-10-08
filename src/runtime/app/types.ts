@@ -37,6 +37,7 @@ export interface SkewConnection {
 /** Detection work belongs to the app, independently of mounted consumers. */
 export interface SkewVersionDetection {
   queue: BackoffQueue
+  revision: number
   lastDetectedServerVersion: string | undefined
   inFlight: Promise<NuxtAppManifestMeta | null> | undefined
 }

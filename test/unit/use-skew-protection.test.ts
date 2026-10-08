@@ -160,6 +160,50 @@ describe('useSkewProtection', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps retrying while push announces a deployment before its manifest propagates', async () => {
+    mockFetch.mockResolvedValue({ id: 'client-v1' })
+    await setup()
+    simulateMessage({ type: 'version', version: 'server-v2' })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores an outdated fetch after the server restores this client build', async () => {
+    const { result } = await setup()
+    let resolve!: (meta: { id: string }) => void
+    mockFetch.mockReturnValue(new Promise((done) => {
+      resolve = done
+    }))
+    const pending = result.checkForUpdates()
+    simulateMessage({ type: 'version', version: 'client-v1' })
+    resolve({ id: 'server-v2' })
+    await pending
+    expect(result.isAppOutdated.value).toBe(false)
+    expect(result.serverVersion.value).toBe('client-v1')
+  })
+
+  it('keeps the newer fetch shared when an older fetch settles', async () => {
+    const { result } = await setup()
+    let resolveOld!: (meta: { id: string }) => void
+    let resolveNew!: (meta: { id: string }) => void
+    mockFetch.mockReturnValueOnce(new Promise((done) => {
+      resolveOld = done
+    }))
+      .mockReturnValueOnce(new Promise((done) => {
+        resolveNew = done
+      }))
+    const oldCheck = result.checkForUpdates()
+    simulateMessage({ type: 'version', version: 'server-v2' })
+    const newCheck = result.checkForUpdates()
+    resolveOld({ id: 'old-response' })
+    await oldCheck
+    const sharedCheck = result.checkForUpdates()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    resolveNew({ id: 'server-v2' })
+    await Promise.all([newCheck, sharedCheck])
+    expect(result.manifest.value?.id).toBe('server-v2')
+  })
+
   describe('queue restart prevention on reconnection', () => {
     it('keeps detecting version updates after the component unmounts', async () => {
       mockFetch.mockResolvedValue({ id: 'server-v2', timestamp: Date.now() })
@@ -420,5 +464,24 @@ describe('useSkewProtection', () => {
       // Should have fetched again for the new version
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('polling and shared rollback updates', () => {
+  it('identifies a rollback from a manifest without a push socket message', async () => {
+    mockHooks.clear()
+    mockStates.clear()
+    mockNuxtApp._skewVersionDetection = undefined
+    const { useSkewProtection } = await import('../../src/runtime/app/composables/useSkewProtection')
+    const protection = useSkewProtection({ lazy: true })
+    await mockCallHook('app:manifest:update', {
+      id: 'older-version',
+      skewProtection: { versions: {
+        'client-v1': { timestamp: '2026-10-08T00:00:00Z' },
+        'older-version': { timestamp: '2026-10-07T00:00:00Z' },
+      } },
+    })
+    expect(protection.isRollback.value).toBe(true)
+    expect(protection.serverVersion.value).toBe('older-version')
   })
 })

@@ -1,5 +1,6 @@
+import type { NuxtAppManifestMeta } from 'nuxt/app'
 import { until, useDocumentVisibility, useIdle } from '@vueuse/core'
-import { defineNuxtPlugin, reloadNuxtApp, useNuxtApp, useRuntimeConfig } from 'nuxt/app'
+import { defineNuxtPlugin, reloadNuxtApp, useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
 import { logger } from '../../shared/logger'
 
 const CHANNEL_NAME = 'nuxt-skew-protection'
@@ -18,7 +19,8 @@ export default defineNuxtPlugin({
       return
 
     const nuxtApp = useNuxtApp()
-    const config = useRuntimeConfig().public.skewProtection as {
+    const runtimeConfig = useRuntimeConfig()
+    const config = runtimeConfig.public.skewProtection as {
       multiTab?: boolean
       basePath?: string
       reloadStrategy?: 'prompt' | 'immediate' | 'idle' | false
@@ -51,22 +53,27 @@ export default defineNuxtPlugin({
     if (config.multiTab === false || typeof BroadcastChannel === 'undefined')
       return
 
-    const channel = new BroadcastChannel(`${CHANNEL_NAME}:${config.basePath || '/__skew'}`)
+    const channel = new BroadcastChannel(`${CHANNEL_NAME}:${runtimeConfig.app.baseURL}:${config.basePath || '/__skew'}`)
 
     // Guard to prevent re-broadcasting messages received from other tabs
     const receivedFromChannel = new WeakSet<object>()
+    const manifestState = useState<NuxtAppManifestMeta | undefined>('skew-manifest', () => undefined)
 
     // When this tab detects an update, broadcast to other tabs
     const stopBroadcasting = nuxtApp.hooks.hook('app:manifest:update', (manifest) => {
       if (!manifest || receivedFromChannel.has(manifest))
         return
+      manifestState.value = manifest
       logger.debug('[MultiTab] Broadcasting version update to other tabs')
       channel.postMessage({ ...manifest, type: 'version-update' })
     })
 
     // When another tab broadcasts an update, trigger hooks locally
     channel.onmessage = (event) => {
-      if (event.data?.type === 'version-update' && event.data.id) {
+      if (event.data?.type === 'version-update' && event.data.id && event.data.id !== runtimeConfig.app.buildId) {
+        if (event.data.id === manifestState.value?.id && (manifestState.value?.skewProtection || !event.data.skewProtection))
+          return
+        manifestState.value = event.data
         logger.debug('[MultiTab] Received version update from another tab')
         receivedFromChannel.add(event.data)
         nuxtApp.hooks.callHook('app:manifest:update', event.data)

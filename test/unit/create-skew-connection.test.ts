@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const connectedState = { value: false }
 const appHook = vi.fn()
 
+let connectionTracking = false
 let cookieConfig: false | Record<string, unknown> = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
 
 // Mock nuxt/app
@@ -12,10 +13,11 @@ vi.mock('nuxt/app', () => ({
     hooks: { callHook: vi.fn() },
   })),
   useRuntimeConfig: vi.fn(() => ({
-    app: { buildId: 'test-build-id' },
+    app: { buildId: 'test-build-id', baseURL: '/' },
     public: {
       skewProtection: {
         cookie: cookieConfig,
+        connectionTracking,
       },
     },
   })),
@@ -31,15 +33,17 @@ vi.mock('#skew-protection/bot-detection', () => ({
 // Mock logger
 vi.mock('../../src/runtime/shared/logger', () => ({
   init: vi.fn(),
-  logger: { debug: vi.fn() },
+  logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
 describe('createSkewConnection', () => {
   beforeEach(() => {
     connectedState.value = false
+    connectionTracking = false
     cookieConfig = { name: '__nkpv', path: '/', sameSite: 'lax', maxAge: 604800 }
     vi.clearAllMocks()
     vi.stubGlobal('window', { addEventListener: vi.fn() })
+    vi.stubGlobal('navigator', {})
   })
 
   afterEach(() => {
@@ -197,5 +201,147 @@ describe('createSkewConnection', () => {
 
     expect(connection.cookie).toBeUndefined()
     expect(useCookie).not.toHaveBeenCalled()
+  })
+})
+
+// Exercise transport effects through the connection consumed by client plugins.
+describe('shared push transport', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('waits for ownership and releases the socket and lock on disconnect', async () => {
+    connectedState.value = false
+    const cleanup = vi.fn()
+    let grant!: () => Promise<void>
+    const request = vi.fn((_name, _options, callback) => {
+      grant = callback
+      return Promise.resolve()
+    })
+    vi.stubGlobal('navigator', { locks: { request } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn(() => cleanup)
+    const connection = createSkewConnection({ name: 'SSE', setup })
+    connection.connect()
+    connection.connect()
+    expect(setup).not.toHaveBeenCalled()
+    const holding = grant()
+    expect(setup).toHaveBeenCalledTimes(1)
+    connection.disconnect()
+    await holding
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0]![1].signal.aborted).toBe(true)
+  })
+
+  it('cancels queued ownership before a socket opens', async () => {
+    connectedState.value = false
+    let grant!: () => Promise<void> | undefined
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, _options, callback) => {
+      grant = callback
+      return Promise.resolve()
+    }) } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn()
+    const connection = createSkewConnection({ name: 'SSE', setup })
+    connection.connect()
+    connection.disconnect()
+    await grant()
+    expect(setup).not.toHaveBeenCalled()
+  })
+
+  it('opens an independent socket if lock requests are rejected', async () => {
+    connectedState.value = false
+    vi.stubGlobal('navigator', { locks: { request: vi.fn().mockRejectedValue(new Error('Denied')) } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn()
+    const connection = createSkewConnection({ name: 'SSE', setup })
+    connection.connect()
+    await vi.waitFor(() => expect(setup).toHaveBeenCalledTimes(1))
+    connection.disconnect()
+  })
+})
+
+describe('synchronous subscription cleanup', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('releases ownership if a subscription disconnects during setup', async () => {
+    connectedState.value = false
+    let grant!: () => Promise<void>
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, _options, callback) => {
+      grant = callback
+      return Promise.resolve()
+    }) } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const cleanup = vi.fn()
+    const connection = createSkewConnection({ name: 'Adapter', setup: () => {
+      connection.disconnect()
+      return cleanup
+    } })
+    connection.connect()
+    await grant()
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(connectedState.value).toBe(false)
+  })
+
+  it('releases ownership even when transport cleanup throws', async () => {
+    connectedState.value = false
+    let grant!: () => Promise<void>
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, _options, callback) => {
+      grant = callback
+      return Promise.resolve()
+    }) } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const connection = createSkewConnection({ name: 'Adapter', setup: () => () => {
+      throw new Error('close failed')
+    } })
+    connection.connect()
+    const holding = grant()
+    expect(() => connection.disconnect()).toThrow('close failed')
+    await holding
+    expect(connectedState.value).toBe(false)
+  })
+})
+
+describe('tracked push transport', () => {
+  it('preserves independent route and stats messages when connection tracking is enabled', async () => {
+    connectionTracking = true
+    connectedState.value = false
+    const request = vi.fn()
+    vi.stubGlobal('navigator', { locks: { request } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const send = vi.fn()
+    const connection = createSkewConnection({ name: 'WS', setup: (onMessage) => {
+      onMessage({ type: 'connected', connectionId: 'this-tab' })
+      return { send }
+    } })
+    connection.connect()
+    connection.sendRoute('/settings')
+    connection.subscribeStats()
+    expect(request).not.toHaveBeenCalled()
+    expect(send.mock.calls).toEqual([[{ type: 'route-update', route: '/settings' }], [{ type: 'subscribe-stats' }]])
+    connection.disconnect()
+    connectionTracking = false
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('failed subscription cleanup', () => {
+  it('closes the version channel before retrying a failed setup', async () => {
+    connectedState.value = false
+    const close = vi.spyOn(BroadcastChannel.prototype, 'close')
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, _options, callback) => Promise.resolve().then(callback)) } })
+    const { createSkewConnection } = await import('../../src/runtime/app/utils/create-skew-connection')
+    const setup = vi.fn().mockImplementationOnce(() => {
+      throw new Error('failed')
+    }).mockReturnValue(undefined)
+    const connection = createSkewConnection({ name: 'SSE', setup })
+    connection.connect()
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1))
+    connection.connect()
+    await vi.waitFor(() => expect(setup).toHaveBeenCalledTimes(2))
+    connection.disconnect()
+    expect(close).toHaveBeenCalledTimes(2)
+    close.mockRestore()
+    vi.unstubAllGlobals()
   })
 })
