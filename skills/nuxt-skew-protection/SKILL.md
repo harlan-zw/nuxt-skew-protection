@@ -2,12 +2,12 @@
 name: nuxt-skew-protection
 description: Keep old Nuxt build chunks available after a deploy and prompt open tabs to reload, with the nuxt-skew-protection module. Use when a task mentions version skew, ChunkLoadError, "Failed to fetch dynamically imported module", stale chunks 404 after deploy, update notifications, SkewNotification, useSkewProtection, isClientOutdated, the __nkpv cookie, /__skew routes, or the skewProtection config key.
 license: MIT
-compatibility: "Requires a project using nuxt-skew-protection. Requires Node.js ^22.22.3 || ^24.15.0 || >=26.0.0. Requires Nuxt ^4.6.0 || ^5.0.0."
+compatibility: "Requires Node.js ^22.22.3 || ^24.15.0 || >=26.0.0. Requires Nuxt ^4.6.0 || ^5.0.0."
 ---
 
 # nuxt-skew-protection
 
-Tested against `nuxt-skew-protection` 1.6.2 on Nuxt 4.5.2 (requires Nuxt `>=4.0.0`).
+Tested against `nuxt-skew-protection` 1.6.2 on Nuxt 4.5.2.
 At build time the module stores every build's assets, then copies the chunks of earlier builds back into `.output/public`.
 In the browser it detects a new deploy and tells you when the chunks the tab loaded are gone. Docs: https://nuxtseo.com/docs/skew-protection
 
