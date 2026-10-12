@@ -1,11 +1,11 @@
 name: CI
 
 on:
+  # No paths-ignore: reusable-ci.yml skips its jobs when only docs change, so
+  # their checks still report.
   push:
     branches:
       - main
-    paths-ignore:
-      - '**/README.md'
   # Every base, so stacked pull requests are tested too.
   pull_request:
 
@@ -21,3 +21,4 @@ jobs:
     uses: harlan-zw/nuxt-seo/.github/workflows/reusable-ci.yml@main
     with:
       redis: true
+      paths-ignore: '**/README.md'
