@@ -3,6 +3,21 @@ import { getNitroVersion } from '@nuxt/kit'
 import NuxtRobots from '@nuxtjs/robots'
 import NuxtSiteConfig from 'nuxt-site-config'
 import NuxtSkewProtection from 'nuxt-skew-protection'
+import NuxtSeoShared from 'nuxtseo-shared'
+
+// Allow the pinned nightly only in this consumer fixture. nuxt-skew-protection
+// accepts Nuxt 5 prereleases in its own compatibility range, the other nuxtseo
+// modules do not yet.
+{
+  const modules: Array<{ getMeta?: () => Promise<{ compatibility?: { nuxt?: string } }> }> = [NuxtSeoShared, NuxtRobots, NuxtSiteConfig]
+  for (const module of modules) {
+    const meta = await module.getMeta?.()
+    if (!meta)
+      throw new Error('The module must expose compatibility metadata.')
+    meta.compatibility ||= {}
+    meta.compatibility.nuxt = '^4.6.0 || ^5.0.0 || 5.0.0-2610061032-c7ad8cd'
+  }
+}
 
 function verifyBuilder(_options: unknown, nuxt: Nuxt) {
   nuxt.hook('modules:done', () => {
