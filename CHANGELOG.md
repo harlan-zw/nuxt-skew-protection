@@ -1,3 +1,21 @@
+## 2.0.0
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.2...v2.0.0)
+
+- docs: add the module icon and unify the README badges (#78) ([d321b10](https://github.com/harlan-zw/nuxt-skew-protection/commit/d321b1072a64e734c1323e4bb0a17b01559c2187))
+- feat!: prepare Skew Protection 2 for Nuxt 4.6 (#77) ([e00c263](https://github.com/harlan-zw/nuxt-skew-protection/commit/e00c2636a12e4b03bf8fb2ae7c98acdbd7e225f5))
+- docs(skills): update for v1.6.2 (#79) ([7d92aa0](https://github.com/harlan-zw/nuxt-skew-protection/commit/7d92aa0e229752262a7a2603005c2fcaa97dc40a))
+- chore: schedule weekly package maintenance (#80) ([5af7edf](https://github.com/harlan-zw/nuxt-skew-protection/commit/5af7edf828643fd4d7d612b52f225e6f4f947e3b))
+- perf!: default to polling and share push connections (#83) ([40277a1](https://github.com/harlan-zw/nuxt-skew-protection/commit/40277a13d40df3bdf52008ceef3de80bd0324bfd))
+- fix(playground): declare "type": "module" to silence Node warning (#89) ([22d6e13](https://github.com/harlan-zw/nuxt-skew-protection/commit/22d6e137810dbb20ab285b74dd0d65d5ddb9c14d))
+- docs: rewrite passive voice flagged by ai-deslop lint (#87) ([3e2b165](https://github.com/harlan-zw/nuxt-skew-protection/commit/3e2b165a350e2774d287cdaac2a825ec8c0e20e5))
+- docs: replace unsupported gray UButton color with neutral (#88) ([96c9b6a](https://github.com/harlan-zw/nuxt-skew-protection/commit/96c9b6a8ab2d2f5a0ca133ff4638c007ecba80af))
+- fix(skills): align metadata with the Agent Skills spec (#90) ([bb218f1](https://github.com/harlan-zw/nuxt-skew-protection/commit/bb218f1abd3dfe069742d2bcf9742687143cc174))
+- docs(examples): add a basic example (#92) ([c18f57a](https://github.com/harlan-zw/nuxt-skew-protection/commit/c18f57abc75b682f7226cbf439ec34b8d01c52a0))
+- docs: add v2 release notes and Nuxt SEO v6 defaults (#91) ([132d9f7](https://github.com/harlan-zw/nuxt-skew-protection/commit/132d9f760be486a25d7882c9149da7ba9894e09c))
+- perf(deps): drop the zod dependency (#94) ([1fec6cd](https://github.com/harlan-zw/nuxt-skew-protection/commit/1fec6cdcbd2f300893d00a0847e0dbd95713a45c))
+- chore(ci): let the reusable workflow skip docs-only jobs (#95) ([366a7f9](https://github.com/harlan-zw/nuxt-skew-protection/commit/366a7f9fe748f0aeea47f1fbd2f739f98d90cfbb))
+
 ## 1.6.2
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.1...v1.6.2)
