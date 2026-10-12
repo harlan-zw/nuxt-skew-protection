@@ -34,7 +34,7 @@ Nuxt Skew Protection keeps previous build assets available across deployments an
 Add `nuxt-skew-protection` to your project:
 
 ```bash
-npx nuxi@latest module add nuxt-skew-protection
+npx nuxt module add nuxt-skew-protection
 ```
 
 > [!TIP]
