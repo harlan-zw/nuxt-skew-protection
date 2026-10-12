@@ -16,5 +16,5 @@ export type { AblyAdapterConfig } from './ably/types'
 
 // Config types only - import adapters from provider/node or provider/web
 export type { PusherAdapterConfig } from './pusher/types'
-export type { AdapterConfigResult, BroadcastFn, DefineAdapterOptions, SkewAdapter, SkewAdapterFactory, SubscribeFn } from './types'
+export type { AdapterConfigParser, AdapterConfigResult, AdapterConfigSchema, BroadcastFn, DefineAdapterOptions, SkewAdapter, SkewAdapterFactory, StandardSchemaV1, SubscribeFn } from './types'
 export { defineAdapter, defineNodeBroadcast, defineWebSubscribe } from './types'

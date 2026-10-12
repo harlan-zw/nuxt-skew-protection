@@ -123,8 +123,7 @@
     "cookie-es": "catalog:",
     "nuxtseo-shared": "catalog:",
     "pathe": "catalog:",
-    "unstorage": "catalog:",
-    "zod": "catalog:"
+    "unstorage": "catalog:"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",
@@ -156,7 +155,8 @@
     "vue-router": "catalog:",
     "vue-tsc": "catalog:",
     "wrangler": "catalog:",
-    "ws": "catalog:"
+    "ws": "catalog:",
+    "zod": "catalog:"
   },
   "resolutions": {
     "nuxt-skew-protection": "workspace:*",

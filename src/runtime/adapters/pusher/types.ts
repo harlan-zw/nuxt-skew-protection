@@ -1,17 +1,29 @@
-import { z } from 'zod'
+import type { AdapterConfigResult } from '../types'
+import { parseStringConfig } from '../types'
 
-export const pusherConfigSchema = z.object({
+export interface PusherAdapterConfig {
   // Client (subscribe)
-  key: z.string().min(1, 'Pusher key is required'),
-  cluster: z.string().min(1, 'Pusher cluster is required'),
+  key: string
+  cluster: string
   // Server (broadcast)
-  appId: z.string().min(1, 'Pusher appId is required'),
-  secret: z.string().min(1, 'Pusher secret is required'),
+  appId: string
+  secret: string
   // Optional
-  channel: z.string().optional(),
-  event: z.string().optional(),
-})
-
-export type PusherAdapterConfig = z.infer<typeof pusherConfigSchema>
+  channel?: string
+  event?: string
+}
 
 export type PusherClientConfig = Pick<PusherAdapterConfig, 'key' | 'cluster' | 'channel' | 'event'>
+
+export function parsePusherConfig(input: unknown): AdapterConfigResult<PusherAdapterConfig> {
+  return parseStringConfig(
+    input,
+    {
+      key: 'Pusher key is required',
+      cluster: 'Pusher cluster is required',
+      appId: 'Pusher appId is required',
+      secret: 'Pusher secret is required',
+    },
+    ['channel', 'event'],
+  )
+}
