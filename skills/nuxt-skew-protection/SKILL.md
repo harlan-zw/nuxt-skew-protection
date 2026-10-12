@@ -13,9 +13,13 @@ In the browser it detects a new deploy and tells you when the chunks the tab loa
 
 ## Setup
 
-Add `nuxt-skew-protection` to `modules`. `@nuxtjs/robots` is a required peer. The module installs it as a module dependency, so do not add it to `modules` a second time.
+Included in `@nuxtjs/seo` v6. If the app uses `@nuxtjs/seo`, configure the `skewProtection` key and do not add the module again.
+Nuxt SEO overrides two defaults: `updateStrategy: 'polling'` and `cookie: false`. Set `skewProtection: false` to remove the module from Nuxt SEO.
 
-Build history lives in storage. The default is the `fs` driver at `node_modules/.cache/nuxt-seo/skew-protection`, relative to the project root.
+Without Nuxt SEO, run `npx nuxt module add nuxt-skew-protection`.
+`@nuxtjs/robots` v7 and `nuxt-site-config` v5 are optional peers. Install Nuxt Robots to keep bot traffic off SSE and WebSocket connections.
+
+Build history lives in storage. The default is the `fs-lite` driver at `node_modules/.cache/nuxt-seo/skew-protection`, relative to the project root.
 If CI starts from a clean checkout, every build is the first build: the build logs `No previous versions found in storage` and no old chunk survives.
 Persist that directory, or configure a shared driver (`redis`, `upstash`, `cloudflare-kv-binding`). On GitHub Actions, give each deploy a new key so the cache saves:
 
@@ -101,10 +105,10 @@ If the update was already detected, a callback runs at registration.
 
 ## Reject stale clients on the server
 
-The server helpers are not auto-imported. Import them from `nuxt-skew-protection/server`:
+The server helpers are not auto-imported. Import them from `#skew-protection/server`. The `nuxt-skew-protection/server` alias also works.
 
 ```ts
-import { isClientOutdated } from 'nuxt-skew-protection/server'
+import { isClientOutdated } from '#skew-protection/server'
 
 export default defineEventHandler((event) => {
   if (isClientOutdated(event)) {
@@ -126,7 +130,7 @@ export default defineEventHandler((event) => {
 
 ## Traps
 
-- **A headless browser test sees no updates.** Bot detection from `@nuxtjs/robots` matches `HeadlessChrome` and skips the SSE or WebSocket connection. Override the user agent in the test.
+- **A headless browser test sees no push updates.** If `@nuxtjs/robots` is installed, its bot detection matches `HeadlessChrome` and skips the SSE or WebSocket connection. Override the user agent in the test.
 - **`useActiveConnections()` exists only with `connectionTracking: true`.** It needs `sse` or `ws`, and stats reach only connections that call `authorize()` in the Nitro hook `skew:authorize-stats`. See https://nuxtseo.com/docs/skew-protection/guides/live-connections
 - **`sse` or `ws` on `nuxt generate` falls back to polling** with a warning. Polling uses Nuxt `experimental.checkOutdatedBuildInterval`, which defaults to one hour.
 - **Vercel native skew protection turns off asset storage.** When `VERCEL_SKEW_PROTECTION_ENABLED=1` and `VERCEL_DEPLOYMENT_ID` are set, `bundleAssets` defaults to `false`.
@@ -135,6 +139,17 @@ export default defineEventHandler((event) => {
 - **`isRollback` requires version timestamps.** It reads `skewProtection.versions` from `latest.json`. If storage is not configured or `bundleAssets` is `false`, it always returns `false`.
 
 ## Version limits
+
+2.x requires Nuxt `^4.6.0 || ^5.0.0` and Node `^22.22.3 || ^24.15.0 || >=26.0.0`. These 2.x changes break 1.x setups:
+
+| 1.x | 2.x fix |
+| --- | --- |
+| SSE by default on most server presets | Polling on every platform. Set `updateStrategy: 'sse'`, or `'ws'` on `cloudflare-durable`, for push updates and `connectionTracking`. |
+| `experimental.appManifest: false` allowed | The build throws. Remove the override, or set `skewProtection: { enabled: false }`. |
+| One push connection per tab | Visible tabs share one connection. Set `multiTab: false` or `connectionTracking: true` for one connection per tab. |
+| `storage.driver` default `fs` | The default is `fs-lite` with the same paths. Set `driver: 'fs'` to keep the old driver. |
+| Robots and Site Config installed with the module | Both are optional peers. Run `npx nuxt module add @nuxtjs/robots` to keep bot filtering. |
+| DevTools panel built in | Install `nuxtseo-devtools-host` as a dev dependency. |
 
 1.x renamed these. The package binary rewrites them in place: `pnpm exec nuxt-skew-protection migrate`.
 
@@ -158,5 +173,6 @@ export default defineEventHandler((event) => {
 
 - `GET /__skew/health` returns `{ ok, version, uptime }`. Compare `version` with the client build id.
 - `/_nuxt/builds/latest.json` lists every stored version under `skewProtection.versions`. One entry after a second deploy means storage did not persist.
-- `debug: true` logs detection, service worker, and storage steps. Nuxt DevTools has a Skew Protection tab.
+- `debug: true` logs detection, service worker, and storage steps.
+- Nuxt DevTools has a Skew Protection tab. The panel needs `nuxtseo-devtools-host` as a dev dependency.
 - In dev, call `useSkewProtection().simulateUpdate()` from the browser console to fire `skew:chunks-outdated` and preview the notification without deploying.
