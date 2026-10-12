@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ablyAdapter } from '../../src/runtime/adapters/ably'
-import { pusherAdapter } from '../../src/runtime/adapters/pusher'
+import { z } from 'zod'
+import { defineAdapter } from '../../src/runtime/adapters'
+import { ablyAdapter, parseAblyConfig } from '../../src/runtime/adapters/ably'
+import { parsePusherConfig, pusherAdapter } from '../../src/runtime/adapters/pusher'
 import { isSkewAdapter } from '../../src/utils'
 
 // Mock Ably SDK
@@ -161,6 +163,83 @@ describe('adapters', () => {
       const { broadcast: ablyBroadcast } = await import('../../src/runtime/adapters/ably/node')
 
       await expect(ablyBroadcast(config, 'test-version')).rejects.toThrow('SDK error')
+    })
+  })
+})
+
+describe('adapter config parsing', () => {
+  const pusher = { key: 'k', cluster: 'us2', appId: 'a', secret: 's' }
+  const ably = { key: 'app.key:secret', authUrl: '/api/ably-token' }
+
+  it('accepts a valid Pusher config and drops unknown keys', () => {
+    expect(parsePusherConfig({ ...pusher, channel: 'c', event: 'e', extra: true })).toEqual({
+      _tag: 'Ok',
+      config: { ...pusher, channel: 'c', event: 'e' },
+    })
+  })
+
+  it('accepts a valid Ably config without optional fields', () => {
+    expect(parseAblyConfig(ably)).toEqual({ _tag: 'Ok', config: ably })
+  })
+
+  it.each([null, undefined, 'pusher', 42, ['key']])('rejects a Pusher config that is %j', (input) => {
+    expect(parsePusherConfig(input)).toEqual({ _tag: 'Err', issues: ['config: expected an object'] })
+  })
+
+  it('reports every missing or empty Pusher field', () => {
+    expect(parsePusherConfig({ key: '', cluster: 'us2', appId: 1 })).toEqual({
+      _tag: 'Err',
+      issues: [
+        'key: Pusher key is required',
+        'appId: Pusher appId is required',
+        'secret: Pusher secret is required',
+      ],
+    })
+  })
+
+  it('rejects optional Ably fields that are not strings', () => {
+    expect(parseAblyConfig({ ...ably, clientId: 7, channel: null, event: {} })).toEqual({
+      _tag: 'Err',
+      issues: ['clientId: expected a string', 'channel: expected a string', 'event: expected a string'],
+    })
+  })
+
+  it('fails the adapter factory parse on a malformed config', () => {
+    const adapter = ablyAdapter({ key: 'app.key:secret' } as any)
+    expect(adapter.parseConfig(adapter.config)).toEqual({ _tag: 'Err', issues: ['authUrl: Ably authUrl is required'] })
+  })
+})
+
+describe('defineAdapter with a Standard Schema', () => {
+  const fileAdapter = defineAdapter({
+    name: 'file',
+    schema: z.object({ url: z.string().min(1) }),
+    web: '~/adapter/web',
+    toPublicConfig: ({ url }) => ({ url }),
+    broadcast: async () => {},
+  })
+
+  it('accepts a config the schema accepts', () => {
+    expect(fileAdapter({ url: 'wss://x' }).parseConfig({ url: 'wss://x' })).toEqual({ _tag: 'Ok', config: { url: 'wss://x' } })
+  })
+
+  it('maps schema issues to path-prefixed messages', () => {
+    const result = fileAdapter({ url: '' }).parseConfig({ url: '' })
+    expect(result._tag).toBe('Err')
+    expect(result._tag === 'Err' && result.issues).toEqual([expect.stringMatching(/^url: /)])
+  })
+
+  it('rejects a schema that validates asynchronously', () => {
+    const asyncAdapter = defineAdapter<{ url: string }, { url: string }>({
+      name: 'async',
+      schema: { '~standard': { version: 1, vendor: 'test', validate: async value => ({ value: value as { url: string } }) } },
+      web: '~/adapter/web',
+      toPublicConfig: ({ url }) => ({ url }),
+      broadcast: async () => {},
+    })
+    expect(asyncAdapter({ url: 'x' }).parseConfig({ url: 'x' })).toEqual({
+      _tag: 'Err',
+      issues: ['config: async schemas are not supported, use a synchronous schema'],
     })
   })
 })
