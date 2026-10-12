@@ -1,3 +1,9 @@
+## 2.0.1
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.0...v2.0.1)
+
+- fix: import useBotDetection from #robots/app (#100) ([74657cc](https://github.com/harlan-zw/nuxt-skew-protection/commit/74657cc69c85a4456cac550b953421b6435cc1b3))
+
 ## 2.0.0
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v1.6.2...v2.0.0)
