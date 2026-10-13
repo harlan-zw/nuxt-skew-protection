@@ -1,3 +1,9 @@
+## 2.0.2
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.1...v2.0.2)
+
+- fix: skip the max-age cookie warning when the cookie is off (#102) ([99bf901](https://github.com/harlan-zw/nuxt-skew-protection/commit/99bf901a34db35529697cba373059d4339ef8859))
+
 ## 2.0.1
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.0...v2.0.1)
