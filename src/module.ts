@@ -528,8 +528,10 @@ export {}
 
             // `s-maxage` says CDN and nothing else. `max-age` alone may have
             // meant the browser, and the author then loses `isClientOutdated`
-            // on this route without ever asking for shared caching.
-            if (fromMaxAgeAlone)
+            // on this route without ever asking for shared caching. With
+            // `cookie: false`, the `@nuxtjs/seo` default, there is no cookie to
+            // lose.
+            if (fromMaxAgeAlone && options.cookie !== false)
               logger.warn(`routeRules['${route}'] caches documents with \`max-age\` and no \`s-maxage\`. The version cookie is dropped there, so \`isClientOutdated\` falls back to the build id. Use \`s-maxage\` for CDN caching, or \`private\` if you meant browser caching only.`)
           }
         }
