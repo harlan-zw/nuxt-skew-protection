@@ -33,9 +33,11 @@ interface SubscribeStatsPayload {
   event?: RequestEvent | H3Event | { headers?: Headers }
 }
 
+type StatsSubscription = { _tag: 'Pending' } | { _tag: 'Authorized' }
+
 export default defineNitroPlugin((nitroApp) => {
   const connections = new Map<string, Connection>()
-  const statsSubscribers = new Set<string>()
+  const statsSubscriptions = new Map<string, StatsSubscription>()
 
   const getStats = (forId?: string) => {
     const versions: Record<string, number> = {}
@@ -50,9 +52,11 @@ export default defineNitroPlugin((nitroApp) => {
   }
 
   const broadcastToSubscribers = () => {
-    if (statsSubscribers.size === 0)
+    if (statsSubscriptions.size === 0)
       return
-    for (const id of statsSubscribers) {
+    for (const [id, subscription] of statsSubscriptions) {
+      if (subscription._tag !== 'Authorized')
+        continue
       const conn = connections.get(id)
       conn?.send({ type: 'stats', ...getStats(id) })
     }
@@ -75,12 +79,17 @@ export default defineNitroPlugin((nitroApp) => {
   })
   nitroApp.hooks.hook('skew:connection:close', ({ id }: ConnectionClosePayload) => {
     connections.delete(id)
-    statsSubscribers.delete(id)
+    statsSubscriptions.delete(id)
     broadcastToSubscribers()
   })
 
   // Subscribe to stats updates - requires auth via skew:authorize-stats hook
   nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event }: SubscribeStatsPayload) => {
+    const conn = connections.get(id)
+    if (!conn)
+      return
+    const pending = { _tag: 'Pending' } as const
+    statsSubscriptions.set(id, pending)
     let authorized = false
     await nitroApp.hooks.callHook('skew:authorize-stats', {
       id,
@@ -88,14 +97,16 @@ export default defineNitroPlugin((nitroApp) => {
       authorize: () => { authorized = true },
     })
 
+    if (statsSubscriptions.get(id) !== pending || connections.get(id) !== conn)
+      return
+
     if (authorized) {
-      statsSubscribers.add(id)
-      const conn = connections.get(id)
-      conn?.send({ type: 'stats', ...getStats(id) })
+      statsSubscriptions.set(id, { _tag: 'Authorized' })
+      conn.send({ type: 'stats', ...getStats(id) })
     }
     else {
-      const conn = connections.get(id)
-      conn?.send({ type: 'stats-unauthorized' })
+      statsSubscriptions.delete(id)
+      conn.send({ type: 'stats-unauthorized' })
     }
   })
 })

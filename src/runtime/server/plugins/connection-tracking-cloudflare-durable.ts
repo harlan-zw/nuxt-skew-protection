@@ -7,7 +7,7 @@ interface DurableAttachment {
   v?: string
   r?: string // route
   ip?: string // ip address
-  s?: boolean // stats subscriber
+  stats?: { _tag: 'Pending', request: string } | { _tag: 'Authorized' }
 }
 
 interface DurableContext {
@@ -80,7 +80,7 @@ function broadcastToSubscribers(ctx: DurableContext) {
   const websockets = ctx.getWebSockets()
   const subscribers = websockets.filter((ws) => {
     const attachment = (ws as any).deserializeAttachment?.() || {}
-    return attachment.s === true
+    return attachment.stats?._tag === 'Authorized'
   })
   if (subscribers.length === 0)
     return
@@ -124,6 +124,8 @@ export default defineNitroPlugin((nitroApp) => {
     if (!ws || !ctx)
       return
 
+    const request = crypto.randomUUID()
+    ws.serializeAttachment?.({ ...(ws.deserializeAttachment?.() || {}), stats: { _tag: 'Pending', request } })
     // Call auth hook
     let authorized = false
     await nitroApp.hooks.callHook('skew:authorize-stats', {
@@ -131,11 +133,16 @@ export default defineNitroPlugin((nitroApp) => {
       authorize: () => { authorized = true },
     })
 
+    const attachment = ws.deserializeAttachment?.()
+    if (attachment?.stats?._tag !== 'Pending' || attachment.stats.request !== request)
+      return
+
     if (authorized) {
-      ws.serializeAttachment?.({ ...(ws.deserializeAttachment?.() || {}), s: true })
+      ws.serializeAttachment?.({ ...attachment, stats: { _tag: 'Authorized' } })
       ws.send(JSON.stringify({ type: 'stats', ...getStats(ctx, id) }))
     }
     else {
+      ws.serializeAttachment?.({ ...attachment, stats: undefined })
       ws.send(JSON.stringify({ type: 'stats-unauthorized' }))
     }
   })
