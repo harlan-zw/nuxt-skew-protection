@@ -58,3 +58,43 @@ describe('websocket messages', () => {
     expect(boundary.callHook).not.toHaveBeenCalled()
   })
 })
+
+describe('websocket close', () => {
+  it.each([1000, 1005, 1006])('closes the socket before tracking disconnect code %i', async (code) => {
+    const events: string[] = []
+    const peer = {
+      id: 'client',
+      close: vi.fn((status?: number) => {
+        if (status === 1005 || status === 1006)
+          throw new Error('Reserved close status')
+        events.push('closed')
+      }),
+    }
+    boundary.callHook.mockImplementation(async () => {
+      events.push('tracked')
+    })
+
+    await websocketHandler.close!(peer as never, { code, reason: 'Fixture close' } as never)
+
+    expect(events).toEqual(['closed', 'tracked'])
+  })
+
+  it('waits for disconnect tracking to finish', async () => {
+    let finish: (() => void) | undefined
+    boundary.callHook.mockImplementation(() => new Promise<void>((resolve) => {
+      finish = resolve
+    }))
+    const peer = { id: 'client', close: vi.fn() }
+    let completed = false
+
+    const closing = Promise.resolve(websocketHandler.close!(peer as never, {} as never)).then(() => {
+      completed = true
+    })
+    await Promise.resolve()
+    expect(completed).toBe(false)
+
+    finish!()
+    await closing
+    expect(completed).toBe(true)
+  })
+})

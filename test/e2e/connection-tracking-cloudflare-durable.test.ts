@@ -182,9 +182,7 @@ describe.skipIf(isCI)('connection-tracking-cloudflare-durable', { concurrent: fa
     expect(stats.total).toBe(3)
   }, 20000)
 
-  // Skipped: Durable Objects in wrangler dev don't immediately reflect
-  // closed connections in getWebSockets() - this works in production
-  it.skip('broadcasts updated stats when connection closes', async () => {
+  it('broadcasts updated stats when connection closes', async () => {
     const conn1 = await createWs()
     activeConns.push(conn1)
     await conn1.waitForStats()

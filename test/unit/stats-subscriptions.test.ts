@@ -25,6 +25,7 @@ function createTracker(mode: 'memory' | 'durable') {
   function connection(id: string) {
     let attachment: Record<string, unknown> = {}
     const ws = {
+      readyState: WebSocket.OPEN as number,
       serializeAttachment: (value: Record<string, unknown>) => { attachment = structuredClone(value) },
       deserializeAttachment: () => structuredClone(attachment),
       send: receive,
@@ -122,6 +123,62 @@ describe.each(['memory', 'durable'] as const)('%s stats subscriptions', (mode) =
     await expect(app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'viewer' } })).rejects.toThrow('Fixture authorization failure')
     messages.length = 0
     await app.hooks.callHook('skew:connection:route-update', { ...subscriber, route: '/next-page' })
+    expect(messages).toEqual([])
+  })
+})
+
+describe('durable connection lifecycle', () => {
+  it('removes a closing connection from broadcast totals', async () => {
+    const { app, messages, connection } = createTracker('durable')
+    const subscriber = connection('subscriber')
+    const closing = { ...connection('closing'), version: 'previous-build' }
+    app.hooks.hook('skew:authorize-stats', ({ authorize }) => authorize())
+    await app.hooks.callHook('skew:connection:open', subscriber)
+    await app.hooks.callHook('skew:connection:open', closing)
+    await app.hooks.callHook('skew:subscribe-stats', subscriber)
+    messages.length = 0
+
+    closing.peer._internal.ws.readyState = WebSocket.CLOSING
+    await app.hooks.callHook('skew:connection:close', closing)
+
+    expect(messages).toEqual([expect.objectContaining({
+      type: 'stats',
+      total: 1,
+      versions: { 'build-fixture': 1 },
+    })])
+  })
+
+  it('does not broadcast to a closing subscriber', async () => {
+    const { app, messages, connection } = createTracker('durable')
+    const subscriber = connection('subscriber')
+    app.hooks.hook('skew:authorize-stats', ({ authorize }) => authorize())
+    await app.hooks.callHook('skew:connection:open', subscriber)
+    await app.hooks.callHook('skew:subscribe-stats', subscriber)
+    messages.length = 0
+
+    subscriber.peer._internal.ws.readyState = WebSocket.CLOSING
+    await app.hooks.callHook('skew:connection:close', subscriber)
+
+    expect(messages).toEqual([])
+  })
+
+  it.each([WebSocket.CLOSING, WebSocket.CLOSED])('does not send after pending authorization closes with state %i', async (readyState) => {
+    const { app, messages, connection } = createTracker('durable')
+    const subscriber = connection('subscriber')
+    let finish: (() => void) | undefined
+    app.hooks.hook('skew:authorize-stats', async ({ authorize }) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      authorize()
+    })
+    await app.hooks.callHook('skew:connection:open', subscriber)
+    const pending = app.hooks.callHook('skew:subscribe-stats', subscriber)
+
+    subscriber.peer._internal.ws.readyState = readyState
+    finish!()
+    await pending
+
     expect(messages).toEqual([])
   })
 })

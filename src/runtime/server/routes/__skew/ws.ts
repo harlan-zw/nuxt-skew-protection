@@ -78,6 +78,7 @@ export default defineWebSocketHandler({
   },
 
   close(peer) {
-    useNitroApp().hooks.callHook('skew:connection:close', { id: peer.id, peer })
+    peer.close()
+    return useNitroApp().hooks.callHook('skew:connection:close', { id: peer.id, peer })
   },
 })
