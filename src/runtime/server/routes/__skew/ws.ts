@@ -42,12 +42,12 @@ export default defineWebSocketHandler({
 
   message(peer, message) {
     const text = message.text()
-    if (text.includes('ping')) {
+    if (text === SKEW_MESSAGE_TYPE.PING) {
       peer.send(JSON.stringify({ type: 'pong' }))
       return
     }
 
-    let data: { type?: string, route?: string }
+    let data: unknown
     try {
       data = JSON.parse(text)
     }
@@ -55,7 +55,13 @@ export default defineWebSocketHandler({
       return
     }
 
-    if (data.type === SKEW_MESSAGE_TYPE.ROUTE_UPDATE && data.route) {
+    if (!data || typeof data !== 'object' || !('type' in data))
+      return
+
+    if (data.type === SKEW_MESSAGE_TYPE.PING) {
+      peer.send(JSON.stringify({ type: 'pong' }))
+    }
+    else if (data.type === SKEW_MESSAGE_TYPE.ROUTE_UPDATE && 'route' in data && typeof data.route === 'string' && data.route) {
       useNitroApp().hooks.callHook('skew:connection:route-update', {
         id: peer.id,
         route: data.route,
