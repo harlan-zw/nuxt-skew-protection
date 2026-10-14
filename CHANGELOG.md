@@ -1,3 +1,11 @@
+## 2.0.3
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.2...v2.0.3)
+
+- fix(runtime): tighten message checks (#105) ([e469ea1](https://github.com/harlan-zw/nuxt-skew-protection/commit/e469ea11a438c9276bb5c614af6817e5c0afa71e))
+- fix(runtime): tighten connection checks (#104) ([a19d84c](https://github.com/harlan-zw/nuxt-skew-protection/commit/a19d84c97fb61afbfecb0ecbaf12a8daf634d8ea))
+- fix(runtime): update connection lifecycle (#106) ([b0da68f](https://github.com/harlan-zw/nuxt-skew-protection/commit/b0da68f887ae1709a2c96ec94652b51961d2c63f))
+
 ## 2.0.2
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.1...v2.0.2)
