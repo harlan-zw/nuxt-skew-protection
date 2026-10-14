@@ -59,8 +59,12 @@ function getCtx(peer?: unknown): DurableContext | null {
   return getInternal(peer)?.durable?.ctx || null
 }
 
+function getOpenWebSockets(ctx: DurableContext) {
+  return ctx.getWebSockets().filter(ws => ws.readyState === WebSocket.OPEN)
+}
+
 function getStats(ctx: DurableContext, forId?: string) {
-  const websockets = ctx.getWebSockets()
+  const websockets = getOpenWebSockets(ctx)
   const versions: Record<string, number> = {}
   const routes: Record<string, number> = {}
   const connections: { id: string, version: string, route: string, ip?: string }[] = []
@@ -77,7 +81,7 @@ function getStats(ctx: DurableContext, forId?: string) {
 }
 
 function broadcastToSubscribers(ctx: DurableContext) {
-  const websockets = ctx.getWebSockets()
+  const websockets = getOpenWebSockets(ctx)
   const subscribers = websockets.filter((ws) => {
     const attachment = (ws as any).deserializeAttachment?.() || {}
     return attachment.stats?._tag === 'Authorized'
@@ -121,7 +125,7 @@ export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('skew:subscribe-stats', async ({ id, event, peer }: SubscribeStatsPayload) => {
     const ws = getInternal(peer)?.ws
     const ctx = getCtx(peer)
-    if (!ws || !ctx)
+    if (!ws || !ctx || ws.readyState !== WebSocket.OPEN)
       return
 
     const request = crypto.randomUUID()
@@ -134,7 +138,7 @@ export default defineNitroPlugin((nitroApp) => {
     })
 
     const attachment = ws.deserializeAttachment?.()
-    if (attachment?.stats?._tag !== 'Pending' || attachment.stats.request !== request)
+    if (ws.readyState !== WebSocket.OPEN || attachment?.stats?._tag !== 'Pending' || attachment.stats.request !== request)
       return
 
     if (authorized) {
