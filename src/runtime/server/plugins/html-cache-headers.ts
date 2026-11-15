@@ -29,7 +29,9 @@ export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event, response) => {
     // Nitro 2 calls this hook before it copies a returned Web Response into
     // the Node response. Read its final status and headers at that boundary.
-    const nativeResponse = response?.body instanceof Response ? response.body : undefined
+    const nativeResponse = response?.body instanceof Response
+      ? response.body
+      : undefined
     const cacheControl = sharedCacheControlHeader(name => nativeResponse?.headers.get(name) ?? getResponseHeader(event, name))
     const decision = resolveHtmlCachePolicy(
       htmlCacheRequestFromEvent(event, getHeader),

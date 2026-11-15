@@ -20,7 +20,10 @@ async function isRedisAvailable() {
       setTimeout(() => reject(new Error('timeout')), 1000)
     })
 
-    await Promise.race([storage.setItem('test', 'ok'), timeout])
+    await Promise.race([
+      storage.setItem('test', 'ok'),
+      timeout,
+    ])
     await storage.removeItem('test')
     return true
   }
@@ -108,7 +111,10 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         driver: redisDriver.default(redisConfig),
       })
 
-      const testData = { version: '1.0.0', assets: ['a.js', 'b.js'] }
+      const testData = {
+        version: '1.0.0',
+        assets: ['a.js', 'b.js'],
+      }
       await storage.setItem('manifest', testData)
       const result = await storage.getItem('manifest')
 

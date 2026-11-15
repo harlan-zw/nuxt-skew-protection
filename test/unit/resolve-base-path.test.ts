@@ -4,29 +4,44 @@ import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRou
 describe('resolveBasePath', () => {
   it('defaults to /__skew for a standard single-app at the root', () => {
     expect(resolveBasePath()).toBe('/__skew')
-    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/_nuxt/' } })).toBe('/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/', buildAssetsDir: '/_nuxt/' },
+    })).toBe('/__skew')
   })
 
   it('auto-detects the mount point from an absolute buildAssetsDir (the pro case)', () => {
     // apps/pro serves chunks from /pro/_nuxt/ and owns the /pro/* route only.
-    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/' } })).toBe('/pro/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/' },
+    })).toBe('/pro/__skew')
   })
 
   it('ignores nested namespaces inside the Nuxt assets directory', () => {
-    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/_nuxt/v2/' } })).toBe('/__skew')
-    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/v2/' } })).toBe('/pro/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/', buildAssetsDir: '/_nuxt/v2/' },
+    })).toBe('/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/', buildAssetsDir: '/pro/_nuxt/v2/' },
+    })).toBe('/pro/__skew')
   })
 
   it('auto-detects from app.baseURL when buildAssetsDir is the default', () => {
-    expect(resolveBasePath({ app: { baseURL: '/pro/', buildAssetsDir: '/_nuxt/' } })).toBe('/pro/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/pro/', buildAssetsDir: '/_nuxt/' },
+    })).toBe('/pro/__skew')
   })
 
   it('handles a multi-segment mount prefix', () => {
-    expect(resolveBasePath({ app: { baseURL: '/', buildAssetsDir: '/app/pro/_nuxt/' } })).toBe('/app/pro/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/', buildAssetsDir: '/app/pro/_nuxt/' },
+    })).toBe('/app/pro/__skew')
   })
 
   it('uses an explicit basePath verbatim, ignoring auto-detection', () => {
-    expect(resolveBasePath({ basePath: '/custom/__skew', app: { buildAssetsDir: '/pro/_nuxt/' } })).toBe('/custom/__skew')
+    expect(resolveBasePath({
+      basePath: '/custom/__skew',
+      app: { buildAssetsDir: '/pro/_nuxt/' },
+    })).toBe('/custom/__skew')
   })
 
   it('normalizes slashes on an explicit basePath', () => {
@@ -75,16 +90,27 @@ describe('resolveCookieName', () => {
 
 describe('resolveBasePath under app.baseURL', () => {
   it('keeps an absolute buildAssetsDir mount under app.baseURL', () => {
-    expect(resolveBasePath({ app: { baseURL: '/app/', buildAssetsDir: '/pro/_nuxt/' } })).toBe('/app/pro/__skew')
+    expect(resolveBasePath({
+      app: { baseURL: '/app/', buildAssetsDir: '/pro/_nuxt/' },
+    })).toBe('/app/pro/__skew')
   })
 
   it('keeps an explicit basePath that is already under app.baseURL', () => {
-    expect(resolveBasePath({ basePath: '/app/custom', app: { baseURL: '/app/' } })).toBe('/app/custom')
+    expect(resolveBasePath({
+      basePath: '/app/custom',
+      app: { baseURL: '/app/' },
+    })).toBe('/app/custom')
   })
 
   it('moves an explicit basePath outside app.baseURL under it', () => {
-    expect(resolveBasePath({ basePath: '/__skew', app: { baseURL: '/app/' } })).toBe('/app/__skew')
-    expect(resolveBasePath({ basePath: '/application/__skew', app: { baseURL: '/app/' } })).toBe('/app/application/__skew')
+    expect(resolveBasePath({
+      basePath: '/__skew',
+      app: { baseURL: '/app/' },
+    })).toBe('/app/__skew')
+    expect(resolveBasePath({
+      basePath: '/application/__skew',
+      app: { baseURL: '/app/' },
+    })).toBe('/app/application/__skew')
   })
 })
 

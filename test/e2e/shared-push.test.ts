@@ -54,10 +54,12 @@ describe('shared push updates', () => {
         await (window as any).__TEST_NUXT_APP__.hooks.callHook('app:manifest:update', {
           id: 'rollback-v0',
           timestamp: Date.now(),
-          skewProtection: { versions: {
-            'shared-push-v1': { timestamp: '2026-10-08T00:00:00Z' },
-            'rollback-v0': { timestamp: '2026-10-07T00:00:00Z' },
-          } },
+          skewProtection: {
+            versions: {
+              'shared-push-v1': { timestamp: '2026-10-08T00:00:00Z' },
+              'rollback-v0': { timestamp: '2026-10-07T00:00:00Z' },
+            },
+          },
         })
       })
       for (const page of pages) {
@@ -65,7 +67,15 @@ describe('shared push updates', () => {
         expect(await page.evaluate(() => {
           const state = (window as any).__TEST_NUXT_APP__.payload.state
           return { server: state['$sskew-server-version'], manifest: state['$sskew-manifest'] }
-        })).toMatchObject({ server: 'rollback-v0', manifest: { id: 'rollback-v0', skewProtection: { versions: { 'rollback-v0': {} } } } })
+        })).toMatchObject({
+          server: 'rollback-v0',
+          manifest: {
+            id: 'rollback-v0',
+            skewProtection: {
+              versions: { 'rollback-v0': {} },
+            },
+          },
+        })
       }
       // A suspended owner releases its socket; restoring it queues behind the next owner.
       await pages[owner]!.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })))
@@ -97,21 +107,31 @@ describe('shared push updates', () => {
       const context = await browser.newContext({ userAgent })
       let deployedVersion = 'shared-push-v1'
       await context.route('**/builds/latest.json?*', async (route) => {
-        await route.fulfill({ json: { id: deployedVersion, timestamp: Date.now(), skewProtection: { versions: {
-          'shared-push-v0': { timestamp: '2026-10-07T00:00:00Z' },
-          'shared-push-v1': { timestamp: '2026-10-08T00:00:00Z' },
-        } } } })
+        await route.fulfill({
+          json: {
+            id: deployedVersion,
+            timestamp: Date.now(),
+            skewProtection: {
+              versions: {
+                'shared-push-v0': { timestamp: '2026-10-07T00:00:00Z' },
+                'shared-push-v1': { timestamp: '2026-10-08T00:00:00Z' },
+              },
+            },
+          },
+        })
       })
       const owner = await context.newPage()
       await owner.addInitScript(() => {
         const NativeEventSource = window.EventSource
-        Object.defineProperty(window, 'EventSource', { value: new Proxy(NativeEventSource, {
-          construct(target, args) {
-            const source = Reflect.construct(target, args)
+        Object.defineProperty(window, 'EventSource', {
+          value: new Proxy(NativeEventSource, {
+            construct(target, args) {
+              const source = Reflect.construct(target, args)
             ;(window as any).__source = source
-            return source
-          },
-        }) })
+              return source
+            },
+          }),
+        })
       })
       await owner.goto(`http://localhost:${port}`)
       await owner.waitForSelector('[data-testid="version"]')
@@ -126,11 +146,17 @@ describe('shared push updates', () => {
       await context.route('**/*', async (route) => {
         if (route.request().isNavigationRequest()) {
           const response = await route.fetch()
-          await route.fulfill({ response, body: (await response.text()).replaceAll('shared-push-v1', 'shared-push-v0') })
+          await route.fulfill({
+            response,
+            body: (await response.text()).replaceAll('shared-push-v1', 'shared-push-v0'),
+          })
         }
         else if (route.request().url().includes('/builds/meta/shared-push-v0.json')) {
           const response = await context.request.get(`http://localhost:${port}/_nuxt/builds/meta/shared-push-v1.json`)
-          await route.fulfill({ response, body: (await response.text()).replaceAll('shared-push-v1', 'shared-push-v0') })
+          await route.fulfill({
+            response,
+            body: (await response.text()).replaceAll('shared-push-v1', 'shared-push-v0'),
+          })
         }
         else {
           await route.fallback()
@@ -212,7 +238,9 @@ describe('shared push updates', () => {
       const owner = await context.newPage()
       await owner.addInitScript(() => {
         ;(window as any).__visibility = 'visible'
-        Object.defineProperty(document, 'visibilityState', { get: () => (window as any).__visibility })
+        Object.defineProperty(document, 'visibilityState', {
+          get: () => (window as any).__visibility,
+        })
       })
       await owner.goto(`http://localhost:${port}`)
       await owner.waitForSelector('[data-testid="version"]')
@@ -220,7 +248,9 @@ describe('shared push updates', () => {
       const follower = await context.newPage()
       await follower.addInitScript(() => {
         ;(window as any).__visibility = 'hidden'
-        Object.defineProperty(document, 'visibilityState', { get: () => (window as any).__visibility })
+        Object.defineProperty(document, 'visibilityState', {
+          get: () => (window as any).__visibility,
+        })
       })
       await follower.goto(`http://localhost:${port}`)
       await follower.waitForSelector('[data-testid="version"]')

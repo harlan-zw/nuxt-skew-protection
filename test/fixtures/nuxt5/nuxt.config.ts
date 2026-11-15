@@ -15,15 +15,29 @@ function verifyBuilder(_options: unknown, nuxt: Nuxt) {
 
 export default defineNuxtConfig({
   workspaceDir: import.meta.dirname,
-  vite: { resolve: { dedupe: ['nuxt', 'vue', 'vue-router'] } },
+  vite: {
+    resolve: {
+      dedupe: ['nuxt', 'vue', 'vue-router'],
+    },
+  },
   future: { compatibilityVersion: 5 },
-  modules: [verifyBuilder, NuxtRobots, NuxtSiteConfig, NuxtSkewProtection],
+  modules: [
+    verifyBuilder,
+    NuxtRobots,
+    NuxtSiteConfig,
+    NuxtSkewProtection,
+  ],
   site: { url: 'https://skew.example.com' },
   robots: { botDetection: true },
 
   compatibilityDate: '2026-06-10',
 
-  nitro: { prerender: { routes: ['/__skew/health'], crawlLinks: false } },
+  nitro: {
+    prerender: {
+      routes: ['/__skew/health'],
+      crawlLinks: false,
+    },
+  },
 
   devtools: {
     enabled: false,

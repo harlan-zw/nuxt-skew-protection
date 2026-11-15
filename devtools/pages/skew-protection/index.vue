@@ -22,10 +22,26 @@ const cookieItems = computed(() => {
   if (!cookie)
     return []
   return [
-    { key: 'Name', value: String(cookie.name || '__nkpv'), mono: true },
-    { key: 'Max Age', value: cookie.maxAge ? `${cookie.maxAge}s` : 'Not set' },
-    { key: 'Path', value: String(cookie.path || '/'), mono: true },
-    { key: 'SameSite', value: String(cookie.sameSite || 'lax') },
+    {
+      key: 'Name',
+      value: String(cookie.name || '__nkpv'),
+      mono: true,
+    },
+    {
+      key: 'Max Age',
+      value: cookie.maxAge
+        ? `${cookie.maxAge}s`
+        : 'Not set',
+    },
+    {
+      key: 'Path',
+      value: String(cookie.path || '/'),
+      mono: true,
+    },
+    {
+      key: 'SameSite',
+      value: String(cookie.sameSite || 'lax'),
+    },
   ]
 })
 
@@ -36,9 +52,15 @@ const healthItems = computed(() => {
   if (!h)
     return []
   return [
-    { key: 'Status', value: h.ok ? 'Healthy' : 'Unhealthy' },
+    {
+      key: 'Status',
+      value: h.ok ? 'Healthy' : 'Unhealthy',
+    },
     { key: 'Build ID', value: h.version, mono: true },
-    { key: 'Uptime', value: formatUptime(h.uptime) },
+    {
+      key: 'Uptime',
+      value: formatUptime(h.uptime),
+    },
   ]
 })
 

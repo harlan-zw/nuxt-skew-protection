@@ -29,7 +29,9 @@ describe('asset publication', () => {
     const manager = createAssetManager({ driver })
     await manager.publishBuild('live', directory, await build('live'))
     const original = await manager.getManifest()
-    const write = failure === 'upload' ? 'setItemRaw' : 'setItem'
+    const write = failure === 'upload'
+      ? 'setItemRaw'
+      : 'setItem'
     const implementation = driver[write]!
     driver[write] = vi.fn(() => {
       throw new Error('storage unavailable')
@@ -64,7 +66,12 @@ describe('asset publication', () => {
     const asset = '_nuxt/shared.hash.js'
     const manifest = {
       current: 'legacy',
-      versions: { legacy: { timestamp: new Date().toISOString(), assets: [asset] } },
+      versions: {
+        legacy: {
+          timestamp: new Date().toISOString(),
+          assets: [asset],
+        },
+      },
       fileIdToVersion: { 'shared.hash.js': 'legacy' },
     }
     await storage.setItem('version-manifest.json', manifest)
@@ -80,7 +87,9 @@ describe('asset publication', () => {
     // Put the failing object in a later batch, after shared objects finish uploading.
     for (let i = 0; i < 26; i++) {
       const path = `_nuxt/asset-${i}.js`
-      await writeFile(join(directory, path), i === 25 ? 'fail' : `content ${i}`)
+      await writeFile(join(directory, path), i === 25
+        ? 'fail'
+        : `content ${i}`)
       assets.push(path)
     }
     await expect(manager.publishBuild('new', directory, assets)).rejects.toThrow('PUT failed')
@@ -107,7 +116,9 @@ describe('asset publication', () => {
   })
 
   it('does not delete expired objects when the cleanup manifest cannot be saved', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.useFakeTimers({
+      toFake: ['Date'],
+    })
     vi.setSystemTime(new Date('2026-01-01'))
     const driver = memoryDriver()
     const manager = createAssetManager({ driver, retentionDays: 7 })
@@ -126,7 +137,9 @@ describe('asset publication', () => {
   })
 
   it('prunes expired history before restore while retaining the live release', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.useFakeTimers({
+      toFake: ['Date'],
+    })
     vi.setSystemTime(new Date('2026-01-01'))
     const driver = memoryDriver()
     const storage = createStorage({ driver })
@@ -148,14 +161,23 @@ describe('asset publication', () => {
     expect(result.versions.live).toBeDefined()
   })
 
-  it.each(['../escape.js', '/absolute.js', '_nuxt/../../escape.js', '..\\escape.js'])('rejects unsafe manifest path %s', async (asset) => {
+  it.each([
+    '../escape.js',
+    '/absolute.js',
+    '_nuxt/../../escape.js',
+    '..\\escape.js',
+  ])('rejects unsafe manifest path %s', async (asset) => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
     await storage.setItem('version-manifest.json', {
       current: 'old',
-      versions: { old: { timestamp: new Date().toISOString(), assets: [asset] } },
+      versions: {
+        old: {
+          timestamp: new Date().toISOString(),
+          assets: [asset],
+        },
+      },
     })
-    await storage.setItemRaw(`old/${asset}`, Buffer.from('unsafe'))
     const manager = createAssetManager({ driver })
     await expect(manager.restoreOldAssetsToPublic('next', directory)).rejects.toThrow('Invalid asset path')
   })

@@ -21,7 +21,10 @@ class MockRealtime {
     }),
   }
 
-  connection = { on: vi.fn() }
+  connection = {
+    on: vi.fn(),
+  }
+
   close = vi.fn()
 
   constructor(options: unknown) {
@@ -67,7 +70,13 @@ describe('adapters', () => {
       expect(isSkewAdapter(value)).toBe(false)
     })
 
-    it.each(['name', 'web', 'parseConfig', 'toPublicConfig', 'broadcast'])('rejects an adapter without %s', (key) => {
+    it.each([
+      'name',
+      'web',
+      'parseConfig',
+      'toPublicConfig',
+      'broadcast',
+    ])('rejects an adapter without %s', (key) => {
       const { [key as keyof typeof valid]: _, ...adapter } = valid
       expect(isSkewAdapter(adapter)).toBe(false)
     })
@@ -128,7 +137,12 @@ describe('adapters', () => {
     })
 
     it('only exposes token authentication to the browser', () => {
-      const adapter = ablyAdapter({ ...config, clientId: 'browser', channel: 'updates', event: 'release' })
+      const adapter = ablyAdapter({
+        ...config,
+        clientId: 'browser',
+        channel: 'updates',
+        event: 'release',
+      })
 
       expect(adapter.toPublicConfig(adapter.config)).toEqual({
         authUrl: '/api/ably-token',
@@ -168,11 +182,21 @@ describe('adapters', () => {
 })
 
 describe('adapter config parsing', () => {
-  const pusher = { key: 'k', cluster: 'us2', appId: 'a', secret: 's' }
+  const pusher = {
+    key: 'k',
+    cluster: 'us2',
+    appId: 'a',
+    secret: 's',
+  }
   const ably = { key: 'app.key:secret', authUrl: '/api/ably-token' }
 
   it('accepts a valid Pusher config and drops unknown keys', () => {
-    expect(parsePusherConfig({ ...pusher, channel: 'c', event: 'e', extra: true })).toEqual({
+    expect(parsePusherConfig({
+      ...pusher,
+      channel: 'c',
+      event: 'e',
+      extra: true,
+    })).toEqual({
       _tag: 'Ok',
       config: { ...pusher, channel: 'c', event: 'e' },
     })
@@ -182,8 +206,17 @@ describe('adapter config parsing', () => {
     expect(parseAblyConfig(ably)).toEqual({ _tag: 'Ok', config: ably })
   })
 
-  it.each([null, undefined, 'pusher', 42, ['key']])('rejects a Pusher config that is %j', (input) => {
-    expect(parsePusherConfig(input)).toEqual({ _tag: 'Err', issues: ['config: expected an object'] })
+  it.each([
+    null,
+    undefined,
+    'pusher',
+    42,
+    ['key'],
+  ])('rejects a Pusher config that is %j', (input) => {
+    expect(parsePusherConfig(input)).toEqual({
+      _tag: 'Err',
+      issues: ['config: expected an object'],
+    })
   })
 
   it('reports every missing or empty Pusher field', () => {
@@ -198,7 +231,12 @@ describe('adapter config parsing', () => {
   })
 
   it('rejects optional Ably fields that are not strings', () => {
-    expect(parseAblyConfig({ ...ably, clientId: 7, channel: null, event: {} })).toEqual({
+    expect(parseAblyConfig({
+      ...ably,
+      clientId: 7,
+      channel: null,
+      event: {},
+    })).toEqual({
       _tag: 'Err',
       issues: ['clientId: expected a string', 'channel: expected a string', 'event: expected a string'],
     })
@@ -206,33 +244,49 @@ describe('adapter config parsing', () => {
 
   it('fails the adapter factory parse on a malformed config', () => {
     const adapter = ablyAdapter({ key: 'app.key:secret' } as any)
-    expect(adapter.parseConfig(adapter.config)).toEqual({ _tag: 'Err', issues: ['authUrl: Ably authUrl is required'] })
+    expect(adapter.parseConfig(adapter.config)).toEqual({
+      _tag: 'Err',
+      issues: ['authUrl: Ably authUrl is required'],
+    })
   })
 })
 
 describe('defineAdapter with a Standard Schema', () => {
   const fileAdapter = defineAdapter({
     name: 'file',
-    schema: z.object({ url: z.string().min(1) }),
+    schema: z.object({
+      url: z.string().min(1),
+    }),
     web: '~/adapter/web',
     toPublicConfig: ({ url }) => ({ url }),
     broadcast: async () => {},
   })
 
   it('accepts a config the schema accepts', () => {
-    expect(fileAdapter({ url: 'wss://x' }).parseConfig({ url: 'wss://x' })).toEqual({ _tag: 'Ok', config: { url: 'wss://x' } })
+    expect(fileAdapter({ url: 'wss://x' }).parseConfig({ url: 'wss://x' })).toEqual({
+      _tag: 'Ok',
+      config: { url: 'wss://x' },
+    })
   })
 
   it('maps schema issues to path-prefixed messages', () => {
     const result = fileAdapter({ url: '' }).parseConfig({ url: '' })
     expect(result._tag).toBe('Err')
-    expect(result._tag === 'Err' && result.issues).toEqual([expect.stringMatching(/^url: /)])
+    expect(result._tag === 'Err' && result.issues).toEqual([
+      expect.stringMatching(/^url: /),
+    ])
   })
 
   it('rejects a schema that validates asynchronously', () => {
     const asyncAdapter = defineAdapter<{ url: string }, { url: string }>({
       name: 'async',
-      schema: { '~standard': { version: 1, vendor: 'test', validate: async value => ({ value: value as { url: string } }) } },
+      schema: {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: async value => ({ value: value as { url: string } }),
+        },
+      },
       web: '~/adapter/web',
       toPublicConfig: ({ url }) => ({ url }),
       broadcast: async () => {},

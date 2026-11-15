@@ -75,9 +75,20 @@ function getStats(ctx: DurableContext, forId?: string) {
     const r = attachment.r || '/'
     versions[v] = (versions[v] || 0) + 1
     routes[r] = (routes[r] || 0) + 1
-    connections.push({ id, version: v, route: r, ip: attachment.ip })
+    connections.push({
+      id,
+      version: v,
+      route: r,
+      ip: attachment.ip,
+    })
   }
-  return { total: websockets.length, versions, routes, connections, yourId: forId }
+  return {
+    total: websockets.length,
+    versions,
+    routes,
+    connections,
+    yourId: forId,
+  }
 }
 
 function broadcastToSubscribers(ctx: DurableContext) {
@@ -100,7 +111,13 @@ export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, peer }: ConnectionPayload) => {
     const ws = getInternal(peer)?.ws
     if (ws?.serializeAttachment) {
-      ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), id, v: version, r: route || '/', ip })
+      ws.serializeAttachment({
+        ...(ws.deserializeAttachment?.() || {}),
+        id,
+        v: version,
+        r: route || '/',
+        ip,
+      })
     }
 
     const ctx = getCtx(peer)
@@ -110,7 +127,10 @@ export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('skew:connection:route-update', ({ route, peer }: RouteUpdatePayload) => {
     const ws = getInternal(peer)?.ws
     if (ws?.serializeAttachment) {
-      ws.serializeAttachment({ ...(ws.deserializeAttachment?.() || {}), r: route })
+      ws.serializeAttachment({
+        ...(ws.deserializeAttachment?.() || {}),
+        r: route,
+      })
     }
 
     const ctx = getCtx(peer)
@@ -129,7 +149,10 @@ export default defineNitroPlugin((nitroApp) => {
       return
 
     const request = crypto.randomUUID()
-    ws.serializeAttachment?.({ ...(ws.deserializeAttachment?.() || {}), stats: { _tag: 'Pending', request } })
+    ws.serializeAttachment?.({
+      ...(ws.deserializeAttachment?.() || {}),
+      stats: { _tag: 'Pending', request },
+    })
     // Call auth hook
     let authorized = false
     await nitroApp.hooks.callHook('skew:authorize-stats', {
@@ -142,8 +165,14 @@ export default defineNitroPlugin((nitroApp) => {
       return
 
     if (authorized) {
-      ws.serializeAttachment?.({ ...attachment, stats: { _tag: 'Authorized' } })
-      ws.send(JSON.stringify({ type: 'stats', ...getStats(ctx, id) }))
+      ws.serializeAttachment?.({
+        ...attachment,
+        stats: { _tag: 'Authorized' },
+      })
+      ws.send(JSON.stringify({
+        type: 'stats',
+        ...getStats(ctx, id),
+      }))
     }
     else {
       ws.serializeAttachment?.({ ...attachment, stats: undefined })

@@ -9,21 +9,24 @@ function showToast(reload, dismiss) {
     icon: 'i-heroicons-sparkles',
     color: 'primary',
     duration: 0,
-    actions: [{
-      label: 'Refresh',
-      click: () => {
-        toast.remove('skew-update')
-        reload()
+    actions: [
+      {
+        label: 'Refresh',
+        click: () => {
+          toast.remove('skew-update')
+          reload()
+        },
       },
-    }, {
-      label: 'Dismiss',
-      color: 'neutral',
-      variant: 'ghost',
-      click: () => {
-        toast.remove('skew-update')
-        dismiss()
+      {
+        label: 'Dismiss',
+        color: 'neutral',
+        variant: 'ghost',
+        click: () => {
+          toast.remove('skew-update')
+          dismiss()
+        },
       },
-    }],
+    ],
   })
 }
 </script>

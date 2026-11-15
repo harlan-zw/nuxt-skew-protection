@@ -13,7 +13,9 @@ const { data: debugData, status: debugStatus } = useAsyncData<DebugResponse | nu
     // The devtools panel may load before its debug endpoint is available.
     return null
   })
-}, { watch: [refreshTime] })
+}, {
+  watch: [refreshTime],
+})
 
 export { debugData }
 
@@ -36,7 +38,9 @@ export async function fetchProductionData() {
   productionData.value = await appFetch.value<ProductionDebugResponse>('/__skew-devtools/debug-production', {
     query: { url },
   }).catch((err: unknown) => {
-    productionError.value = err instanceof Error ? err.message : 'Failed to connect to production'
+    productionError.value = err instanceof Error
+      ? err.message
+      : 'Failed to connect to production'
     return null
   })
 }

@@ -195,7 +195,9 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
     const { version } = JSON.parse(await readFile(resolver.resolve('../package.json'), 'utf8')) as { version: string }
-    logger.level = (options.debug || nuxt.options.debug) ? 4 : 3
+    logger.level = (options.debug || nuxt.options.debug)
+      ? 4
+      : 3
     if (options.enabled === false) {
       logger.debug('The module is disabled, skipping setup.')
       return
@@ -203,12 +205,20 @@ export default defineNuxtModule<ModuleOptions>({
     if (nuxt.options.experimental.appManifest === false)
       throw new Error('nuxt-skew-protection requires experimental.appManifest. Enable it or disable the module.')
     const nitroCompatibility = setupNitroRuntimeCompatibility(nuxt)
-    setupRuntimeAliases({ namespace: '#skew-protection', app: resolver.resolve('./runtime/app'), server: resolver.resolve('./runtime/server') }, nuxt)
+    setupRuntimeAliases({
+      namespace: '#skew-protection',
+      app: resolver.resolve('./runtime/app'),
+      server: resolver.resolve('./runtime/server'),
+    }, nuxt)
     nuxt.hook('nitro:config', (nitroConfig) => {
       if (getNitroVersion(nuxt) === 3) {
         const nativeConfig = nitroConfig as unknown as { noExternals?: boolean | (string | RegExp)[] }
-        if (nativeConfig.noExternals !== true)
-          nativeConfig.noExternals = [...nativeConfig.noExternals || [], 'nuxt-skew-protection']
+        if (nativeConfig.noExternals !== true) {
+          nativeConfig.noExternals = [
+            ...nativeConfig.noExternals || [],
+            'nuxt-skew-protection',
+          ]
+        }
       }
       else {
         const externals = nitroConfig.externals ||= {}
@@ -484,7 +494,9 @@ export {}
       // app declares no HTML caching in its config, which is what keeps every
       // message below quiet for everyone who is not caching documents.
       const publicAssetBaseURLs = (nuxt.options.nitro.publicAssets ?? [])
-        .flatMap(asset => asset && typeof asset.baseURL === 'string' ? [asset.baseURL] : [])
+        .flatMap(asset => asset && typeof asset.baseURL === 'string'
+          ? [asset.baseURL]
+          : [])
       const caching = cachingRouteRules(nuxt.options.routeRules ?? {}, publicAssetBaseURLs)
 
       if (onVercel) {
@@ -497,7 +509,9 @@ export {}
         // this warning and installed the plugin anyway, which then stripped
         // `__vdpl` and broke the mechanism the warning said it would not touch.
         if (caching.length) {
-          logger.warn(`${caching.length} route rule${caching.length > 1 ? 's' : ''} ask a shared cache to store HTML. That cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document. Shared caches skip any response that sets a cookie.`)
+          logger.warn(`${caching.length} route rule${caching.length > 1
+            ? 's'
+            : ''} ask a shared cache to store HTML. That cannot work on Vercel. Vercel skew protection sets a \`__vdpl\` cookie on every document. Shared caches skip any response that sets a cookie.`)
         }
       }
       else {
@@ -561,7 +575,9 @@ export {}
           if (capability) {
             const published = nuxt.options.runtimeConfig.htmlCacheCapabilities
             nuxt.options.runtimeConfig.htmlCacheCapabilities = [
-              ...(Array.isArray(published) ? published : []),
+              ...(Array.isArray(published)
+                ? published
+                : []),
               capability,
             ]
           }
@@ -595,7 +611,11 @@ export {}
           nitroConfig.rollupConfig ||= {}
           const existingPlugins = nitroConfig.rollupConfig.plugins
           nitroConfig.rollupConfig.plugins = [
-            ...(Array.isArray(existingPlugins) ? existingPlugins : existingPlugins ? [existingPlugins] : []),
+            ...(Array.isArray(existingPlugins)
+              ? existingPlugins
+              : existingPlugins
+                ? [existingPlugins]
+                : []),
             createCloudflareAssetProtectionPlugin({
               buildAssetsPath,
               recoveryPath,
@@ -741,7 +761,11 @@ export {}
             const timestamps = Object.values(manifest.versions).map(v => new Date(v.timestamp).getTime())
             const oldestTimestamp = Math.min(Date.now(), ...timestamps)
             const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
-            const timeInfo = daysSince > 0 ? `${daysSince} day${daysSince > 1 ? 's' : ''} ago` : 'today'
+            const timeInfo = daysSince > 0
+              ? `${daysSince} day${daysSince > 1
+                ? 's'
+                : ''} ago`
+              : 'today'
 
             // Store assets in configured storage (can be slow with many assets)
             const storageInfo = options.storage!.base && ['fs', 'fs-lite'].includes(options.storage!.driver)
@@ -759,7 +783,9 @@ export {}
 
             await assetManager.publishBuild(buildId, publicDir, assets)
               .catch((error: unknown) => {
-                logger.error(`Failed to store assets:`, error instanceof Error ? error.message : error)
+                logger.error(`Failed to store assets:`, error instanceof Error
+                  ? error.message
+                  : error)
                 throw error
               })
 
@@ -783,7 +809,9 @@ export {}
                 }
               }
 
-              logger.log(`Restored build files from ${versionCount} release${versionCount > 1 ? 's' : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]`)
+              logger.log(`Restored build files from ${versionCount} release${versionCount > 1
+                ? 's'
+                : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]`)
             }
           }
           else {

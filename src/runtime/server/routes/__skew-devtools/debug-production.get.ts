@@ -3,7 +3,9 @@ import { defineEventHandler, getQuery } from 'nuxt/server'
 const RE_TRAILING_SLASHES = /\/+$/
 
 async function fetchDebugJson<T>(url: string): Promise<T> {
-  const request = () => fetch(url, { signal: AbortSignal.timeout(5000) })
+  const request = () => fetch(url, {
+    signal: AbortSignal.timeout(5000),
+  })
   const first = await request().then(response => ({ _tag: 'Response' as const, response })).catch((error: unknown) => ({ _tag: 'Error' as const, error }))
   let response: Response
   if (first._tag === 'Response' && ![408, 409, 425, 429, 500, 502, 503, 504].includes(first.response.status)) {
@@ -36,7 +38,9 @@ export default defineEventHandler(async (event): Promise<ProductionDebugResponse
   const { url } = getQuery(event) as { url?: string }
 
   if (!url) {
-    return { errors: ['Missing url query parameter'] }
+    return {
+      errors: ['Missing url query parameter'],
+    }
   }
 
   const errors: string[] = []

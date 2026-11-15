@@ -126,7 +126,9 @@ export function createCloudflareAssetProtectionPlugin(
       }
     },
     resolveId(id) {
-      return id === virtualEntryId ? resolvedVirtualEntryId : null
+      return id === virtualEntryId
+        ? resolvedVirtualEntryId
+        : null
     },
     load(id) {
       if (id !== resolvedVirtualEntryId || !nitroEntryId) {

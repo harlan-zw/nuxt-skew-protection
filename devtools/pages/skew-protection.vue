@@ -29,10 +29,31 @@ watch(() => route.path, (p) => {
 }, { immediate: true })
 
 const navItems = [
-  { value: 'overview', to: '/skew-protection', icon: 'carbon:dashboard', label: 'Overview' },
-  { value: 'versions', to: '/skew-protection/versions', icon: 'carbon:version', label: 'Versions' },
-  { value: 'connections', to: '/skew-protection/connections', icon: 'carbon:connection-signal', label: 'Connections', devOnly: true },
-  { value: 'docs', to: '/skew-protection/docs', icon: 'carbon:book', label: 'Docs' },
+  {
+    value: 'overview',
+    to: '/skew-protection',
+    icon: 'carbon:dashboard',
+    label: 'Overview',
+  },
+  {
+    value: 'versions',
+    to: '/skew-protection/versions',
+    icon: 'carbon:version',
+    label: 'Versions',
+  },
+  {
+    value: 'connections',
+    to: '/skew-protection/connections',
+    icon: 'carbon:connection-signal',
+    label: 'Connections',
+    devOnly: true,
+  },
+  {
+    value: 'docs',
+    to: '/skew-protection/docs',
+    icon: 'carbon:book',
+    label: 'Docs',
+  },
 ]
 </script>
 

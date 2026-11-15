@@ -50,6 +50,8 @@ export default defineNuxtPlugin({
     // Track route changes if enabled
     trackRouteChanges(router, routeTracking, skewConnection)
 
-    return { provide: { skewConnection } }
+    return {
+      provide: { skewConnection },
+    }
   },
 })

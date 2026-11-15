@@ -17,8 +17,12 @@ vi.mock('#nuxtseo/h3', () => ({
 }))
 
 vi.mock('#nuxtseo/nitro', () => ({
-  useNitroApp: vi.fn(() => ({ hooks: { callHook } })),
-  useRuntimeConfig: vi.fn(() => ({ app: { buildId: 'server-build-id' } })),
+  useNitroApp: vi.fn(() => ({
+    hooks: { callHook },
+  })),
+  useRuntimeConfig: vi.fn(() => ({
+    app: { buildId: 'server-build-id' },
+  })),
 }))
 
 vi.mock('../../src/runtime/server/imports/cookie', () => ({

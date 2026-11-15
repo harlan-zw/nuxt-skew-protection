@@ -76,7 +76,9 @@ vi.mock('nuxt/app', () => ({
 }))
 
 vi.mock('../../src/runtime/shared/logger', () => ({
-  logger: { debug: vi.fn() },
+  logger: {
+    debug: vi.fn(),
+  },
 }))
 
 describe('multi-tab plugin', () => {
@@ -122,7 +124,13 @@ describe('multi-tab plugin', () => {
     const manifest = {
       id: 'v2',
       timestamp: 12345,
-      skewProtection: { versions: { v2: { deletedChunks: ['_nuxt/old.js'] } } },
+      skewProtection: {
+        versions: {
+          v2: {
+            deletedChunks: ['_nuxt/old.js'],
+          },
+        },
+      },
     }
     await mockCallHook('app:manifest:update', manifest)
     expect(MockBroadcastChannel.instances[0].postMessage).toHaveBeenCalledWith({ type: 'version-update', ...manifest })
@@ -146,7 +154,9 @@ describe('multi-tab plugin', () => {
     mockCallHook.mockClear()
 
     // Simulate receiving a message from another tab
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
+    channel.onmessage!({
+      data: { type: 'version-update', id: 'v2', timestamp: 12345 },
+    })
 
     expect(mockCallHook).toHaveBeenCalledWith('app:manifest:update', {
       type: 'version-update',
@@ -163,7 +173,9 @@ describe('multi-tab plugin', () => {
 
     // Simulate receiving a message from another tab
     // This calls app:manifest:update, which should NOT re-broadcast
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
+    channel.onmessage!({
+      data: { type: 'version-update', id: 'v2', timestamp: 12345 },
+    })
 
     expect(channel.postMessage).not.toHaveBeenCalled()
   })
@@ -172,8 +184,12 @@ describe('multi-tab plugin', () => {
     mockHookFn('app:manifest:update', () => Promise.resolve())
     await setupPlugin()
     const channel = MockBroadcastChannel.instances[0]
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2' } })
-    channel.onmessage!({ data: { type: 'version-update', id: 'v3' } })
+    channel.onmessage!({
+      data: { type: 'version-update', id: 'v2' },
+    })
+    channel.onmessage!({
+      data: { type: 'version-update', id: 'v3' },
+    })
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(channel.postMessage).not.toHaveBeenCalled()
   })
@@ -211,7 +227,9 @@ describe('multi-tab plugin', () => {
     const channel = MockBroadcastChannel.instances[0]
 
     // First: receive an update from another tab (should not re-broadcast)
-    channel.onmessage!({ data: { type: 'version-update', id: 'v2', timestamp: 12345 } })
+    channel.onmessage!({
+      data: { type: 'version-update', id: 'v2', timestamp: 12345 },
+    })
     channel.postMessage.mockClear()
 
     // Then: a local update happens (should broadcast)
@@ -243,7 +261,9 @@ describe('multi-tab plugin', () => {
     const channel = MockBroadcastChannel.instances[0]
     mockCallHook.mockClear()
 
-    channel.onmessage!({ data: { type: 'other-message', id: 'v2' } })
+    channel.onmessage!({
+      data: { type: 'other-message', id: 'v2' },
+    })
     expect(mockCallHook).not.toHaveBeenCalled()
   })
 
@@ -253,7 +273,9 @@ describe('multi-tab plugin', () => {
     const channel = MockBroadcastChannel.instances[0]
     mockCallHook.mockClear()
 
-    channel.onmessage!({ data: { type: 'version-update' } })
+    channel.onmessage!({
+      data: { type: 'version-update' },
+    })
     expect(mockCallHook).not.toHaveBeenCalled()
   })
 })

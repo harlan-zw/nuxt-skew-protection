@@ -32,10 +32,18 @@ async function startWrangler(): Promise<ChildProcess> {
   const portProbe = createServer()
   await new Promise<void>(resolve => portProbe.listen(0, '127.0.0.1', resolve))
   port = (portProbe.address() as AddressInfo).port
-  await new Promise<void>((resolve, reject) => portProbe.close(error => error ? reject(error) : resolve()))
+  await new Promise<void>((resolve, reject) => portProbe.close(error => error
+    ? reject(error)
+    : resolve()))
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('pnpm', ['exec', 'wrangler', 'dev', '--port', String(port)], {
+    const proc = spawn('pnpm', [
+      'exec',
+      'wrangler',
+      'dev',
+      '--port',
+      String(port),
+    ], {
       cwd: fixtureDir,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

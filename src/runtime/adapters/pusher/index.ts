@@ -17,7 +17,11 @@ export const pusherAdapter: SkewAdapterFactory<PusherAdapterConfig, PusherClient
   toPublicConfig: ({ key, cluster, channel, event }) => ({
     key,
     cluster,
-    ...(channel ? { channel } : {}),
-    ...(event ? { event } : {}),
+    ...(channel
+      ? { channel }
+      : {}),
+    ...(event
+      ? { event }
+      : {}),
   }),
 })

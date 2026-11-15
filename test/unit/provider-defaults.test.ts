@@ -25,8 +25,12 @@ describe('vercel asset defaults', () => {
   })
 
   it.each([
-    [{ VERCEL_SKEW_PROTECTION_ENABLED: '0', VERCEL_DEPLOYMENT_ID: 'dpl_native' }],
-    [{ VERCEL_SKEW_PROTECTION_ENABLED: '1' }],
+    [
+      { VERCEL_SKEW_PROTECTION_ENABLED: '0', VERCEL_DEPLOYMENT_ID: 'dpl_native' },
+    ],
+    [
+      { VERCEL_SKEW_PROTECTION_ENABLED: '1' },
+    ],
   ])('keeps asset persistence without complete native Vercel protection', (env) => {
     expect(resolveBundleAssets({}, env)).toEqual({
       _tag: 'default',

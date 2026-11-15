@@ -16,7 +16,11 @@ async function setupWarnings(cookie: ModuleOptions['cookie']) {
       dev: true,
       modules: [skewProtection],
       skewProtection: { cookie },
-      routeRules: { '/docs/**': { headers: { 'Cache-Control': 'public, max-age=3600' } } },
+      routeRules: {
+        '/docs/**': {
+          headers: { 'Cache-Control': 'public, max-age=3600' },
+        },
+      },
     },
   })
   const warnings: string[] = []

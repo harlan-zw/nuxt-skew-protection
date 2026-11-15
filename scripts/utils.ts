@@ -77,7 +77,12 @@ export async function runTest(
   }
   catch (error: any) {
     const duration = Date.now() - start
-    results.push({ name, passed: false, error: error.message, duration })
+    results.push({
+      name,
+      passed: false,
+      error: error.message,
+      duration,
+    })
     log(`  ❌ FAIL (${duration}ms)`, 'red')
     log(`  Error: ${error.message}`, 'red')
   }
@@ -141,7 +146,9 @@ export async function verifyAssetsAccessible(
 
     if (!response.ok) {
       throw new Error(
-        `Asset ${asset} returned ${response.status}${deploymentId ? ` (deployment: ${deploymentId})` : ''}`,
+        `Asset ${asset} returned ${response.status}${deploymentId
+          ? ` (deployment: ${deploymentId})`
+          : ''}`,
       )
     }
   }
@@ -187,7 +194,9 @@ export function printSummary(results: TestResult[]): void {
   results.forEach((result) => {
     const icon = result.passed ? '✅' : '❌'
     const color = result.passed ? 'green' : 'red'
-    const duration = result.duration ? ` (${result.duration}ms)` : ''
+    const duration = result.duration
+      ? ` (${result.duration}ms)`
+      : ''
     log(`${icon} ${result.name}${duration}`, color)
 
     if (!result.passed && result.error) {
@@ -292,7 +301,11 @@ export async function startServer(options: ServerStartOptions): Promise<any> {
 
     const serverProcess = spawn(command, args, {
       cwd,
-      env: { ...process.env, PORT: port.toString(), ...env },
+      env: {
+        ...process.env,
+        PORT: port.toString(),
+        ...env,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
@@ -305,7 +318,9 @@ export async function startServer(options: ServerStartOptions): Promise<any> {
       }
     }, startupTimeout)
 
-    const patterns = Array.isArray(readyPattern) ? readyPattern : [readyPattern]
+    const patterns = Array.isArray(readyPattern)
+      ? readyPattern
+      : [readyPattern]
 
     serverProcess.stdout?.on('data', (data: Buffer) => {
       const output = data.toString()

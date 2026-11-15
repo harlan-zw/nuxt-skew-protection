@@ -45,7 +45,12 @@ export function useActiveConnections() {
   }
 
   // Use useState for proper SSR hydration and client-side reactivity
-  const stats = useState<ConnectionStats>('skew-stats', () => ({ total: 0, versions: {}, routes: {}, connections: [] }))
+  const stats = useState<ConnectionStats>('skew-stats', () => ({
+    total: 0,
+    versions: {},
+    routes: {},
+    connections: [],
+  }))
   const authorized = useState<boolean | null>('skew-authorized', () => null)
 
   // Track subscription at app level to avoid duplicate hooks

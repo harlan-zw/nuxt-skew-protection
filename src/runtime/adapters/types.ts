@@ -68,13 +68,19 @@ function toConfigParser<TConfig>(schema: AdapterConfigSchema<TConfig>): AdapterC
     return schema
   return (config) => {
     const result = schema['~standard'].validate(config)
-    if (result instanceof Promise)
-      return { _tag: 'Err', issues: ['config: async schemas are not supported, use a synchronous schema'] }
+    if (result instanceof Promise) {
+      return {
+        _tag: 'Err',
+        issues: ['config: async schemas are not supported, use a synchronous schema'],
+      }
+    }
     if (result.issues) {
       return {
         _tag: 'Err',
         issues: result.issues.map(({ message, path }) => {
-          const key = path?.map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.')
+          const key = path?.map(segment => String(typeof segment === 'object'
+            ? segment.key
+            : segment)).join('.')
           return `${key || 'config'}: ${message}`
         }),
       }
@@ -105,8 +111,12 @@ export function parseStringConfig<TRequired extends string, TOptional extends st
   required: Record<TRequired, string>,
   optional: readonly TOptional[],
 ): AdapterConfigResult<Record<TRequired, string> & Partial<Record<TOptional, string>>> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input))
-    return { _tag: 'Err', issues: ['config: expected an object'] }
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return {
+      _tag: 'Err',
+      issues: ['config: expected an object'],
+    }
+  }
   const fields = input as Record<string, unknown>
   const config: Record<string, string> = {}
   const issues: string[] = []

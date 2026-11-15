@@ -39,7 +39,12 @@ async function startWrangler(): Promise<ChildProcess> {
     // Nitro emits today's date, which a slightly older local workerd refuses.
     '--compatibility-date',
     '2026-08-01',
-  ], { cwd: fixtureDir, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  ], {
+    cwd: fixtureDir,
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  })
 
   for (let attempt = 0; attempt < 30; attempt++) {
     const ready = await fetch(`http://localhost:${port}/`).then(() => true).catch(() => false)
@@ -79,7 +84,9 @@ describe('html caching on cloudflare', () => {
   // The case this feature exists for. Googlebot sends no sec-fetch-dest, so a
   // policy keyed on that header alone left crawlers as the only cache HIT.
   it('drops the cookie for a crawler that sends no sec-fetch-dest', async () => {
-    const response = await fetch(`http://localhost:${port}/cached`, { headers: { accept: 'text/html' } })
+    const response = await fetch(`http://localhost:${port}/cached`, {
+      headers: { accept: 'text/html' },
+    })
     expect(versionCookies(response)).toEqual([])
   })
 

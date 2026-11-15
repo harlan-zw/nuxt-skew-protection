@@ -895,7 +895,9 @@ describe('version Manager', () => {
       const augmentedData = await readFile(metaPath, 'utf-8')
       const augmented = JSON.parse(augmentedData)
 
-      expect(augmented.skewProtection).toEqual({ timestamp: expect.any(String) })
+      expect(augmented.skewProtection).toEqual({
+        timestamp: expect.any(String),
+      })
     })
   })
 

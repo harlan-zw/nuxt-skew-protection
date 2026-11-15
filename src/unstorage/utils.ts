@@ -24,8 +24,12 @@ function parseWranglerKVNamespaces(value: unknown, source: string): WranglerKVNa
     if (!entry || typeof entry !== 'object')
       throw new TypeError(`[nuxt-skew-protection] ${source} has an invalid kv_namespaces entry at index ${index}.`)
 
-    const binding = 'binding' in entry ? entry.binding : undefined
-    const id = 'id' in entry ? entry.id : undefined
+    const binding = 'binding' in entry
+      ? entry.binding
+      : undefined
+    const id = 'id' in entry
+      ? entry.id
+      : undefined
     if (typeof binding !== 'string' || (id !== undefined && typeof id !== 'string'))
       throw new TypeError(`[nuxt-skew-protection] ${source} has invalid binding or id values for kv_namespaces entry ${index}.`)
 
@@ -83,7 +87,10 @@ async function detectCloudflareKVNamespace(binding: string, nitroOptions?: Build
 
   const rootDir = nuxt.options.rootDir || process.cwd()
   const configNames = ['wrangler.json', 'wrangler.jsonc', 'wrangler.toml']
-  const configDirectories = [rootDir, join(rootDir, 'app')]
+  const configDirectories = [
+    rootDir,
+    join(rootDir, 'app'),
+  ]
 
   for (const directory of configDirectories) {
     for (const configName of configNames) {
@@ -115,7 +122,9 @@ export async function resolveBuildTimeDriver(
   } = storage
 
   if (driver === 'cloudflare-kv-binding') {
-    const binding = typeof configuredBinding === 'string' ? configuredBinding : 'SKEW_PROTECTION'
+    const binding = typeof configuredBinding === 'string'
+      ? configuredBinding
+      : 'SKEW_PROTECTION'
     const namespaceId = typeof configuredNamespaceId === 'string'
       ? configuredNamespaceId
       : await detectCloudflareKVNamespace(binding, nitroOptions)

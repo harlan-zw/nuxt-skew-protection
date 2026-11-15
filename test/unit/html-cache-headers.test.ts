@@ -158,20 +158,44 @@ describe('skew ceiling', () => {
 
 describe('checking the app\'s own route rules', () => {
   const routeRules = {
-    '/gh/**': { headers: { 'cache-control': 'public, s-maxage=300' } },
-    '/archive/**': { headers: { 'Cache-Control': 'public, s-maxage=1000000' } },
-    '/@**': { headers: { 'cache-control': 'private, no-store' } },
+    '/gh/**': {
+      headers: { 'cache-control': 'public, s-maxage=300' },
+    },
+    '/archive/**': {
+      headers: { 'Cache-Control': 'public, s-maxage=1000000' },
+    },
+    '/@**': {
+      headers: { 'cache-control': 'private, no-store' },
+    },
     '/api/**': { cors: true },
   }
 
   it('names the route rule the author wrote', () => {
     expect(overlongRouteRules(routeRules, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/archive/**', seconds: 1_000_000, source: 'cache-control', fromMaxAgeAlone: false }])
+      .toEqual([
+        {
+          route: '/archive/**',
+          seconds: 1_000_000,
+          source: 'cache-control',
+          fromMaxAgeAlone: false,
+        },
+      ])
   })
 
   it('matches the header name case-insensitively', () => {
-    expect(overlongRouteRules({ '/x': { headers: { 'CACHE-CONTROL': 'public, s-maxage=999' } } }, 10))
-      .toEqual([{ route: '/x', seconds: 999, source: 'cache-control', fromMaxAgeAlone: false }])
+    expect(overlongRouteRules({
+      '/x': {
+        headers: { 'CACHE-CONTROL': 'public, s-maxage=999' },
+      },
+    }, 10))
+      .toEqual([
+        {
+          route: '/x',
+          seconds: 999,
+          source: 'cache-control',
+          fromMaxAgeAlone: false,
+        },
+      ])
   })
 
   it('reports nothing when every window fits', () => {
@@ -187,32 +211,65 @@ describe('checking the app\'s own route rules', () => {
   // asked for HTML caching gets warned about it.
   it('lists every rule that asks a shared cache to keep a document', () => {
     expect(cachingRouteRules(routeRules)).toEqual([
-      { route: '/gh/**', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
-      { route: '/archive/**', seconds: 1_000_000, source: 'cache-control', fromMaxAgeAlone: false },
+      {
+        route: '/gh/**',
+        seconds: 300,
+        source: 'cache-control',
+        fromMaxAgeAlone: false,
+      },
+      {
+        route: '/archive/**',
+        seconds: 1_000_000,
+        source: 'cache-control',
+        fromMaxAgeAlone: false,
+      },
     ])
   })
 
   it('lists nothing for an app that declares no caching', () => {
-    expect(cachingRouteRules({ '/api/**': { cors: true }, '/@**': { headers: { 'cache-control': 'private, no-store' } } }))
+    expect(cachingRouteRules({
+      '/api/**': { cors: true },
+      '/@**': {
+        headers: { 'cache-control': 'private, no-store' },
+      },
+    }))
       .toEqual([])
   })
 
   it('ignores route rules that can only serve assets', () => {
     expect(cachingRouteRules({
-      '/_fonts/**': { cache: { maxAge: 31_536_000 } },
-      '/fonts/**': { headers: { 'cache-control': 'public, max-age=31536000' } },
-      '/docs/**': { headers: { 'cache-control': 'public, s-maxage=300' } },
+      '/_fonts/**': {
+        cache: { maxAge: 31_536_000 },
+      },
+      '/fonts/**': {
+        headers: { 'cache-control': 'public, max-age=31536000' },
+      },
+      '/docs/**': {
+        headers: { 'cache-control': 'public, s-maxage=300' },
+      },
     })).toEqual([
-      { route: '/docs/**', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
+      {
+        route: '/docs/**',
+        seconds: 300,
+        source: 'cache-control',
+        fromMaxAgeAlone: false,
+      },
     ])
   })
 
   it('ignores a custom public asset prefix', () => {
     expect(cachingRouteRules({
-      '/media/**': { cache: { maxAge: 31_536_000 } },
+      '/media/**': {
+        cache: { maxAge: 31_536_000 },
+      },
       '/marketing/**': { swr: 300 },
     }, ['/media'])).toEqual([
-      { route: '/marketing/**', seconds: 300, source: 'swr', fromMaxAgeAlone: false },
+      {
+        route: '/marketing/**',
+        seconds: 300,
+        source: 'swr',
+        fromMaxAgeAlone: false,
+      },
     ])
   })
 
@@ -225,7 +282,12 @@ describe('checking the app\'s own route rules', () => {
         },
       },
     })).toEqual([
-      { route: '/docs/**', seconds: 90_000, source: 'cache-control', fromMaxAgeAlone: false },
+      {
+        route: '/docs/**',
+        seconds: 90_000,
+        source: 'cache-control',
+        fromMaxAgeAlone: false,
+      },
     ])
   })
 })
@@ -250,18 +312,35 @@ describe('telling CDN intent from browser intent', () => {
 
   it('carries the flag through to the route the author wrote', () => {
     expect(cachingRouteRules({
-      '/browser': { headers: { 'cache-control': 'public, max-age=60' } },
-      '/cdn': { headers: { 'cache-control': 'public, s-maxage=300' } },
+      '/browser': {
+        headers: { 'cache-control': 'public, max-age=60' },
+      },
+      '/cdn': {
+        headers: { 'cache-control': 'public, s-maxage=300' },
+      },
     })).toEqual([
-      { route: '/browser', seconds: 60, source: 'cache-control', fromMaxAgeAlone: true },
-      { route: '/cdn', seconds: 300, source: 'cache-control', fromMaxAgeAlone: false },
+      {
+        route: '/browser',
+        seconds: 60,
+        source: 'cache-control',
+        fromMaxAgeAlone: true,
+      },
+      {
+        route: '/cdn',
+        seconds: 300,
+        source: 'cache-control',
+        fromMaxAgeAlone: false,
+      },
     ])
   })
 
   // `swr` and `isr` are nitro's own words for shared caching. There is no
   // browser-only reading of them, so they are never ambiguous.
   it('never flags nitro\'s own caching shorthands', () => {
-    expect(cachingRouteRules({ '/a': { swr: 60 }, '/b': { isr: 60 } })
+    expect(cachingRouteRules({
+      '/a': { swr: 60 },
+      '/b': { isr: 60 },
+    })
       .every(route => !route.fromMaxAgeAlone)).toBe(true)
   })
 })
@@ -308,7 +387,11 @@ describe('credentials other than cookies', () => {
 describe('reading Set-Cookie across h3 majors', () => {
   const h3v1 = {}
   const h3v2 = (cookies: string[]) => ({
-    res: { headers: { getSetCookie: () => cookies } },
+    res: {
+      headers: {
+        getSetCookie: () => cookies,
+      },
+    },
   })
 
   // h3 v2 stores response headers in a `Headers`, and `get('set-cookie')`
@@ -344,33 +427,73 @@ describe('reading Set-Cookie across h3 majors', () => {
 
 describe('route rules that do not spell it as a header', () => {
   it('sees a swr rule, which headers-only scanning missed entirely', () => {
-    expect(overlongRouteRules({ '/blog/**': { swr: 31_536_000 } }, skewCacheCeilingSeconds(30)))
-      .toEqual([{ route: '/blog/**', seconds: 31_536_000, source: 'swr', fromMaxAgeAlone: false }])
+    expect(overlongRouteRules({
+      '/blog/**': { swr: 31_536_000 },
+    }, skewCacheCeilingSeconds(30)))
+      .toEqual([
+        {
+          route: '/blog/**',
+          seconds: 31_536_000,
+          source: 'swr',
+          fromMaxAgeAlone: false,
+        },
+      ])
   })
 
   it('sees an isr rule', () => {
-    expect(overlongRouteRules({ '/docs/**': { isr: 2_000_000 } }, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/docs/**', seconds: 2_000_000, source: 'isr', fromMaxAgeAlone: false }])
+    expect(overlongRouteRules({
+      '/docs/**': { isr: 2_000_000 },
+    }, skewCacheCeilingSeconds(1)))
+      .toEqual([
+        {
+          route: '/docs/**',
+          seconds: 2_000_000,
+          source: 'isr',
+          fromMaxAgeAlone: false,
+        },
+      ])
   })
 
   it('treats an unbounded swr as unbounded rather than skipping it', () => {
-    expect(overlongRouteRules({ '/x': { swr: true } }, skewCacheCeilingSeconds(30)))
-      .toMatchObject([{ route: '/x', source: 'swr' }])
+    expect(overlongRouteRules({
+      '/x': { swr: true },
+    }, skewCacheCeilingSeconds(30)))
+      .toMatchObject([
+        { route: '/x', source: 'swr' },
+      ])
   })
 
   it('sees a normalised cache rule', () => {
-    expect(overlongRouteRules({ '/x': { cache: { maxAge: 60, staleMaxAge: 31_536_000 } } }, skewCacheCeilingSeconds(1)))
-      .toEqual([{ route: '/x', seconds: 31_536_060, source: 'cache', fromMaxAgeAlone: false }])
+    expect(overlongRouteRules({
+      '/x': {
+        cache: { maxAge: 60, staleMaxAge: 31_536_000 },
+      },
+    }, skewCacheCeilingSeconds(1)))
+      .toEqual([
+        {
+          route: '/x',
+          seconds: 31_536_060,
+          source: 'cache',
+          fromMaxAgeAlone: false,
+        },
+      ])
   })
 
   it('prefers an explicit header over the shorthand', () => {
-    const rules = { '/x': { swr: 31_536_000, headers: { 'cache-control': 'public, s-maxage=60' } } }
+    const rules = {
+      '/x': {
+        swr: 31_536_000,
+        headers: { 'cache-control': 'public, s-maxage=60' },
+      },
+    }
 
     expect(overlongRouteRules(rules, skewCacheCeilingSeconds(30))).toEqual([])
   })
 
   it('ignores a rule that says nothing about caching', () => {
-    expect(overlongRouteRules({ '/api/**': { cors: true } } as never, 60)).toEqual([])
+    expect(overlongRouteRules({
+      '/api/**': { cors: true },
+    } as never, 60)).toEqual([])
   })
 })
 

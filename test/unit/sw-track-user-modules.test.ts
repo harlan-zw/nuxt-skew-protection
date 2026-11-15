@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   onAppOutdated: vi.fn(),
   callHook: vi.fn(),
   register: vi.fn(),
-  runtimeConfig: { app: { baseURL: '/' } },
+  runtimeConfig: {
+    app: { baseURL: '/' },
+  },
 }))
 
 vi.mock('nuxt/app', () => ({
@@ -15,10 +17,20 @@ vi.mock('../../src/runtime/app/composables/useSkewProtection', () => ({
   useSkewProtection: () => ({ clientVersion: 'v1', onAppOutdated: mocks.onAppOutdated }),
 }))
 vi.mock('../../src/runtime/app/composables/useRuntimeConfigSkewProtection', () => ({
-  useRuntimeConfigSkewProtection: () => ({ assetRecovery: { _tag: 'none' } }),
+  useRuntimeConfigSkewProtection: () => ({
+    assetRecovery: { _tag: 'none' },
+  }),
 }))
-vi.mock('#internal/nuxt/paths', () => ({ buildAssetsURL: (path: string) => `/_nuxt/${path}` }))
-vi.mock('../../src/runtime/shared/logger', () => ({ logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('#internal/nuxt/paths', () => ({
+  buildAssetsURL: (path: string) => `/_nuxt/${path}`,
+}))
+vi.mock('../../src/runtime/shared/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -41,26 +53,40 @@ async function setupWorker(existingScriptURL?: string | Error) {
         modules.clear()
       if (message.type === 'GET_MODULES') {
         queueMicrotask(() => {
-          for (const listener of listeners)
-            listener({ data: { type: 'MODULES_LIST', modules: [...modules] } })
+          for (const listener of listeners) {
+            listener({
+              data: {
+                type: 'MODULES_LIST',
+                modules: [...modules],
+              },
+            })
+          }
         })
       }
     },
   }
-  vi.stubGlobal('window', { location: { origin: 'http://localhost' } })
+  vi.stubGlobal('window', {
+    location: { origin: 'http://localhost' },
+  })
   vi.spyOn(performance, 'getEntriesByType').mockReturnValue([])
   vi.stubGlobal('navigator', {
     serviceWorker: {
       getRegistration: () => existingScriptURL instanceof Error
         ? Promise.reject(existingScriptURL)
-        : Promise.resolve(existingScriptURL ? { active: { scriptURL: existingScriptURL } } : undefined),
+        : Promise.resolve(existingScriptURL
+            ? {
+                active: { scriptURL: existingScriptURL },
+              }
+            : undefined),
       register: mocks.register.mockResolvedValue({ active: worker }),
       addEventListener: (_name: string, listener: (event: unknown) => void) => listeners.add(listener),
       removeEventListener: (_name: string, listener: (event: unknown) => void) => listeners.delete(listener),
     },
   })
   const { default: plugin } = await import('../../src/runtime/app/plugins/sw-track-user-modules.client')
-  await plugin.setup({ hooks: { callHook: mocks.callHook } } as never)
+  await plugin.setup({
+    hooks: { callHook: mocks.callHook },
+  } as never)
   return mocks.onAppOutdated.mock.calls[0]?.[0] as (manifest: unknown) => Promise<void>
 }
 
@@ -88,7 +114,13 @@ it('can update its own service worker', async () => {
 it('keeps loaded chunks available for later deployment checks', async () => {
   const update = await setupWorker()
   const fetchSkew = vi.fn((url: string) => Promise.resolve(
-    url === '/_nuxt/builds/skew/v3.json' ? { deletedChunks: { v3: ['_nuxt/old.js'] } } : { deletedChunks: {} },
+    url === '/_nuxt/builds/skew/v3.json'
+      ? {
+          deletedChunks: {
+            v3: ['_nuxt/old.js'],
+          },
+        }
+      : { deletedChunks: {} },
   ))
   vi.stubGlobal('$fetch', fetchSkew)
   const versions = {
@@ -96,8 +128,14 @@ it('keeps loaded chunks available for later deployment checks', async () => {
     v2: { timestamp: '2026-09-02' },
     v3: { timestamp: '2026-09-03' },
   }
-  await update({ id: 'v2', skewProtection: { versions } })
-  const next = update({ id: 'v3', skewProtection: { versions } })
+  await update({
+    id: 'v2',
+    skewProtection: { versions },
+  })
+  const next = update({
+    id: 'v3',
+    skewProtection: { versions },
+  })
   await vi.advanceTimersByTimeAsync(100)
   await next
   expect(fetchSkew).toHaveBeenLastCalledWith('/_nuxt/builds/skew/v3.json')
@@ -112,7 +150,11 @@ it('retries a skew file that appears after the manifest', async () => {
   const update = await setupWorker()
   const fetchSkew = vi.fn()
     .mockRejectedValueOnce(new Error('skew file not deployed yet'))
-    .mockResolvedValue({ deletedChunks: { v2: ['_nuxt/old.js'] } })
+    .mockResolvedValue({
+      deletedChunks: {
+        v2: ['_nuxt/old.js'],
+      },
+    })
   vi.stubGlobal('$fetch', fetchSkew)
 
   await update({
@@ -142,7 +184,11 @@ it('retries when a missing skew file returns an HTML fallback', async () => {
   const update = await setupWorker()
   const fetchSkew = vi.fn()
     .mockResolvedValueOnce('<html>app shell</html>')
-    .mockResolvedValue({ deletedChunks: { v2: ['_nuxt/old.js'] } })
+    .mockResolvedValue({
+      deletedChunks: {
+        v2: ['_nuxt/old.js'],
+      },
+    })
   vi.stubGlobal('$fetch', fetchSkew)
 
   await update({
@@ -170,7 +216,11 @@ it('stops an older skew retry after a newer build is checked', async () => {
   const fetchSkew = vi.fn((url: string) => {
     if (url.endsWith('/v2.json'))
       return Promise.reject(new Error('not deployed yet'))
-    return Promise.resolve({ deletedChunks: { v3: ['_nuxt/old.js'] } })
+    return Promise.resolve({
+      deletedChunks: {
+        v3: ['_nuxt/old.js'],
+      },
+    })
   })
   vi.stubGlobal('$fetch', fetchSkew)
   const versions = {
@@ -179,8 +229,14 @@ it('stops an older skew retry after a newer build is checked', async () => {
     v3: { timestamp: '2026-09-03' },
   }
 
-  await update({ id: 'v2', skewProtection: { versions } })
-  const newerCheck = update({ id: 'v3', skewProtection: { versions } })
+  await update({
+    id: 'v2',
+    skewProtection: { versions },
+  })
+  const newerCheck = update({
+    id: 'v3',
+    skewProtection: { versions },
+  })
   await vi.advanceTimersByTimeAsync(100)
   await newerCheck
   await vi.advanceTimersByTimeAsync(5_000)
@@ -198,7 +254,10 @@ it('checks inline deleted chunks from an older deployment', async () => {
     skewProtection: {
       versions: {
         v1: { timestamp: '2026-09-01', deletedChunks: [] },
-        v2: { timestamp: '2026-09-02', deletedChunks: ['_nuxt/old.js'] },
+        v2: {
+          timestamp: '2026-09-02',
+          deletedChunks: ['_nuxt/old.js'],
+        },
       },
     },
   }

@@ -27,7 +27,15 @@ describe('server cookie helpers', () => {
     const { getCookie } = await import('nuxt/server')
     const { getSkewProtectionCookie } = await import('../../src/runtime/server/imports/cookie')
 
-    expect(getSkewProtectionCookie({ context: {}, req: new Request('http://localhost'), res: { status: 200, statusText: '', headers: new Headers() } })).toBeUndefined()
+    expect(getSkewProtectionCookie({
+      context: {},
+      req: new Request('http://localhost'),
+      res: {
+        status: 200,
+        statusText: '',
+        headers: new Headers(),
+      },
+    })).toBeUndefined()
     expect(getCookie).not.toHaveBeenCalled()
   })
 
@@ -35,7 +43,15 @@ describe('server cookie helpers', () => {
     const { setCookie } = await import('nuxt/server')
     const { setSkewProtectionCookie } = await import('../../src/runtime/server/imports/cookie')
 
-    setSkewProtectionCookie({ context: {}, req: new Request('http://localhost'), res: { status: 200, statusText: '', headers: new Headers() } }, 'build-id')
+    setSkewProtectionCookie({
+      context: {},
+      req: new Request('http://localhost'),
+      res: {
+        status: 200,
+        statusText: '',
+        headers: new Headers(),
+      },
+    }, 'build-id')
 
     expect(setCookie).not.toHaveBeenCalled()
   })

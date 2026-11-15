@@ -49,7 +49,9 @@ describe('path-routed auto-detection', { concurrent: false }, () => {
 
   it('sets the auto-namespaced __nkpv_pro version cookie on document requests', async () => {
     // Cookie is only set on document navigations (sec-fetch-dest: document).
-    const res = await fetch(`${base}/`, { headers: { 'sec-fetch-dest': 'document' } })
+    const res = await fetch(`${base}/`, {
+      headers: { 'sec-fetch-dest': 'document' },
+    })
     const setCookies = res.headers.getSetCookie()
     const skewCookie = setCookies.find(c => c.startsWith('__nkpv'))
     expect(skewCookie).toBeDefined()

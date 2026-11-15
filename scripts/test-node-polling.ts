@@ -79,7 +79,9 @@ async function deploy(deploymentId: string, port: number, cleanStorage = false):
     port,
     cwd: fixtureDir,
     command: 'node',
-    args: [join(deploymentOutputDir, 'server/index.mjs')],
+    args: [
+      join(deploymentOutputDir, 'server/index.mjs'),
+    ],
   })
 
   const serverUrl = `http://localhost:${port}`
@@ -184,7 +186,9 @@ async function verifyEntryAssetContent(
   const content = await verifyAssetContent(
     serverUrl,
     deployment.entryAsset,
-    [{ type: 'includes', value: `"${expectedVersion}"` }],
+    [
+      { type: 'includes', value: `"${expectedVersion}"` },
+    ],
   )
 
   log(`  ✅ Entry asset contains version "${expectedVersion}"`, 'green')

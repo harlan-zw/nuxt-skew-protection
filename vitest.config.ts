@@ -7,7 +7,9 @@ export default defineConfig({
       // Unit tests
       defineProject({
         resolve: {
-          alias: { '#skew-protection/bot-detection': resolve('./src/runtime/app/utils/bot-detection-none.ts') },
+          alias: {
+            '#skew-protection/bot-detection': resolve('./src/runtime/app/utils/bot-detection-none.ts'),
+          },
         },
         test: {
           name: 'unit',

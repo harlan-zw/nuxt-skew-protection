@@ -127,9 +127,13 @@ export function fetchCloudflareBuildAsset(
 
   if (!assets) {
     const miss = disableCaching(new Response(null, { status: 404 }))
-    return Promise.resolve(parsed.viaRecovery ? deindexResponse(miss) : miss)
+    return Promise.resolve(parsed.viaRecovery
+      ? deindexResponse(miss)
+      : miss)
   }
 
   const response = fetchCloudflareAsset(parsed.request, assets)
-  return parsed.viaRecovery ? response.then(deindexResponse) : response
+  return parsed.viaRecovery
+    ? response.then(deindexResponse)
+    : response
 }

@@ -37,8 +37,15 @@ describe('skew-notification', () => {
       await page.evaluate(async (event) => {
         const app = (window as any).__TEST_NUXT_APP__
         await app.hooks.callHook(event, event === 'app:manifest:update'
-          ? { id: 'pending-v2', timestamp: Date.now() }
-          : { deletedChunks: ['old.js'], invalidatedModules: ['old.js'], passedReleases: ['pending-v2'] })
+          ? {
+              id: 'pending-v2',
+              timestamp: Date.now(),
+            }
+          : {
+              deletedChunks: ['old.js'],
+              invalidatedModules: ['old.js'],
+              passedReleases: ['pending-v2'],
+            })
       }, event)
       await page.click('[data-testid="toggle-notification"]')
       await page.waitForSelector('[data-testid="skew-notification"]')
@@ -50,8 +57,15 @@ describe('skew-notification', () => {
       await page.evaluate(async (event) => {
         const app = (window as any).__TEST_NUXT_APP__
         await app.hooks.callHook(event, event === 'app:manifest:update'
-          ? { id: 'pending-v3', timestamp: Date.now() }
-          : { deletedChunks: ['other.js'], invalidatedModules: ['other.js'], passedReleases: ['pending-v3'] })
+          ? {
+              id: 'pending-v3',
+              timestamp: Date.now(),
+            }
+          : {
+              deletedChunks: ['other.js'],
+              invalidatedModules: ['other.js'],
+              passedReleases: ['pending-v3'],
+            })
       }, event)
       await page.waitForSelector('[data-testid="skew-notification"]')
     }

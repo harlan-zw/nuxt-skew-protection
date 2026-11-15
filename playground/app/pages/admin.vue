@@ -11,7 +11,9 @@ const versionList = computed(() => {
       id: id.slice(0, 8),
       fullId: id,
       count,
-      percentage: total.value ? Math.round((count / total.value) * 100) : 0,
+      percentage: total.value
+        ? Math.round((count / total.value) * 100)
+        : 0,
     }))
 })
 

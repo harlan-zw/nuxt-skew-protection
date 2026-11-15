@@ -4,7 +4,11 @@ const { loggedIn } = useUserSession()
 const navLinks = computed(() => [
   { label: 'Playground', to: '/', icon: 'i-heroicons-home' },
   { label: 'Admin', to: '/admin', icon: 'i-heroicons-chart-bar' },
-  ...(!loggedIn.value ? [{ label: 'Login', to: '/login', icon: 'i-heroicons-arrow-right-on-rectangle' }] : []),
+  ...(!loggedIn.value
+    ? [
+        { label: 'Login', to: '/login', icon: 'i-heroicons-arrow-right-on-rectangle' },
+      ]
+    : []),
 ])
 </script>
 

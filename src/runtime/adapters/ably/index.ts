@@ -16,8 +16,14 @@ export const ablyAdapter: SkewAdapterFactory<AblyAdapterConfig, AblyClientConfig
   schema: parseAblyConfig,
   toPublicConfig: ({ authUrl, clientId, channel, event }) => ({
     authUrl,
-    ...(clientId ? { clientId } : {}),
-    ...(channel ? { channel } : {}),
-    ...(event ? { event } : {}),
+    ...(clientId
+      ? { clientId }
+      : {}),
+    ...(channel
+      ? { channel }
+      : {}),
+    ...(event
+      ? { event }
+      : {}),
   }),
 })

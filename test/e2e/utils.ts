@@ -41,7 +41,10 @@ export function startServer(fixtureDir: string, port: number): Promise<ChildProc
   return new Promise((resolve, reject) => {
     const proc = spawn('node', ['.output/server/index.mjs'], {
       cwd: fixtureDir,
-      env: { ...process.env, PORT: String(port) },
+      env: {
+        ...process.env,
+        PORT: String(port),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
       // Own process group: `node` may be a shell wrapper, so stopServer must
       // signal the whole group or the real server keeps the port.

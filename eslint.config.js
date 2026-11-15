@@ -12,11 +12,14 @@ export default antfu({
     'test/fixtures/*/.skew-storage',
   ],
   rules: {
-    'unused-imports/no-unused-vars': ['error', {
-      argsIgnorePattern: '^_',
-      varsIgnorePattern: '^_',
-      caughtErrorsIgnorePattern: '^_',
-    }],
+    'unused-imports/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
   },
 }, {
   files: ['test/**/*.ts', 'scripts/**/*.ts', 'playground/**/*.vue'],
@@ -33,7 +36,12 @@ export default antfu({
     'unused-imports/no-unused-vars': 'off',
     'ts/no-unused-vars': 'off',
   },
-}, ...harlanzw({ base: { ignores: false }, link: true, nuxt: true, vue: true }), {
+}, ...harlanzw({
+  base: { ignores: false },
+  link: true,
+  nuxt: true,
+  vue: true,
+}), {
   files: ['test/fixtures/**/*.vue'],
   rules: {
     'harlanzw/nuxt-no-unsafe-date': 'off',

@@ -111,7 +111,9 @@ class WSClient {
       this.ws.on('message', (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString()) as WSMessage
-          log(`  📨 Received: ${message.type}${message.version ? ` (version: ${message.version})` : ''}`, 'cyan')
+          log(`  📨 Received: ${message.type}${message.version
+            ? ` (version: ${message.version})`
+            : ''}`, 'cyan')
           this.messages.push(message)
         }
         catch (error) {

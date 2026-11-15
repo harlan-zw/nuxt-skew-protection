@@ -220,7 +220,10 @@ describe('version Management Integration', () => {
     it('should handle missing storage directory gracefully', async () => {
       // Don't create storage directory - manager should handle this
       const manager = createAssetManager({
-        driver: await resolveBuildTimeDriver({ driver: 'fs', base: join(testDir, 'non-existent-storage') }),
+        driver: await resolveBuildTimeDriver({
+          driver: 'fs',
+          base: join(testDir, 'non-existent-storage'),
+        }),
         debug: false,
       })
 

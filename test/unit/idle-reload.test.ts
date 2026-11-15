@@ -6,7 +6,10 @@ const hooks = new Map<string, ((...args: any[]) => any)[]>()
 const nuxtApp = {
   hooks: {
     hook: (name: string, cb: (...args: any[]) => any) => {
-      hooks.set(name, [...(hooks.get(name) || []), cb])
+      hooks.set(name, [
+        ...(hooks.get(name) || []),
+        cb,
+      ])
       return () => {}
     },
     callHook: async (name: string, ...args: any[]) => {
@@ -21,17 +24,27 @@ vi.mock('nuxt/app', () => ({
   reloadNuxtApp: vi.fn(),
   useNuxtApp: () => nuxtApp,
   useRuntimeConfig: () => ({
-    public: { skewProtection: { basePath: '/__skew', multiTab: false, reloadStrategy: 'idle' } },
+    public: {
+      skewProtection: { basePath: '/__skew', multiTab: false, reloadStrategy: 'idle' },
+    },
   }),
 }))
 
 vi.mock('../../src/runtime/shared/logger', () => ({
-  logger: { debug: vi.fn() },
+  logger: {
+    debug: vi.fn(),
+  },
 }))
 
 function setHidden(hidden: boolean) {
-  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' })
-  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => hidden ? 'hidden' : 'visible',
+  })
+  Object.defineProperty(document, 'hidden', {
+    configurable: true,
+    get: () => hidden,
+  })
   document.dispatchEvent(new Event('visibilitychange'))
 }
 

@@ -40,7 +40,10 @@ export default defineEventHandler(async (event) => {
   let keepaliveTimeout: ReturnType<typeof setTimeout> | undefined
   const scheduleKeepalive = () => {
     keepaliveTimeout = setTimeout(() => {
-      send({ type: 'keepalive', timestamp: Date.now() })
+      send({
+        type: 'keepalive',
+        timestamp: Date.now(),
+      })
       scheduleKeepalive()
     }, 30000)
   }
