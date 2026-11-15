@@ -263,16 +263,32 @@ export function createAssetManager(options: {
     return `asset-operations/${createHash('sha256').update(key).digest('hex')}`
   }
 
-  async function hasUncertainOperation(key: string): Promise<boolean> {
-    const operation = await storage.getItem(safetyKey(key))
-    if (operation === null)
-      return false
-    if (typeof operation !== 'string')
-      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
-    return await storage.getItem(`asset-operation-completions/${operation}`) !== true
+  function createOperationReader() {
+    // A later phase must observe newly written guards and completions.
+    const operations = new Map<string, Promise<boolean>>()
+    const completions = new Map<string, Promise<boolean>>()
+    return (key: string): Promise<boolean> => {
+      const existing = operations.get(key)
+      if (existing)
+        return existing
+      const read = storage.getItem(safetyKey(key)).then((operation) => {
+        if (operation === null)
+          return false
+        if (typeof operation !== 'string')
+          throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+        let complete = completions.get(operation)
+        if (!complete) {
+          complete = storage.getItem(`asset-operation-completions/${operation}`).then(value => value === true)
+          completions.set(operation, complete)
+        }
+        return complete.then(value => !value)
+      })
+      operations.set(key, read)
+      return read
+    }
   }
 
-  async function protectAssetOperation(keys: Iterable<string>) {
+  async function protectAssetOperation(keys: Iterable<string>, hasUncertainOperation = createOperationReader()) {
     const operation = randomUUID()
     const uniqueKeys = [
       ...new Set(keys),
@@ -312,6 +328,7 @@ export function createAssetManager(options: {
     const candidates = [
       ...new Set(keys),
     ].filter(key => !retainedKeys.has(key))
+    const hasUncertainOperation = createOperationReader()
     await processBatch(candidates, 50, async (key) => {
       if (await hasUncertainOperation(key))
         uncertain.add(key)
@@ -338,7 +355,7 @@ export function createAssetManager(options: {
     const results = await processBatch(candidates, 50, async (key) => {
       if (uncertain.has(key) || (RE_BLOB_KEY.test(key) && !deletable.has(key)))
         return key
-      const complete = await protectAssetOperation([key])
+      const complete = await protectAssetOperation([key], hasUncertainOperation)
       return storage.removeItem(key).then(async () => {
         await complete()
         return undefined
@@ -662,12 +679,21 @@ export function createAssetManager(options: {
     version.storageKeys = {}
     const uploads = new Map<string, Promise<void>>()
     const uncertainObjectKeys = new Set((await getPendingUploads()).uncertainKeys)
+    const hasUncertainOperation = createOperationReader()
+    const retainedKeys = Object.values(manifest.versions)
+      .flatMap(data => Object.values(data.storageKeys || {}))
+      .filter(key => RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key))
+    const checkedKeys = await processBatch([
+      ...new Set(retainedKeys),
+    ], 50, async key =>
+      await hasUncertainOperation(key)
+        ? undefined
+        : key)
+    const safeKeys = new Set(checkedKeys.filter((key): key is string => key !== undefined))
     const reusableKeys = new Map<string, string>()
-    for (const data of Object.values(manifest.versions)) {
-      for (const key of Object.values(data.storageKeys || {})) {
-        if (RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key) && !await hasUncertainOperation(key))
-          reusableKeys.set(key.slice('blobs/'.length, 'blobs/'.length + 64), key)
-      }
+    for (const key of retainedKeys) {
+      if (safeKeys.has(key))
+        reusableKeys.set(key.slice('blobs/'.length, 'blobs/'.length + 64), key)
     }
 
     const storeStart = Date.now()
