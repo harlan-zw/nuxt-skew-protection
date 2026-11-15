@@ -1,5 +1,5 @@
 import type { Driver, Storage } from 'unstorage'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { colors } from 'consola/utils'
@@ -9,6 +9,14 @@ import { logger } from '../logger'
 
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
 const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
+const PENDING_UPLOADS_KEY = 'pending-uploads.json'
+const RE_BLOB_KEY = /^blobs\/[a-f0-9]{64}(?:[-/][a-f0-9-]{36})?$/
+
+interface PendingUploads {
+  _tag: 'PendingUploads'
+  keys: string[]
+  uncertainKeys: string[]
+}
 
 function formatStorageError(error: unknown, operation: string): Error {
   const cause = error instanceof Error
@@ -166,14 +174,28 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 }
 
 // Get the unified manifest
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
   const emptyManifest: VersionManifest = { current: '', versions: {} }
 
   return storage.getItem('version-manifest.json')
     .then((manifest) => {
-      if (manifest && typeof manifest === 'object' && 'versions' in manifest)
-        return manifest as VersionManifest
-      return emptyManifest
+      if (manifest === null)
+        return emptyManifest
+      if (!isRecord(manifest) || typeof manifest.current !== 'string' || !isRecord(manifest.versions))
+        throw new TypeError('Invalid version manifest. Expected version asset references.')
+      for (const version of Object.values(manifest.versions)) {
+        if (!isRecord(version) || !Array.isArray(version.assets)
+          || !version.assets.every(asset => typeof asset === 'string' && asset.length > 0)
+          || (version.storageKeys !== undefined && (!isRecord(version.storageKeys)
+            || !Object.values(version.storageKeys).every(key => typeof key === 'string' && key.length > 0)))) {
+          throw new TypeError('Invalid version manifest. Expected version asset references.')
+        }
+      }
+      return manifest as unknown as VersionManifest
     })
     .catch((e: unknown) => { throw formatStorageError(e, 'read') })
 }
@@ -221,6 +243,7 @@ export function createAssetManager(options: {
   maxNumberOfVersions?: number
   buildAssetsDir?: string
   persistAssets?: boolean
+  readConsistency?: 'strong' | 'eventual'
   debug?: boolean
 }) {
   // Create storage with proper driver
@@ -231,6 +254,38 @@ export function createAssetManager(options: {
   const maxNumberOfVersions = options.maxNumberOfVersions || 20
   const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
   const persistAssets = options.persistAssets !== false
+  const readConsistency = options.readConsistency
+    ?? (['memory', 'fs', 'fs-lite'].includes(options.driver?.name || '')
+      ? 'strong'
+      : 'eventual')
+
+  function safetyKey(key: string) {
+    return `asset-operations/${createHash('sha256').update(key).digest('hex')}`
+  }
+
+  async function hasUncertainOperation(key: string): Promise<boolean> {
+    const operation = await storage.getItem(safetyKey(key))
+    if (operation === null)
+      return false
+    if (typeof operation !== 'string')
+      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+    return await storage.getItem(`asset-operation-completions/${operation}`) !== true
+  }
+
+  async function protectAssetOperation(keys: Iterable<string>) {
+    const operation = randomUUID()
+    const uniqueKeys = [
+      ...new Set(keys),
+    ]
+    await processBatch(uniqueKeys, 50, async (key) => {
+      // Never replace an unresolved operation, including one hidden by a stale journal PUT.
+      if (!await hasUncertainOperation(key))
+        await storage.setItem(safetyKey(key), operation)
+    })
+    // A completion belongs only to this operation. A delayed completion cannot
+    // clear a newer guard. A failed guard PUT never receives a completion.
+    return () => storage.setItem(`asset-operation-completions/${operation}`, true)
+  }
 
   function limitVersionCount(manifest: VersionManifest, buildId: string): string[] {
     const removedKeys: string[] = []
@@ -249,12 +304,178 @@ export function createAssetManager(options: {
   }
 
   async function removeUnreferencedAssets(manifest: VersionManifest, keys: Iterable<string>) {
+    const pending = await getPendingUploads()
+    const { uncertainKeys } = pending
+    const uncertain = new Set(uncertainKeys)
     const retainedKeys = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
       version.assets.map(asset => assetStorageKey(id, version, asset))))
-    await processBatch([
+    const candidates = [
       ...new Set(keys),
-    ].filter(key => !retainedKeys.has(key)), 50, key =>
-      storage.removeItem(key).catch(error => logger.warn(`Failed to remove asset ${key}:`, error)))
+    ].filter(key => !retainedKeys.has(key))
+    await processBatch(candidates, 50, async (key) => {
+      if (await hasUncertainOperation(key))
+        uncertain.add(key)
+    })
+    const deletable = new Set(candidates.filter(key => RE_BLOB_KEY.test(key) && readConsistency === 'strong' && !uncertain.has(key)))
+    if (deletable.size > 0) {
+      // A failed DELETE can still finish later. Persist its keys before sending the request.
+      await storage.setItem(PENDING_UPLOADS_KEY, {
+        ...pending,
+        keys: [
+          ...new Set([
+            ...pending.keys,
+            ...deletable,
+          ]),
+        ],
+        uncertainKeys: [
+          ...new Set([
+            ...pending.uncertainKeys,
+            ...deletable,
+          ]),
+        ],
+      })
+    }
+    const results = await processBatch(candidates, 50, async (key) => {
+      if (uncertain.has(key) || (RE_BLOB_KEY.test(key) && !deletable.has(key)))
+        return key
+      const complete = await protectAssetOperation([key])
+      return storage.removeItem(key).then(async () => {
+        await complete()
+        return undefined
+      }).catch((error) => {
+        logger.warn(`Failed to remove asset ${key}:`, error)
+        return key
+      })
+    })
+    const remaining = results.filter((key): key is string => key !== undefined)
+    const remainingKeys = new Set(remaining)
+    const completed = new Set([...deletable].filter(key => !remainingKeys.has(key)))
+    if (completed.size > 0) {
+      const current = await getPendingUploads()
+      await storage.setItem(PENDING_UPLOADS_KEY, {
+        ...current,
+        keys: current.keys.filter(key => !completed.has(key)),
+        uncertainKeys: current.uncertainKeys.filter(key => !completed.has(key)),
+      }).catch(error => logger.warn('Failed to record confirmed asset deletion:', error))
+    }
+    return remaining
+  }
+
+  async function getPendingUploads(): Promise<PendingUploads> {
+    const value: unknown = await storage.getItem(PENDING_UPLOADS_KEY)
+    if (value === null)
+      return { _tag: 'PendingUploads', keys: [], uncertainKeys: [] }
+    if (
+      typeof value !== 'object' || value === null
+      || !('_tag' in value) || value._tag !== 'PendingUploads'
+      || !('keys' in value) || !Array.isArray(value.keys)
+      || !value.keys.every(key => typeof key === 'string' && RE_BLOB_KEY.test(key))
+    ) {
+      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+    }
+    const keys: string[] = value.keys
+    // Records without a commit outcome cannot authorize deletion.
+    const uncertainKeys: unknown = 'uncertainKeys' in value
+      ? value.uncertainKeys
+      : keys
+    if (!Array.isArray(uncertainKeys)
+      || !uncertainKeys.every(key => typeof key === 'string' && key.length > 0)) {
+      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+    }
+    return {
+      _tag: 'PendingUploads',
+      keys,
+      uncertainKeys,
+    }
+  }
+
+  async function recordPendingUploads(keys: Iterable<string>) {
+    const additions = [...keys].filter(key => RE_BLOB_KEY.test(key))
+    if (additions.length === 0)
+      return
+    const previous = await getPendingUploads()
+    const pending = new Set([
+      ...previous.keys,
+      ...additions,
+    ])
+    await storage.setItem(PENDING_UPLOADS_KEY, {
+      _tag: 'PendingUploads',
+      keys: [...pending],
+      uncertainKeys: previous.uncertainKeys,
+    })
+  }
+
+  async function commitVersionManifest(manifest: VersionManifest) {
+    const previous = await getPendingUploads()
+    const references = Object.entries(manifest.versions).flatMap(([id, version]) =>
+      version.assets.map(asset => assetStorageKey(id, version, asset)))
+    const keys = [
+      ...new Set([
+        ...previous.keys,
+        ...references.filter(key => RE_BLOB_KEY.test(key)),
+      ]),
+    ]
+    if (references.length > 0) {
+      // Persist uncertainty before the write. A rejected request may still commit later.
+      await storage.setItem(PENDING_UPLOADS_KEY, {
+        _tag: 'PendingUploads',
+        keys,
+        uncertainKeys: [
+          ...new Set([
+            ...previous.uncertainKeys,
+            ...references,
+          ]),
+        ],
+      })
+    }
+    const complete = await protectAssetOperation(references)
+    await setVersionManifest(manifest, storage)
+    await complete().catch(error => logger.warn('Failed to record the confirmed asset publication:', error))
+    if (references.length > 0) {
+      await storage.setItem(PENDING_UPLOADS_KEY, {
+        _tag: 'PendingUploads',
+        keys,
+        uncertainKeys: previous.uncertainKeys,
+      }).catch(error => logger.warn('Failed to record the confirmed asset publication:', error))
+    }
+  }
+
+  async function recoverPendingUploads(manifest: VersionManifest) {
+    if (readConsistency !== 'strong')
+      return
+    const pending = await getPendingUploads()
+    const uncertain = new Set(pending.uncertainKeys)
+    const candidates = pending.keys.filter(key => !uncertain.has(key))
+    if (candidates.length === 0)
+      return
+    const remaining = await removeUnreferencedAssets(manifest, candidates)
+    const current = await getPendingUploads()
+    await storage.setItem(PENDING_UPLOADS_KEY, {
+      ...current,
+      keys: [
+        ...new Set([
+          ...remaining,
+          ...current.uncertainKeys.filter(key => RE_BLOB_KEY.test(key)),
+        ]),
+      ],
+    })
+  }
+
+  async function finishAssetCleanup(manifest: VersionManifest, keys: Iterable<string>) {
+    // Only this successful commit authorizes removals. Storage reads can be stale,
+    // including reads that report an absent manifest after a lost write response.
+    const candidates = new Set(keys)
+    const failed = new Set(await removeUnreferencedAssets(manifest, candidates))
+    const retained = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
+      version.assets.map(asset => assetStorageKey(id, version, asset))))
+    await getPendingUploads().then((pending) => {
+      const uncertain = new Set(pending.uncertainKeys)
+      return storage.setItem(PENDING_UPLOADS_KEY, {
+        ...pending,
+        // An uncertain request can still commit later, even after an authoritative negative read.
+        keys: pending.keys.filter(key => uncertain.has(key) || failed.has(key) || (!candidates.has(key) && !retained.has(key))),
+      })
+    }).catch(error => logger.warn('Failed to clean pending asset uploads:', error))
   }
 
   async function getAssetsFromBuild(publicDir: string) {
@@ -312,7 +533,7 @@ export function createAssetManager(options: {
 
     const saveStart = Date.now()
     if (save)
-      await setVersionManifest(manifest, storage)
+      await commitVersionManifest(manifest)
     logger.debug(`updateVersionsManifest: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
     logger.debug(`updateVersionsManifest: total ${formatDuration(Date.now() - startTime)}`)
 
@@ -320,7 +541,10 @@ export function createAssetManager(options: {
   }
 
   async function cleanupExpiredVersions() {
+    // Validate the journal, but do not infer abandoned objects from a storage read.
+    await getPendingUploads()
     const manifest = await getVersionManifest(storage)
+    await recoverPendingUploads(manifest)
     if (!manifest || !manifest.versions) {
       return
     }
@@ -404,10 +628,11 @@ export function createAssetManager(options: {
 
     // Save manifest if any changes were made
     if (removedVersions.length > 0 || prunedCount > 0) {
-      await setVersionManifest(manifest, storage)
+      await recordPendingUploads(removedKeys)
+      await commitVersionManifest(manifest)
+      // Publish removals before deleting bytes. A failed write keeps history restorable.
+      await finishAssetCleanup(manifest, removedKeys)
     }
-    // Publish removals before deleting bytes. A failed manifest write keeps history restorable.
-    await removeUnreferencedAssets(manifest, removedKeys)
   }
 
   async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[], preparedManifest?: VersionManifest) {
@@ -436,65 +661,81 @@ export function createAssetManager(options: {
     const version = manifest.versions[buildId]!
     version.storageKeys = {}
     const uploads = new Map<string, Promise<void>>()
+    const uncertainObjectKeys = new Set((await getPendingUploads()).uncertainKeys)
+    const reusableKeys = new Map<string, string>()
+    for (const data of Object.values(manifest.versions)) {
+      for (const key of Object.values(data.storageKeys || {})) {
+        if (RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key) && !await hasUncertainOperation(key))
+          reusableKeys.set(key.slice('blobs/'.length, 'blobs/'.length + 64), key)
+      }
+    }
 
     const storeStart = Date.now()
 
-    // Process assets in batches to limit memory usage
-    // Use smaller batches for memory efficiency
-    await processBatch(assets, 25, async (asset) => {
-      const fileId = extractFileId(asset)
+    for (let index = 0; index < assets.length; index += 25) {
+      const batch = await processBatch(assets.slice(index, index + 25), 25, async (asset) => {
+        const assetData = await fs.readFile(assetOutputPath(publicDir, asset))
+        const hash = createHash('sha256').update(assetData).digest('hex')
+        const canonicalKey = `blobs/${hash}`
+        const storageKey = reusableKeys.get(hash) || (uncertainObjectKeys.has(canonicalKey) || await hasUncertainOperation(canonicalKey)
+          // Keep replacements beside canonical files for filesystem drivers.
+          ? `${canonicalKey}-${randomUUID()}`
+          : canonicalKey)
+        reusableKeys.set(hash, storageKey)
+        return { asset, assetData, storageKey }
+      })
+      // Persist candidates before uploading this batch, so a stopped process can recover later.
+      await recordPendingUploads(batch.map(item => item.storageKey))
+      await processBatch(batch, 25, async ({ asset, assetData, storageKey }) => {
+        const fileId = extractFileId(asset)
 
-      // Store the file in current build's storage
-      const assetPath = assetOutputPath(publicDir, asset)
-      const assetData = await fs.readFile(assetPath)
+        if (assetData) {
+          totalBytes += assetData.byteLength
+          let upload = uploads.get(storageKey)
+          if (!upload) {
+            upload = (async () => {
+              if (await storage.hasItem(storageKey)) {
+                skippedCount++
+                return
+              }
+              await storage.setItemRaw(storageKey, assetData)
+              storedCount++
+            })()
+            uploads.set(storageKey, upload)
+          }
+          await upload
+          version.storageKeys![asset] = storageKey
 
-      if (assetData) {
-        totalBytes += assetData.byteLength
-        const storageKey = `blobs/${createHash('sha256').update(assetData).digest('hex')}`
-        let upload = uploads.get(storageKey)
-        if (!upload) {
-          upload = (async () => {
-            if (await storage.hasItem(storageKey)) {
-              skippedCount++
-              return
-            }
-            await storage.setItemRaw(storageKey, assetData)
-            storedCount++
-          })()
-          uploads.set(storageKey, upload)
-        }
-        await upload
-        version.storageKeys![asset] = storageKey
+          // Check if this file ID already exists in a previous version
+          // If so, remove it from the old location since we now have it in the new location
+          if (fileId && fileIdToVersion[fileId] && fileIdToVersion[fileId] !== buildId) {
+            const previousVersionId = fileIdToVersion[fileId]
 
-        // Check if this file ID already exists in a previous version
-        // If so, remove it from the old location since we now have it in the new location
-        if (fileId && fileIdToVersion[fileId] && fileIdToVersion[fileId] !== buildId) {
-          const previousVersionId = fileIdToVersion[fileId]
+            // Remove the asset from the previous version's assets list
+            if (manifest.versions[previousVersionId]) {
+              const previousAssets = manifest.versions[previousVersionId].assets
+              const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
+              if (assetIndex !== -1) {
+                // Get the actual old asset path (may differ from current asset path)
+                const oldAssetPath = previousAssets[assetIndex]
+                previousAssets.splice(assetIndex, 1)
 
-          // Remove the asset from the previous version's assets list
-          if (manifest.versions[previousVersionId]) {
-            const previousAssets = manifest.versions[previousVersionId].assets
-            const assetIndex = previousAssets.findIndex(a => extractFileId(a) === fileId)
-            if (assetIndex !== -1) {
-              // Get the actual old asset path (may differ from current asset path)
-              const oldAssetPath = previousAssets[assetIndex]
-              previousAssets.splice(assetIndex, 1)
-
-              // Remove from storage using the correct old path
-              const oldStorageKey = assetStorageKey(previousVersionId, manifest.versions[previousVersionId], oldAssetPath!)
-              supersededKeys.push(oldStorageKey)
-              delete manifest.versions[previousVersionId].storageKeys?.[oldAssetPath!]
-              deduplicatedCount++
+                // Remove from storage using the correct old path
+                const oldStorageKey = assetStorageKey(previousVersionId, manifest.versions[previousVersionId], oldAssetPath!)
+                supersededKeys.push(oldStorageKey)
+                delete manifest.versions[previousVersionId].storageKeys?.[oldAssetPath!]
+                deduplicatedCount++
+              }
             }
           }
-        }
 
-        // Update the file ID mapping to point to the current version
-        if (fileId) {
-          fileIdToVersion[fileId] = buildId
+          // Update the file ID mapping to point to the current version
+          if (fileId) {
+            fileIdToVersion[fileId] = buildId
+          }
         }
-      }
-    })
+      })
+    }
 
     logger.debug(`storeAssetsInStorage: stored ${storedCount} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - storeStart)}`)
     logger.debug(`storeAssetsInStorage: deduplicated ${deduplicatedCount}, skipped ${skippedCount}`)
@@ -504,8 +745,9 @@ export function createAssetManager(options: {
 
     // Save updated manifest with fileIdToVersion mapping
     const saveStart = Date.now()
-    await setVersionManifest(manifest, storage)
-    await removeUnreferencedAssets(manifest, supersededKeys)
+    await recordPendingUploads(supersededKeys)
+    await commitVersionManifest(manifest)
+    await finishAssetCleanup(manifest, supersededKeys)
     logger.debug(`storeAssetsInStorage: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
     logger.debug(`storeAssetsInStorage: total ${formatDuration(Date.now() - startTime)}`)
   }
@@ -746,8 +988,9 @@ export function createAssetManager(options: {
     }
     else {
       const removedKeys = limitVersionCount(manifest, buildId)
-      await setVersionManifest(manifest, storage)
-      await removeUnreferencedAssets(manifest, removedKeys)
+      await recordPendingUploads(removedKeys)
+      await commitVersionManifest(manifest)
+      await finishAssetCleanup(manifest, removedKeys)
     }
   }
 

@@ -40,6 +40,8 @@ export interface ModuleOptions {
    */
   storage?: (Record<string, any> & {
     driver: string
+    /** Enable abandoned-upload cleanup only when reads reflect completed writes immediately. */
+    readConsistency?: 'strong' | 'eventual'
   })
   /**
    * How long to retain old versions (in days)
@@ -748,6 +750,7 @@ export {}
             ...options,
             buildAssetsDir: nuxt.options.app.buildAssetsDir,
             persistAssets: options.bundleAssets !== false,
+            readConsistency: options.storage?.readConsistency,
             driver: await resolveBuildTimeDriver(options.storage!, nitro.options),
           })
 
