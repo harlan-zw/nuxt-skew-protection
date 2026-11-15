@@ -65,7 +65,9 @@ describe('abandoned asset uploads', () => {
     const assets = [asset]
     for (let index = 0; index < 26; index++) {
       const path = `_nuxt/chunk-${index}.js`
-      await writeFile(join(directory, path), index === 25 ? 'fail' : `chunk ${index}`)
+      await writeFile(join(directory, path), index === 25
+        ? 'fail'
+        : `chunk ${index}`)
       assets.push(path)
     }
     const upload = driver.setItemRaw!
@@ -148,12 +150,31 @@ describe('abandoned asset uploads', () => {
     expect(await storage.getItemRaw(currentKey)).toEqual(Buffer.from('newer bytes'))
   })
 
+  it('allows the next publication when storage cannot delete objects', async () => {
+    const driver = memoryDriver()
+    driver.removeItem = () => {
+      throw new Error('DELETE forbidden')
+    }
+    const manager = createAssetManager({ driver })
+    await manager.publishBuild('next', directory, [asset])
+    await writeFile(join(directory, '_nuxt', 'builds', 'latest.json'), JSON.stringify({ id: 'second' }))
+    await writeFile(join(directory, '_nuxt', 'builds', 'meta', 'second.json'), JSON.stringify({ id: 'second' }))
+
+    await manager.publishBuild('second', directory, [asset])
+    expect((await manager.getManifest()).current).toBe('second')
+    const storage = createStorage({ driver })
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+  })
+
   it.each(['version-manifest.json', 'blobs/../version-manifest.json'])('rejects a pending deletion outside shared objects: %s', async (invalidKey) => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
     const manifest = { current: 'live', versions: {} }
     await storage.setItem('version-manifest.json', manifest)
-    await storage.setItem('pending-uploads.json', { _tag: 'PendingUploads', keys: [invalidKey] })
+    await storage.setItem('pending-uploads.json', {
+      _tag: 'PendingUploads',
+      keys: [invalidKey],
+    })
 
     await expect(createAssetManager({ driver }).cleanupExpiredVersions()).rejects.toThrow('Invalid pending asset uploads')
     expect(await storage.getItem('version-manifest.json')).toEqual(manifest)

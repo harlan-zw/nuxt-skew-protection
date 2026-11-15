@@ -253,7 +253,9 @@ export function createAssetManager(options: {
   async function removeUnreferencedAssets(manifest: VersionManifest, keys: Iterable<string>) {
     const retainedKeys = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
       version.assets.map(asset => assetStorageKey(id, version, asset))))
-    const results = await processBatch([...new Set(keys)].filter(key => !retainedKeys.has(key)), 50, key =>
+    const results = await processBatch([
+      ...new Set(keys),
+    ].filter(key => !retainedKeys.has(key)), 50, key =>
       storage.removeItem(key).then(() => undefined).catch((error) => {
         logger.warn(`Failed to remove asset ${key}:`, error)
         return key
@@ -280,8 +282,14 @@ export function createAssetManager(options: {
     const additions = [...keys].filter(key => RE_BLOB_KEY.test(key))
     if (additions.length === 0)
       return
-    const pending = new Set([...await getPendingUploads(), ...additions])
-    await storage.setItem(PENDING_UPLOADS_KEY, { _tag: 'PendingUploads', keys: [...pending] })
+    const pending = new Set([
+      ...await getPendingUploads(),
+      ...additions,
+    ])
+    await storage.setItem(PENDING_UPLOADS_KEY, {
+      _tag: 'PendingUploads',
+      keys: [...pending],
+    })
   }
 
   async function recoverPendingUploads() {
@@ -291,12 +299,7 @@ export function createAssetManager(options: {
     // A response can fail after the manifest commits. Re-read it before deleting any bytes.
     const manifest = await getVersionManifest(storage)
     const remaining = await removeUnreferencedAssets(manifest, pending)
-    if (remaining.length > 0) {
-      await storage.setItem(PENDING_UPLOADS_KEY, { _tag: 'PendingUploads', keys: remaining })
-    }
-    else {
-      await storage.removeItem(PENDING_UPLOADS_KEY)
-    }
+    await storage.setItem(PENDING_UPLOADS_KEY, { _tag: 'PendingUploads', keys: remaining })
   }
 
   async function finishAssetCleanup(manifest: VersionManifest, keys: Iterable<string>) {
