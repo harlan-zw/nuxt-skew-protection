@@ -259,6 +259,34 @@ export function createAssetManager(options: {
       ? 'strong'
       : 'eventual')
 
+  function safetyKey(key: string) {
+    return `asset-operations/${createHash('sha256').update(key).digest('hex')}`
+  }
+
+  async function hasUncertainOperation(key: string): Promise<boolean> {
+    const operation = await storage.getItem(safetyKey(key))
+    if (operation === null)
+      return false
+    if (typeof operation !== 'string')
+      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+    return await storage.getItem(`asset-operation-completions/${operation}`) !== true
+  }
+
+  async function protectAssetOperation(keys: Iterable<string>) {
+    const operation = randomUUID()
+    const uniqueKeys = [
+      ...new Set(keys),
+    ]
+    await processBatch(uniqueKeys, 50, async (key) => {
+      // Never replace an unresolved operation, including one hidden by a stale journal PUT.
+      if (!await hasUncertainOperation(key))
+        await storage.setItem(safetyKey(key), operation)
+    })
+    // A completion belongs only to this operation. A delayed completion cannot
+    // clear a newer guard. A failed guard PUT never receives a completion.
+    return () => storage.setItem(`asset-operation-completions/${operation}`, true)
+  }
+
   function limitVersionCount(manifest: VersionManifest, buildId: string): string[] {
     const removedKeys: string[] = []
     const previousVersions = Object.entries(manifest.versions)
@@ -284,6 +312,10 @@ export function createAssetManager(options: {
     const candidates = [
       ...new Set(keys),
     ].filter(key => !retainedKeys.has(key))
+    await processBatch(candidates, 50, async (key) => {
+      if (await hasUncertainOperation(key))
+        uncertain.add(key)
+    })
     const deletable = new Set(candidates.filter(key => RE_BLOB_KEY.test(key) && readConsistency === 'strong' && !uncertain.has(key)))
     if (deletable.size > 0) {
       // A failed DELETE can still finish later. Persist its keys before sending the request.
@@ -306,7 +338,11 @@ export function createAssetManager(options: {
     const results = await processBatch(candidates, 50, async (key) => {
       if (uncertain.has(key) || (RE_BLOB_KEY.test(key) && !deletable.has(key)))
         return key
-      return storage.removeItem(key).then(() => undefined).catch((error) => {
+      const complete = await protectAssetOperation([key])
+      return storage.removeItem(key).then(async () => {
+        await complete()
+        return undefined
+      }).catch((error) => {
         logger.warn(`Failed to remove asset ${key}:`, error)
         return key
       })
@@ -392,7 +428,9 @@ export function createAssetManager(options: {
         ],
       })
     }
+    const complete = await protectAssetOperation(references)
     await setVersionManifest(manifest, storage)
+    await complete().catch(error => logger.warn('Failed to record the confirmed asset publication:', error))
     if (references.length > 0) {
       await storage.setItem(PENDING_UPLOADS_KEY, {
         _tag: 'PendingUploads',
@@ -627,7 +665,7 @@ export function createAssetManager(options: {
     const reusableKeys = new Map<string, string>()
     for (const data of Object.values(manifest.versions)) {
       for (const key of Object.values(data.storageKeys || {})) {
-        if (RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key))
+        if (RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key) && !await hasUncertainOperation(key))
           reusableKeys.set(key.split('/')[1]!, key)
       }
     }
@@ -639,7 +677,7 @@ export function createAssetManager(options: {
         const assetData = await fs.readFile(assetOutputPath(publicDir, asset))
         const hash = createHash('sha256').update(assetData).digest('hex')
         const canonicalKey = `blobs/${hash}`
-        const storageKey = reusableKeys.get(hash) || (uncertainObjectKeys.has(canonicalKey)
+        const storageKey = reusableKeys.get(hash) || (uncertainObjectKeys.has(canonicalKey) || await hasUncertainOperation(canonicalKey)
           ? `${canonicalKey}/${randomUUID()}`
           : canonicalKey)
         reusableKeys.set(hash, storageKey)

@@ -297,6 +297,53 @@ describe('abandoned asset uploads', () => {
       expect(await storage.getItemRaw(storedKey)).not.toBeNull()
   })
 
+  it('preserves current references after a delayed cleanup journal PUT erases a pending DELETE', async () => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const save = driver.setItem!
+    const remove = driver.removeItem!
+    let delayedJournal: (() => unknown) | undefined
+    let delayedDelete: (() => unknown) | undefined
+    driver.setItem = (item, value, options) => {
+      if (item === 'pending-uploads.json' && delayedJournal === undefined
+        && JSON.parse(String(value)).keys.length === 0) {
+        delayedJournal = () => save(item, value, options)
+        throw new Error('journal PUT response lost')
+      }
+      return save(item, value, options)
+    }
+    driver.removeItem = (item, options) => {
+      if (item === key.replaceAll('/', ':')) {
+        delayedDelete = () => remove(item, options)
+        throw new Error('DELETE response lost')
+      }
+      return remove(item, options)
+    }
+    const publish = async (id: string, bytes: string) => {
+      await writeFile(join(directory, asset), bytes)
+      await writeFile(join(directory, '_nuxt', 'builds', 'latest.json'), JSON.stringify({ id }))
+      await writeFile(join(directory, '_nuxt', 'builds', 'meta', `${id}.json`), JSON.stringify({ id }))
+      // Each build uses a fresh manager, as sequential build processes do.
+      const manager = createAssetManager({ driver, readConsistency: 'strong', maxNumberOfVersions: 1 })
+      await manager.publishBuild(id, directory, [asset])
+      return manager.getManifest()
+    }
+
+    await publish('first', 'new bytes')
+    expect(delayedJournal).toBeDefined()
+    await publish('second', 'replacement bytes')
+    expect(delayedDelete).toBeDefined()
+    await delayedJournal!()
+    const manifest = await publish('third', 'new bytes')
+    await delayedDelete!()
+
+    for (const version of Object.values(manifest.versions)) {
+      for (const storedKey of Object.values(version.storageKeys!))
+        expect(await storage.getItemRaw(storedKey)).not.toBeNull()
+    }
+    expect(await storage.getItemRaw(manifest.versions.third!.storageKeys![asset]!)).toEqual(Buffer.from('new bytes'))
+  })
+
   it('allows the next publication when storage cannot delete objects', async () => {
     const driver = memoryDriver()
     driver.removeItem = () => {
