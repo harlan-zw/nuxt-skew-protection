@@ -77,7 +77,11 @@ describe('cloudflare KV Wrangler driver', () => {
   it.each(['[]', '[{"name":"skew:missing-other"}]'])('returns null for an absent key with listed keys %s', async (keys) => {
     const execute = vi.fn(async (args: readonly string[]) => args.includes('list')
       ? successfulExecution(keys)
-      : { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from('404: Not Found') })
+      : {
+          exitCode: 1,
+          stdout: Buffer.alloc(0),
+          stderr: Buffer.from('404: Not Found'),
+        })
     const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id', base: 'skew:' })
 
     await expect(driver.getItem?.('missing')).resolves.toBeNull()
@@ -86,8 +90,11 @@ describe('cloudflare KV Wrangler driver', () => {
   it('creates and reads the first version manifest in an empty namespace', async () => {
     const values = new Map<string, string>()
     const execute = async (args: readonly string[]): Promise<WranglerExecution> => {
-      if (args[2] === 'list')
-        return successfulExecution(JSON.stringify([...values.keys()].map(name => ({ name }))))
+      if (args[2] === 'list') {
+        return successfulExecution(JSON.stringify([
+          ...values.keys(),
+        ].map(name => ({ name }))))
+      }
       const key = args[3]!
       if (args[2] === 'put') {
         values.set(key, await readFile(args[args.indexOf('--path') + 1]!, 'utf8'))
@@ -95,7 +102,11 @@ describe('cloudflare KV Wrangler driver', () => {
       }
       const value = values.get(key)
       return value === undefined
-        ? { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from('404: Not Found') }
+        ? {
+            exitCode: 1,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from('404: Not Found'),
+          }
         : successfulExecution(value)
     }
     const manager = createAssetManager({
@@ -106,14 +117,22 @@ describe('cloudflare KV Wrangler driver', () => {
 
     expect(await manager.getManifest()).toMatchObject({
       current: 'first-build',
-      versions: { 'first-build': { assets: ['_nuxt/entry.hash.js'] } },
+      versions: {
+        'first-build': {
+          assets: ['_nuxt/entry.hash.js'],
+        },
+      },
     })
   })
 
   it.each(['list', 'get'])('preserves %s failures for JSON reads', async (operation) => {
     for (const message of ['authentication failed', 'namespace 404: Not Found', 'network connection failed']) {
       const execute = async (args: readonly string[]) => args[2] === operation
-        ? { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from(message) }
+        ? {
+            exitCode: 1,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from(message),
+          }
         : successfulExecution('[{"name":"manifest"}]')
       const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
 
