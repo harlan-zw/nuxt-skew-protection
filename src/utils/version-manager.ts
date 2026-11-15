@@ -251,7 +251,9 @@ export function createAssetManager(options: {
   async function removeUnreferencedAssets(manifest: VersionManifest, keys: Iterable<string>) {
     const retainedKeys = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
       version.assets.map(asset => assetStorageKey(id, version, asset))))
-    await processBatch([...new Set(keys)].filter(key => !retainedKeys.has(key)), 50, key =>
+    await processBatch([
+      ...new Set(keys),
+    ].filter(key => !retainedKeys.has(key)), 50, key =>
       storage.removeItem(key).catch(error => logger.warn(`Failed to remove asset ${key}:`, error)))
   }
 
@@ -735,7 +737,9 @@ export function createAssetManager(options: {
     await augmentBuildMetadata(buildId, publicDir, manifest)
     if (persistAssets) {
       const skewAsset = `${buildAssetsDir}/builds/skew/${buildId}.json`
-      const storedAssets = [...new Set([...assets, skewAsset])]
+      const storedAssets = [
+        ...new Set([...assets, skewAsset]),
+      ]
       manifest.versions[buildId]!.assets = storedAssets
       await restoreOldAssetsToPublic(buildId, publicDir, storedAssets)
       await storeAssetsInStorage(buildId, publicDir, storedAssets, manifest)

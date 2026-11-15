@@ -25,7 +25,9 @@ describe('first release diagnostics', () => {
     try {
       await nuxt.ready()
       expect(nuxt.options.nitro.storage?.['skew-protection']).toBeUndefined()
-      const plugins = nuxt.options.plugins.map(plugin => typeof plugin === 'string' ? plugin : plugin.src)
+      const plugins = nuxt.options.plugins.map(plugin => typeof plugin === 'string'
+        ? plugin
+        : plugin.src)
       expect(plugins.some(src => src.includes('sw-track-user-modules'))).toBe(serviceWorker)
       expect(nuxt.options.nitro.publicAssets?.some(asset => asset.dir?.endsWith('/sw'))).toBe(serviceWorker)
     }
