@@ -168,14 +168,28 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 }
 
 // Get the unified manifest
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 async function getVersionManifest(storage: Storage): Promise<VersionManifest> {
   const emptyManifest: VersionManifest = { current: '', versions: {} }
 
   return storage.getItem('version-manifest.json')
     .then((manifest) => {
-      if (manifest && typeof manifest === 'object' && 'versions' in manifest)
-        return manifest as VersionManifest
-      return emptyManifest
+      if (manifest === null)
+        return emptyManifest
+      if (!isRecord(manifest) || typeof manifest.current !== 'string' || !isRecord(manifest.versions))
+        throw new TypeError('Invalid version manifest. Expected version asset references.')
+      for (const version of Object.values(manifest.versions)) {
+        if (!isRecord(version) || !Array.isArray(version.assets)
+          || !version.assets.every(asset => typeof asset === 'string' && asset.length > 0)
+          || (version.storageKeys !== undefined && (!isRecord(version.storageKeys)
+            || !Object.values(version.storageKeys).every(key => typeof key === 'string' && key.length > 0)))) {
+          throw new TypeError('Invalid version manifest. Expected version asset references.')
+        }
+      }
+      return manifest as unknown as VersionManifest
     })
     .catch((e: unknown) => { throw formatStorageError(e, 'read') })
 }
@@ -292,20 +306,18 @@ export function createAssetManager(options: {
     })
   }
 
-  async function recoverPendingUploads() {
-    const pending = await getPendingUploads()
-    if (pending.length === 0)
-      return
-    // A response can fail after the manifest commits. Re-read it before deleting any bytes.
-    const manifest = await getVersionManifest(storage)
-    const remaining = await removeUnreferencedAssets(manifest, pending)
-    await storage.setItem(PENDING_UPLOADS_KEY, { _tag: 'PendingUploads', keys: remaining })
-  }
-
   async function finishAssetCleanup(manifest: VersionManifest, keys: Iterable<string>) {
-    await removeUnreferencedAssets(manifest, [...keys].filter(key => !RE_BLOB_KEY.test(key)))
-    // Cleanup can retry on the next build. A completed publication remains usable if DELETE fails.
-    await recoverPendingUploads().catch(error => logger.warn('Failed to clean pending asset uploads:', error))
+    // Only this successful commit authorizes removals. Storage reads can be stale,
+    // including reads that report an absent manifest after a lost write response.
+    const candidates = new Set(keys)
+    const failed = new Set(await removeUnreferencedAssets(manifest, candidates))
+    const retained = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
+      version.assets.map(asset => assetStorageKey(id, version, asset))))
+    await getPendingUploads().then(pending => storage.setItem(PENDING_UPLOADS_KEY, {
+      _tag: 'PendingUploads',
+      // Preserve uncertain objects until authoritative references become available.
+      keys: pending.filter(key => failed.has(key) || (!candidates.has(key) && !retained.has(key))),
+    })).catch(error => logger.warn('Failed to clean pending asset uploads:', error))
   }
 
   async function getAssetsFromBuild(publicDir: string) {
@@ -371,7 +383,8 @@ export function createAssetManager(options: {
   }
 
   async function cleanupExpiredVersions() {
-    await recoverPendingUploads()
+    // Validate the journal, but do not infer abandoned objects from a storage read.
+    await getPendingUploads()
     const manifest = await getVersionManifest(storage)
     if (!manifest || !manifest.versions) {
       return
@@ -458,9 +471,9 @@ export function createAssetManager(options: {
     if (removedVersions.length > 0 || prunedCount > 0) {
       await recordPendingUploads(removedKeys)
       await setVersionManifest(manifest, storage)
+      // Publish removals before deleting bytes. A failed write keeps history restorable.
+      await finishAssetCleanup(manifest, removedKeys)
     }
-    // Publish removals before deleting bytes. A failed manifest write keeps history restorable.
-    await finishAssetCleanup(manifest, removedKeys)
   }
 
   async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[], preparedManifest?: VersionManifest) {

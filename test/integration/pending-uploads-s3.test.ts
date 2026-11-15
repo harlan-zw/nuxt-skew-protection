@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { createAssetManager } from '../../src/utils/version-manager'
 
 describe('pending uploads through the S3 driver', () => {
-  it.each(['BeforeCommit', 'AfterCommit'] as const)('recovers after a manifest PUT fails %s', async (failure) => {
+  it.each(['BeforeCommit', 'AfterCommit'] as const)('preserves uncertain bytes until republication after a manifest PUT fails %s', async (failure) => {
     const objects = new Map<string, Buffer>()
     let responseMode: typeof failure | 'Success' = failure
     const server = createServer((request, response) => {
@@ -68,9 +68,7 @@ describe('pending uploads through the S3 driver', () => {
 
       const recovered = createManager()
       await recovered.cleanupExpiredVersions()
-      expect(objects.get(objectPath)).toEqual(failure === 'AfterCommit'
-        ? bytes
-        : undefined)
+      expect(objects.get(objectPath)).toEqual(bytes)
       expect((await recovered.getManifest()).current).toBe(failure === 'AfterCommit'
         ? 'next'
         : '')

@@ -24,24 +24,104 @@ describe('abandoned asset uploads', () => {
     await rm(directory, { recursive: true, force: true })
   })
 
-  it('removes abandoned bytes after the failed publisher is replaced', async () => {
+  it('keeps every committed object when the first read after publication is stale', async () => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const previous = JSON.stringify({ current: '', versions: {} })
+    await storage.setItem('version-manifest.json', JSON.parse(previous))
+    const save = driver.setItem!
+    const read = driver.getItem!
+    let stale = false
+    driver.setItem = async (item, value, options) => {
+      await save(item, value, options)
+      if (item === 'version-manifest.json')
+        stale = true
+    }
+    driver.getItem = (item, options) => {
+      if (item === 'version-manifest.json' && stale) {
+        stale = false
+        return previous
+      }
+      return read(item, options)
+    }
+
+    await createAssetManager({ driver }).publishBuild('next', directory, [asset])
+    driver.getItem = read
+    const manifest = await createAssetManager({ driver }).getManifest()
+    for (const version of Object.values(manifest.versions)) {
+      for (const objectKey of Object.values(version.storageKeys!))
+        expect(await storage.getItemRaw(objectKey)).not.toBeNull()
+    }
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+  })
+
+  it.each([
+    null,
+    { current: '', versions: {} },
+  ])('preserves uncertain committed bytes and records after a lost response and stale read: %j', async (staleManifest) => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
     const save = driver.setItem!
-    driver.setItem = (item, value, options) => {
+    driver.setItem = async (item, value, options) => {
+      await save(item, value, options)
       if (item === 'version-manifest.json')
-        throw new Error('manifest unavailable')
-      return save(item, value, options)
+        throw new Error('response lost')
     }
-    const publisher = createAssetManager({ driver })
-    await expect(publisher.publishBuild('next', directory, [asset])).rejects.toThrow('manifest unavailable')
-    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+    await expect(createAssetManager({ driver }).publishBuild('next', directory, [asset])).rejects.toThrow('response lost')
     driver.setItem = save
+    const pending = await storage.getItem('pending-uploads.json')
+    const read = driver.getItem!
+    driver.getItem = (item, options) => item === 'version-manifest.json'
+      ? staleManifest === null
+        ? null
+        : JSON.stringify(staleManifest)
+      : read(item, options)
 
-    const recovered = createAssetManager({ driver })
-    await recovered.cleanupExpiredVersions()
-    expect(await storage.getItemRaw(key)).toBeNull()
-    expect((await recovered.getManifest()).current).toBe('')
+    await createAssetManager({ driver }).cleanupExpiredVersions()
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+    expect(await storage.getItem('pending-uploads.json')).toEqual(pending)
+  })
+
+  it.each([
+    { current: 'live' },
+    { current: 'live', versions: [] },
+    {
+      current: 'live',
+      versions: {
+        live: { assets: 'invalid' },
+      },
+    },
+    {
+      current: 'live',
+      versions: {
+        live: {
+          assets: [42],
+        },
+      },
+    },
+    {
+      current: 'live',
+      versions: {
+        live: {
+          assets: [asset],
+          storageKeys: { [asset]: 42 },
+        },
+      },
+    },
+  ])('rejects malformed manifest references without deleting bytes or records: %j', async (manifest) => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const pending = {
+      _tag: 'PendingUploads',
+      keys: [key],
+    }
+    await storage.setItemRaw(key, Buffer.from('new bytes'))
+    await storage.setItem('pending-uploads.json', pending)
+    await storage.setItem('version-manifest.json', manifest)
+
+    await expect(createAssetManager({ driver }).cleanupExpiredVersions()).rejects.toThrow('Invalid version manifest')
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+    expect(await storage.getItem('pending-uploads.json')).toEqual(pending)
   })
 
   it('stops before uploading bytes when the pending record cannot be saved', async () => {
@@ -57,30 +137,6 @@ describe('abandoned asset uploads', () => {
     await expect(createAssetManager({ driver }).publishBuild('next', directory, [asset])).rejects.toThrow('pending record unavailable')
     expect(await storage.getItemRaw(key)).toBeNull()
     expect((await createAssetManager({ driver }).getManifest()).current).toBe('')
-  })
-
-  it('recovers earlier batches when a later upload fails', async () => {
-    const driver = memoryDriver()
-    const storage = createStorage({ driver })
-    const assets = [asset]
-    for (let index = 0; index < 26; index++) {
-      const path = `_nuxt/chunk-${index}.js`
-      await writeFile(join(directory, path), index === 25
-        ? 'fail'
-        : `chunk ${index}`)
-      assets.push(path)
-    }
-    const upload = driver.setItemRaw!
-    driver.setItemRaw = (item, value, options) => {
-      if (Buffer.from(value).toString() === 'fail')
-        throw new Error('later upload failed')
-      return upload(item, value, options)
-    }
-    await expect(createAssetManager({ driver }).publishBuild('next', directory, assets)).rejects.toThrow('later upload failed')
-    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
-
-    await createAssetManager({ driver }).cleanupExpiredVersions()
-    expect(await storage.getItemRaw(key)).toBeNull()
   })
 
   it('keeps committed bytes when the manifest write succeeds before its response fails', async () => {
@@ -100,32 +156,7 @@ describe('abandoned asset uploads', () => {
     expect((await createAssetManager({ driver }).getManifest()).current).toBe('next')
   })
 
-  it('retries failed object deletion on the next cleanup', async () => {
-    const driver = memoryDriver()
-    const storage = createStorage({ driver })
-    const save = driver.setItem!
-    driver.setItem = (item, value, options) => {
-      if (item === 'version-manifest.json')
-        throw new Error('manifest unavailable')
-      return save(item, value, options)
-    }
-    await expect(createAssetManager({ driver }).publishBuild('next', directory, [asset])).rejects.toThrow('manifest unavailable')
-    driver.setItem = save
-    const remove = driver.removeItem!
-    driver.removeItem = (item, options) => {
-      if (item === key.replaceAll('/', ':'))
-        throw new Error('DELETE unavailable')
-      return remove(item, options)
-    }
-    await createAssetManager({ driver }).cleanupExpiredVersions()
-    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
-    driver.removeItem = remove
-
-    await createAssetManager({ driver }).cleanupExpiredVersions()
-    expect(await storage.getItemRaw(key)).toBeNull()
-  })
-
-  it('retries superseded object deletion after publication succeeds', async () => {
+  it('defers failed superseded deletion when a later read cannot prove current references', async () => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
     const manager = createAssetManager({ driver, maxNumberOfVersions: 1 })
@@ -145,7 +176,11 @@ describe('abandoned asset uploads', () => {
     driver.removeItem = remove
 
     await createAssetManager({ driver }).cleanupExpiredVersions()
-    expect(await storage.getItemRaw(key)).toBeNull()
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+    expect(await storage.getItem('pending-uploads.json')).toEqual({
+      _tag: 'PendingUploads',
+      keys: [key],
+    })
     const currentKey = (await manager.getManifest()).versions.second!.storageKeys![asset]!
     expect(await storage.getItemRaw(currentKey)).toEqual(Buffer.from('newer bytes'))
   })
