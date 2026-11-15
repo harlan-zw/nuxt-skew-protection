@@ -187,7 +187,8 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
         await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
       }
 
-      expect(Buffer.from(await storage.getItemRaw('build-1/_nuxt/chunk-1.ABC1.js')).toString()).toBe('chunk 1 content')
+      const key = (await manager.getManifest()).versions['build-1']!.storageKeys!['_nuxt/chunk-1.ABC1.js']!
+      expect(Buffer.from(await storage.getItemRaw(key)).toString()).toBe('chunk 1 content')
 
       // Verify both versions exist
       const versions = await manager.listExistingVersions()
@@ -243,11 +244,13 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
       await mkdir(nuxtDir, { recursive: true })
 
       // Create 4 versions
+      const storedKeys: string[] = []
       for (let i = 1; i <= 4; i++) {
         const asset = `_nuxt/version-${i}.ABC${i}.js`
         await writeFile(join(outputDir, 'public', asset), `version ${i}`)
         await manager.updateVersionsManifest(`build-${i}`, [asset])
         await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
+        storedKeys.push((await manager.getManifest()).versions[`build-${i}`]!.storageKeys![asset]!)
         await new Promise(resolve => setTimeout(resolve, 10))
       }
 
@@ -263,8 +266,8 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
       expect(versions.map(v => v.id)).not.toContain('build-2')
 
       // Verify assets are actually removed from Redis
-      const asset1 = await storage.getItemRaw('build-1/_nuxt/version-1.ABC1.js')
-      const asset4 = await storage.getItemRaw('build-4/_nuxt/version-4.ABC4.js')
+      const asset1 = await storage.getItemRaw(storedKeys[0]!)
+      const asset4 = await storage.getItemRaw(storedKeys[3]!)
 
       expect(asset1).toBeNull()
       expect(Buffer.from(asset4).toString()).toBe('version 4')

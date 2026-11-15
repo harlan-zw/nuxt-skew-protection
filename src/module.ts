@@ -97,6 +97,11 @@ export interface ModuleOptions {
    */
   bundleAssets?: boolean
   /**
+   * Track loaded chunks with a service worker. Disable for apps sharing an origin.
+   * @default true
+   */
+  serviceWorker?: boolean
+  /**
    * Enable or disable the module
    * @default true
    */
@@ -437,12 +442,6 @@ export {}
     // add aliases for nuxt-skew-protection types and server
     nuxt.options.alias['#skew-protection'] = resolver.resolve('./runtime')
     nuxt.options.alias['nuxt-skew-protection/server'] = resolver.resolve('./runtime/server')
-    if (options.storage?.driver) {
-      // Mount storage for runtime access
-      nuxt.options.nitro = nuxt.options.nitro || {}
-      nuxt.options.nitro.storage = nuxt.options.nitro.storage || {}
-      nuxt.options.nitro.storage['skew-protection'] = options.storage
-    }
 
     // Dev mode: add WS plugin for connectionTracking
     if (nuxt.options.dev && options.connectionTracking) {
@@ -697,7 +696,7 @@ export {}
       nuxt.hook('modules:done', () => {
         // PWA workers can register during the same first page load. Waiting for
         // all modules avoids that race regardless of module installation order.
-        if (hasNuxtModule('@vite-pwa/nuxt') || hasNuxtModule('@nuxtjs/pwa'))
+        if (options.serviceWorker === false || hasNuxtModule('@vite-pwa/nuxt') || hasNuxtModule('@nuxtjs/pwa'))
           return
         addPlugin({
           src: resolver.resolve('./runtime/app/plugins/sw-track-user-modules.client'),
@@ -722,10 +721,12 @@ export {}
       // Add service worker as public asset
       nuxt.options.nitro = nuxt.options.nitro || {}
       nuxt.options.nitro.publicAssets = nuxt.options.nitro.publicAssets || []
-      nuxt.options.nitro.publicAssets.push({
-        dir: swPath,
-        maxAge: 0, // Service workers should not be cached
-      })
+      if (options.serviceWorker !== false) {
+        nuxt.options.nitro.publicAssets.push({
+          dir: swPath,
+          maxAge: 0, // Service workers should not be cached
+        })
+      }
 
       // Build metadata is required by chunk invalidation, even when providers retain asset bytes.
       if (options.storage) {
@@ -753,15 +754,12 @@ export {}
           // Get list of assets from build
           const assets = await assetManager.getAssetsFromBuild(publicDir)
 
-          // Update versions manifest
-          await assetManager.updateVersionsManifest(buildId, assets)
-
           if (options.bundleAssets) {
             // Get release info for logging
             const manifest = await assetManager.getManifest()
-            const totalReleases = Object.keys(manifest.versions).length
+            const totalReleases = Object.keys(manifest.versions).length + (manifest.versions[buildId] ? 0 : 1)
             const timestamps = Object.values(manifest.versions).map(v => new Date(v.timestamp).getTime())
-            const oldestTimestamp = Math.min(...timestamps)
+            const oldestTimestamp = Math.min(Date.now(), ...timestamps)
             const daysSince = Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60 * 24))
             const timeInfo = daysSince > 0
               ? `${daysSince} day${daysSince > 1
@@ -770,7 +768,7 @@ export {}
               : 'today'
 
             // Store assets in configured storage (can be slow with many assets)
-            const storageInfo = options.storage!.base
+            const storageInfo = options.storage!.base && ['fs', 'fs-lite'].includes(options.storage!.driver)
               ? `${colors.green(options.storage!.driver)} ${colors.gray(`(${options.storage!.base})`)}`
               : colors.green(options.storage!.driver)
             if (totalReleases === 1 && ['fs', 'fs-lite'].includes(options.storage!.driver)) {
@@ -783,7 +781,7 @@ export {}
               logger.log(`Storing ${colors.yellow(assets.length.toString())} assets for ${colors.cyan(buildId.slice(0, 8))} (${totalReleases} releases, oldest from ${timeInfo}) [${storageInfo}]`)
             }
 
-            await assetManager.storeAssetsInStorage(buildId, publicDir, assets)
+            await assetManager.publishBuild(buildId, publicDir, assets)
               .catch((error: unknown) => {
                 logger.error(`Failed to store assets:`, error instanceof Error
                   ? error.message
@@ -797,9 +795,9 @@ export {}
 
             logger.success(`Successfully stored ${assets.length} assets for latest release`)
 
-            // For static/prerendered builds: restore old versioned assets into public directory
+            // Publication has restored retained assets into the public directory.
             if (versionCount > 0) {
-              // Re-read manifest after storeAssetsInStorage to get post-deduplication counts
+              // Read post-deduplication counts.
               const updatedManifest = await assetManager.getManifest()
               let totalAssets = 0
               const versionSizes: string[] = []
@@ -811,25 +809,20 @@ export {}
                 }
               }
 
-              logger.log(`Restoring build files from ${versionCount} release${versionCount > 1
+              logger.log(`Restored build files from ${versionCount} release${versionCount > 1
                 ? 's'
-                : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]...`)
+                : ''} (${totalAssets} assets) [${versionSizes.join(', ')}]`)
             }
-
-            await assetManager.restoreOldAssetsToPublic(buildId, publicDir, assets)
           }
-
-          // Augment Nuxt build metadata files with skew protection data
-          await assetManager.augmentBuildMetadata(buildId, publicDir)
+          else {
+            await assetManager.publishBuild(buildId, publicDir, assets)
+          }
         })
 
-        // Clean up expired versions on close
+        // Release storage connections on close.
         nuxt.hook('nitro:init', (nitro) => {
           nitro.hooks.hook('close', async () => {
             if (assetManager) {
-              await assetManager.cleanupExpiredVersions().catch((error) => {
-                logger.debug('Failed to clean up expired skew protection versions:', error)
-              })
               await assetManager.dispose()
             }
           })

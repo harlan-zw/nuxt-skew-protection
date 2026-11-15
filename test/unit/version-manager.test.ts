@@ -385,12 +385,9 @@ describe('version Manager', () => {
       await manager.updateVersionsManifest(buildId, assets)
       await manager.storeAssetsInStorage(buildId, join(outputDir, 'public'), assets)
 
-      // Verify asset is stored
-      const storedAsset = await readFile(
-        join(storageDir, buildId, '_nuxt', 'entry.ABC123.js'),
-        'utf-8',
-      )
-      expect(storedAsset).toBe(assetContent)
+      await rm(join(outputDir, 'public', '_nuxt', 'entry.ABC123.js'))
+      await manager.restoreOldAssetsToPublic('next', join(outputDir, 'public'))
+      expect(await readFile(join(outputDir, 'public', '_nuxt', 'entry.ABC123.js'), 'utf-8')).toBe(assetContent)
     })
 
     it('rejects asset storage write failures', async () => {
@@ -624,11 +621,12 @@ describe('version Manager', () => {
       await writeFile(join(outputDir, 'public', currentAsset), 'current content')
       await manager.updateVersionsManifest('v2', [currentAsset])
       await manager.storeAssetsInStorage('v2', join(outputDir, 'public'), [currentAsset])
-      await createStorage({ driver }).removeItem(`v1/${oldAsset}`)
+      const key = (await manager.getManifest()).versions.v1!.storageKeys![oldAsset]!
+      await createStorage({ driver }).removeItem(key)
 
       await expect(
         manager.restoreOldAssetsToPublic('v2', join(outputDir, 'public'), [currentAsset]),
-      ).rejects.toThrow(`Stored asset v1/${oldAsset} is missing`)
+      ).rejects.toThrow(`Stored asset ${key} is missing`)
     })
 
     it('should skip restoring assets with same file ID', async () => {

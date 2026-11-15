@@ -1,5 +1,7 @@
 import type { Driver, Storage } from 'unstorage'
+import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
@@ -58,8 +60,13 @@ async function processBatch<T, R>(
   const results: R[] = []
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize)
-    const batchResults = await Promise.all(batch.map(processor))
-    results.push(...batchResults)
+    // Finish in-flight requests before a failed build disposes its storage driver.
+    const batchResults = await Promise.allSettled(batch.map(processor))
+    for (const result of batchResults) {
+      if (result.status === 'rejected')
+        throw result.reason
+      results.push(result.value)
+    }
   }
   return results
 }
@@ -72,6 +79,8 @@ export interface VersionManifest {
     expires: string
     // Assets currently stored for this version (shrinks as newer versions deduplicate)
     assets: string[]
+    // Content-addressed objects. Older manifests use version-prefixed keys.
+    storageKeys?: Record<string, string>
     // Original assets at build time (never changes, used for deletedChunks calculation)
     originalAssets?: string[]
     // Chunks deleted in this version compared to previous version
@@ -79,6 +88,19 @@ export interface VersionManifest {
   }>
   // Maps file IDs (hashes from filename) to the latest version that contains them
   fileIdToVersion?: Record<string, string>
+}
+
+function assetOutputPath(publicDir: string, asset: string): string {
+  const root = resolve(publicDir)
+  const target = resolve(root, asset)
+  const path = relative(root, target)
+  if (!path || isAbsolute(asset) || asset.includes('\\') || path === '..' || path.startsWith(`..${sep}`))
+    throw new Error(`Invalid asset path: ${asset}`)
+  return target
+}
+
+function assetStorageKey(versionId: string, version: Pick<VersionManifest['versions'][string], 'storageKeys'>, asset: string): string {
+  return version.storageKeys?.[asset] || `${versionId}/${asset}`
 }
 
 /**
@@ -210,6 +232,29 @@ export function createAssetManager(options: {
   const buildAssetsDir = (options.buildAssetsDir || '/_nuxt/').replace(/^\/+|\/+$/g, '')
   const persistAssets = options.persistAssets !== false
 
+  function limitVersionCount(manifest: VersionManifest, buildId: string): string[] {
+    const removedKeys: string[] = []
+    const previousVersions = Object.entries(manifest.versions)
+      .filter(([id]) => id !== buildId)
+      .sort(([, a], [, b]) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    for (const [id, data] of previousVersions.slice(Math.max(0, maxNumberOfVersions - 1))) {
+      removedKeys.push(...data.assets.map(asset => assetStorageKey(id, data, asset)))
+      delete manifest.versions[id]
+      for (const [fileId, versionId] of Object.entries(manifest.fileIdToVersion || {})) {
+        if (versionId === id)
+          delete manifest.fileIdToVersion![fileId]
+      }
+    }
+    return removedKeys
+  }
+
+  async function removeUnreferencedAssets(manifest: VersionManifest, keys: Iterable<string>) {
+    const retainedKeys = new Set(Object.entries(manifest.versions).flatMap(([id, version]) =>
+      version.assets.map(asset => assetStorageKey(id, version, asset))))
+    await processBatch([...new Set(keys)].filter(key => !retainedKeys.has(key)), 50, key =>
+      storage.removeItem(key).catch(error => logger.warn(`Failed to remove asset ${key}:`, error)))
+  }
+
   async function getAssetsFromBuild(publicDir: string) {
     const startTime = Date.now()
     const nuxtDir = join(publicDir, buildAssetsDir)
@@ -232,7 +277,7 @@ export function createAssetManager(options: {
     return assets
   }
 
-  async function updateVersionsManifest(buildId: string, assets: string[]) {
+  async function updateVersionsManifest(buildId: string, assets: string[], save = true) {
     const startTime = Date.now()
     logger.debug(`updateVersionsManifest: starting for ${buildId}`)
 
@@ -264,7 +309,8 @@ export function createAssetManager(options: {
     }
 
     const saveStart = Date.now()
-    await setVersionManifest(manifest, storage)
+    if (save)
+      await setVersionManifest(manifest, storage)
     logger.debug(`updateVersionsManifest: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
     logger.debug(`updateVersionsManifest: total ${formatDuration(Date.now() - startTime)}`)
 
@@ -279,6 +325,8 @@ export function createAssetManager(options: {
 
     const now = new Date()
     const removedVersions: Array<{ id: string, reason: string, assetCount: number }> = []
+    const removedKeys = new Set<string>()
+    let prunedCount = 0
 
     const sortedVersions = Object.entries(manifest.versions)
       .map(([id, data]) => ({
@@ -301,14 +349,8 @@ export function createAssetManager(options: {
       }
 
       if (isExpired || exceedsCount) {
-        // Remove assets from storage in batches to limit memory
-        await processBatch(version.assets, 50, async (asset) => {
-          await storage.removeItem(`${version.id}/${asset}`).catch((error) => {
-            if (options.debug) {
-              logger.warn(`Failed to remove asset ${asset}:`, error)
-            }
-          })
-        })
+        for (const asset of version.assets)
+          removedKeys.add(assetStorageKey(version.id, version, asset))
 
         delete manifest.versions[version.id]
 
@@ -347,7 +389,6 @@ export function createAssetManager(options: {
     // Final pruning: remove any orphaned fileId entries referencing non-existent versions
     if (manifest.fileIdToVersion) {
       const validVersionIds = new Set(Object.keys(manifest.versions))
-      let prunedCount = 0
       for (const [fileId, versionId] of Object.entries(manifest.fileIdToVersion)) {
         if (!validVersionIds.has(versionId)) {
           delete manifest.fileIdToVersion[fileId]
@@ -360,17 +401,19 @@ export function createAssetManager(options: {
     }
 
     // Save manifest if any changes were made
-    if (removedVersions.length > 0 || (manifest.fileIdToVersion && Object.keys(manifest.fileIdToVersion).length > 0)) {
+    if (removedVersions.length > 0 || prunedCount > 0) {
       await setVersionManifest(manifest, storage)
     }
+    // Publish removals before deleting bytes. A failed manifest write keeps history restorable.
+    await removeUnreferencedAssets(manifest, removedKeys)
   }
 
-  async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[]) {
+  async function storeAssetsInStorage(buildId: string, publicDir: string, assets: string[], preparedManifest?: VersionManifest) {
     const startTime = Date.now()
     logger.debug(`storeAssetsInStorage: starting for ${buildId} (${assets.length} assets)`)
 
     const manifestStart = Date.now()
-    const manifest = await getVersionManifest(storage)
+    const manifest = preparedManifest || await getVersionManifest(storage)
     logger.debug(`storeAssetsInStorage: loaded manifest in ${formatDuration(Date.now() - manifestStart)}`)
 
     // Initialize fileIdToVersion map if it doesn't exist
@@ -387,6 +430,10 @@ export function createAssetManager(options: {
     let deduplicatedCount = 0
     let totalBytes = 0
     let skippedCount = 0
+    const supersededKeys: string[] = []
+    const version = manifest.versions[buildId]!
+    version.storageKeys = {}
+    const uploads = new Map<string, Promise<void>>()
 
     const storeStart = Date.now()
 
@@ -395,21 +442,27 @@ export function createAssetManager(options: {
     await processBatch(assets, 25, async (asset) => {
       const fileId = extractFileId(asset)
 
-      // Check if already deduplicated BEFORE reading file (memory optimization)
-      if (fileId && fileIdToVersion[fileId] === buildId) {
-        skippedCount++
-        return
-      }
-
       // Store the file in current build's storage
-      const assetPath = join(publicDir, asset)
+      const assetPath = assetOutputPath(publicDir, asset)
       const assetData = await fs.readFile(assetPath)
 
       if (assetData) {
         totalBytes += assetData.byteLength
-        const storageKey = `${buildId}/${asset}`
-        await storage.setItemRaw(storageKey, assetData)
-        storedCount++
+        const storageKey = `blobs/${createHash('sha256').update(assetData).digest('hex')}`
+        let upload = uploads.get(storageKey)
+        if (!upload) {
+          upload = (async () => {
+            if (await storage.hasItem(storageKey)) {
+              skippedCount++
+              return
+            }
+            await storage.setItemRaw(storageKey, assetData)
+            storedCount++
+          })()
+          uploads.set(storageKey, upload)
+        }
+        await upload
+        version.storageKeys![asset] = storageKey
 
         // Check if this file ID already exists in a previous version
         // If so, remove it from the old location since we now have it in the new location
@@ -426,10 +479,9 @@ export function createAssetManager(options: {
               previousAssets.splice(assetIndex, 1)
 
               // Remove from storage using the correct old path
-              const oldStorageKey = `${previousVersionId}/${oldAssetPath}`
-              await storage.removeItem(oldStorageKey).catch((error) => {
-                logger.debug(`Failed to remove duplicate asset ${oldStorageKey}: ${error}`)
-              })
+              const oldStorageKey = assetStorageKey(previousVersionId, manifest.versions[previousVersionId], oldAssetPath!)
+              supersededKeys.push(oldStorageKey)
+              delete manifest.versions[previousVersionId].storageKeys?.[oldAssetPath!]
               deduplicatedCount++
             }
           }
@@ -445,9 +497,13 @@ export function createAssetManager(options: {
     logger.debug(`storeAssetsInStorage: stored ${storedCount} assets (${formatBytes(totalBytes)}) in ${formatDuration(Date.now() - storeStart)}`)
     logger.debug(`storeAssetsInStorage: deduplicated ${deduplicatedCount}, skipped ${skippedCount}`)
 
+    // Reserve the new release's slot only after the old current release was restored.
+    supersededKeys.push(...limitVersionCount(manifest, buildId))
+
     // Save updated manifest with fileIdToVersion mapping
     const saveStart = Date.now()
     await setVersionManifest(manifest, storage)
+    await removeUnreferencedAssets(manifest, supersededKeys)
     logger.debug(`storeAssetsInStorage: saved manifest in ${formatDuration(Date.now() - saveStart)}`)
     logger.debug(`storeAssetsInStorage: total ${formatDuration(Date.now() - startTime)}`)
   }
@@ -506,6 +562,7 @@ export function createAssetManager(options: {
       }
 
       for (const asset of versionData.assets) {
+        assetOutputPath(publicDir, asset)
         // Skip if this asset path is already in the current version
         if (currentAssetsSet.has(asset)) {
           skippedSamePath++
@@ -543,11 +600,11 @@ export function createAssetManager(options: {
     // Process restoration tasks in batches to limit memory
     // Use smaller batches for memory efficiency
     const batchResults = await processBatch(assetTasks, 25, async ({ versionId, asset, versionData }) => {
-      const storageKey = `${versionId}/${asset}`
+      const storageKey = assetStorageKey(versionId, versionData, asset)
       return await storage.getItemRaw(storageKey)
         .then(async (assetData) => {
           if (assetData) {
-            const targetPath = join(publicDir, asset)
+            const targetPath = assetOutputPath(publicDir, asset)
             const dir = dirname(targetPath)
 
             if (!createdDirs.has(dir)) {
@@ -624,8 +681,8 @@ export function createAssetManager(options: {
    * The deleted chunk lists go to builds/skew/{buildId}.json, which a client
    * fetches only after it detects a new build.
    */
-  async function augmentBuildMetadata(buildId: string, publicDir: string) {
-    const manifest = await getVersionManifest(storage)
+  async function augmentBuildMetadata(buildId: string, publicDir: string, preparedManifest?: VersionManifest) {
+    const manifest = preparedManifest || await getVersionManifest(storage)
     const buildsDir = join(publicDir, buildAssetsDir, 'builds')
 
     const versions: Record<string, { timestamp: string }> = {}
@@ -671,7 +728,27 @@ export function createAssetManager(options: {
     await fs.writeFile(skewPath, JSON.stringify({ deletedChunks }), 'utf-8')
   }
 
+  async function publishBuild(buildId: string, publicDir: string, assets: string[]) {
+    // Keep current pointing at the live release while pruning and restoring history.
+    await cleanupExpiredVersions()
+    const { manifest } = await updateVersionsManifest(buildId, assets, false)
+    await augmentBuildMetadata(buildId, publicDir, manifest)
+    if (persistAssets) {
+      const skewAsset = `${buildAssetsDir}/builds/skew/${buildId}.json`
+      const storedAssets = [...new Set([...assets, skewAsset])]
+      manifest.versions[buildId]!.assets = storedAssets
+      await restoreOldAssetsToPublic(buildId, publicDir, storedAssets)
+      await storeAssetsInStorage(buildId, publicDir, storedAssets, manifest)
+    }
+    else {
+      const removedKeys = limitVersionCount(manifest, buildId)
+      await setVersionManifest(manifest, storage)
+      await removeUnreferencedAssets(manifest, removedKeys)
+    }
+  }
+
   return {
+    publishBuild,
     getAssetsFromBuild,
     updateVersionsManifest,
     cleanupExpiredVersions,

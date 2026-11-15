@@ -7,6 +7,34 @@ import { logger } from '../../src/logger'
 import skewProtection from '../../src/module'
 
 describe('first release diagnostics', () => {
+  it.each([true, false])('keeps build credentials out of Nitro with serviceWorker=%s', async (serviceWorker) => {
+    const rootDir = await mkdtemp(join(tmpdir(), 'skew-storage-boundary-'))
+    const nuxt = await loadNuxt({
+      cwd: rootDir,
+      ready: false,
+      overrides: {
+        dev: false,
+        modules: [skewProtection],
+        nitro: { preset: 'cloudflare-module' },
+        skewProtection: {
+          serviceWorker,
+          storage: { driver: 's3', accessKeyId: 'build-only-key', secretAccessKey: 'build-only-secret' },
+        },
+      },
+    })
+    try {
+      await nuxt.ready()
+      expect(nuxt.options.nitro.storage?.['skew-protection']).toBeUndefined()
+      const plugins = nuxt.options.plugins.map(plugin => typeof plugin === 'string' ? plugin : plugin.src)
+      expect(plugins.some(src => src.includes('sw-track-user-modules'))).toBe(serviceWorker)
+      expect(nuxt.options.nitro.publicAssets?.some(asset => asset.dir?.endsWith('/sw'))).toBe(serviceWorker)
+    }
+    finally {
+      await nuxt.close()
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
   it.each(['fs', 'memory'])('reports a first %s release at the appropriate severity', async (driver) => {
     const rootDir = await mkdtemp(join(tmpdir(), 'skew-first-release-'))
     const publicDir = join(rootDir, 'public')
