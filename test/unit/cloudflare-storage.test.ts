@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createCloudflareKVWranglerDriver } from '../../src/unstorage/cloudflare-kv-wrangler-driver'
 import { readWranglerKVNamespaces, selectCloudflareKVNamespace } from '../../src/unstorage/utils'
+import { createAssetManager } from '../../src/utils/version-manager'
 
 function successfulExecution(stdout: Uint8Array | string = ''): WranglerExecution {
   return {
@@ -73,8 +74,75 @@ describe('cloudflare KV namespace resolution', () => {
 })
 
 describe('cloudflare KV Wrangler driver', () => {
+  it.each(['[]', '[{"name":"skew:missing-other"}]'])('returns null for an absent key with listed keys %s', async (keys) => {
+    const execute = vi.fn(async (args: readonly string[]) => args.includes('list')
+      ? successfulExecution(keys)
+      : { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from('404: Not Found') })
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id', base: 'skew:' })
+
+    await expect(driver.getItem?.('missing')).resolves.toBeNull()
+  })
+
+  it('creates and reads the first version manifest in an empty namespace', async () => {
+    const values = new Map<string, string>()
+    const execute = async (args: readonly string[]): Promise<WranglerExecution> => {
+      if (args[2] === 'list')
+        return successfulExecution(JSON.stringify([...values.keys()].map(name => ({ name }))))
+      const key = args[3]!
+      if (args[2] === 'put') {
+        values.set(key, await readFile(args[args.indexOf('--path') + 1]!, 'utf8'))
+        return successfulExecution()
+      }
+      const value = values.get(key)
+      return value === undefined
+        ? { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from('404: Not Found') }
+        : successfulExecution(value)
+    }
+    const manager = createAssetManager({
+      driver: createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id', base: 'skew:' }),
+    })
+
+    await manager.updateVersionsManifest('first-build', ['_nuxt/entry.hash.js'])
+
+    expect(await manager.getManifest()).toMatchObject({
+      current: 'first-build',
+      versions: { 'first-build': { assets: ['_nuxt/entry.hash.js'] } },
+    })
+  })
+
+  it.each(['list', 'get'])('preserves %s failures for JSON reads', async (operation) => {
+    for (const message of ['authentication failed', 'namespace 404: Not Found', 'network connection failed']) {
+      const execute = async (args: readonly string[]) => args[2] === operation
+        ? { exitCode: 1, stdout: Buffer.alloc(0), stderr: Buffer.from(message) }
+        : successfulExecution('[{"name":"manifest"}]')
+      const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
+
+      await expect(driver.getItem?.('manifest')).rejects.toThrow(message)
+    }
+  })
+
+  it('preserves process execution failures', async () => {
+    const error = new Error('Unable to run Wrangler')
+    const driver = createCloudflareKVWranglerDriver(async () => {
+      throw error
+    })({ namespaceId: 'namespace-id' })
+
+    await expect(driver.getItem?.('manifest')).rejects.toBe(error)
+  })
+
+  it('rejects malformed stored JSON', async () => {
+    const execute = async (args: readonly string[]) => successfulExecution(args[2] === 'list'
+      ? '[{"name":"manifest"}]'
+      : '{invalid json')
+    const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
+
+    await expect(driver.getItem?.('manifest')).rejects.toBeInstanceOf(SyntaxError)
+  })
+
   it('returns null for Wrangler v4 missing-value output', async () => {
-    const execute = vi.fn(async () => successfulExecution('Value not found\n'))
+    const execute = vi.fn(async (args: readonly string[]) => successfulExecution(args[2] === 'list'
+      ? '[{"name":"missing"}]'
+      : 'Value not found\n'))
     const driver = createCloudflareKVWranglerDriver(execute)({ namespaceId: 'namespace-id' })
 
     await expect(driver.getItem?.('missing')).resolves.toBeNull()
