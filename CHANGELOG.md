@@ -1,3 +1,14 @@
+## 2.0.4
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.3...v2.0.4)
+
+- docs: add skew protection docker example (#110) ([a0fe1bf](https://github.com/harlan-zw/nuxt-skew-protection/commit/a0fe1bf6b1fd1bfdbadca7c85376b9db3e0b5dcd))
+- fix(cloudflare): return null for missing KV JSON keys (#114) ([cfa7122](https://github.com/harlan-zw/nuxt-skew-protection/commit/cfa7122e068b8aa9dd120154721457a40ecd5ca9))
+- fix(cloudflare): resolve KV bindings from Nitro build options (#115) ([32aba3d](https://github.com/harlan-zw/nuxt-skew-protection/commit/32aba3d97c7fc20420abafde4ac9619ac469fcd3))
+- fix: publish retained assets safely and isolate build storage (#116) ([03dabf9](https://github.com/harlan-zw/nuxt-skew-protection/commit/03dabf96f67ef1763d1263d1c204e3caf8dfa75a))
+- chore(deps): refresh workspace and fixture dependencies (#109) ([65a59d9](https://github.com/harlan-zw/nuxt-skew-protection/commit/65a59d9d15ad17eea3a98454896e3505d472b1c1))
+- fix: recover uploads only with strong reads and known outcomes (#118) ([58a4842](https://github.com/harlan-zw/nuxt-skew-protection/commit/58a48420b82a4799998c86c9f592b9f11f2a4f4c))
+
 ## 2.0.3
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.2...v2.0.3)
