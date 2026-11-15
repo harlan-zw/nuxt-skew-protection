@@ -144,6 +144,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       const manager = createAssetManager({
         driver: redisDriver.default(redisConfig),
+        readConsistency: 'strong',
         retentionDays: 7,
         debug: false,
       })
@@ -173,6 +174,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       const manager = createAssetManager({
         driver: redisDriver.default(redisConfig),
+        readConsistency: 'strong',
         debug: false,
       })
 
@@ -202,6 +204,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       const manager = createAssetManager({
         driver: redisDriver.default(redisConfig),
+        readConsistency: 'strong',
         debug: false,
       })
 
@@ -235,6 +238,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       const manager = createAssetManager({
         driver: redisDriver.default(redisConfig),
+        readConsistency: 'strong',
         retentionDays: 7,
         maxNumberOfVersions: 2,
         debug: false,
@@ -278,6 +282,7 @@ describe.skipIf(!redisAvailable)('redis Storage Integration', () => {
 
       const manager = createAssetManager({
         driver: redisDriver.default(redisConfig),
+        readConsistency: 'strong',
         debug: false,
       })
 

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { createAssetManager } from '../../src/utils/version-manager'
 
 describe('pending uploads through the S3 driver', () => {
-  it.each(['BeforeCommit', 'AfterCommit'] as const)('preserves uncertain bytes until republication after a manifest PUT fails %s', async (failure) => {
+  it.each(['AssetPut', 'BeforeCommit', 'AfterCommit'] as const)('handles interrupted uploads and uncertain manifest PUTs: %s', async (failure) => {
     const objects = new Map<string, Buffer>()
     let responseMode: typeof failure | 'Success' = failure
     const server = createServer((request, response) => {
@@ -20,7 +20,7 @@ describe('pending uploads through the S3 driver', () => {
           const isManifest = key === '/assets/version-manifest.json'
           if (!isManifest || responseMode !== 'BeforeCommit')
             objects.set(key, Buffer.concat(chunks))
-          response.statusCode = isManifest && responseMode !== 'Success'
+          response.statusCode = (isManifest && responseMode !== 'Success') || (key === objectPath && responseMode === 'AssetPut')
             ? 500
             : 200
         }
@@ -46,6 +46,7 @@ describe('pending uploads through the S3 driver', () => {
       throw new Error('Expected a local HTTP server port')
     const directory = await mkdtemp(join(tmpdir(), 'skew-pending-s3-'))
     const createManager = () => createAssetManager({
+      readConsistency: 'strong',
       driver: s3Driver({
         endpoint: `http://127.0.0.1:${address.port}`,
         bucket: 'assets',
@@ -68,13 +69,16 @@ describe('pending uploads through the S3 driver', () => {
 
       const recovered = createManager()
       await recovered.cleanupExpiredVersions()
-      expect(objects.get(objectPath)).toEqual(bytes)
+      expect(objects.get(objectPath)).toEqual(failure === 'AssetPut'
+        ? undefined
+        : bytes)
       expect((await recovered.getManifest()).current).toBe(failure === 'AfterCommit'
         ? 'next'
         : '')
       await recovered.publishBuild('next', directory, [asset])
-      expect(objects.get(objectPath)).toEqual(bytes)
-      expect((await recovered.getManifest()).current).toBe('next')
+      const manifest = await recovered.getManifest()
+      expect(objects.get(`/assets/${manifest.versions.next!.storageKeys![asset]}`)).toEqual(bytes)
+      expect(manifest.current).toBe('next')
     }
     finally {
       await new Promise<void>((resolve, reject) => server.close(error => error

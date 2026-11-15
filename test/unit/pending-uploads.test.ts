@@ -24,6 +24,88 @@ describe('abandoned asset uploads', () => {
     await rm(directory, { recursive: true, force: true })
   })
 
+  it.each(['strong', 'eventual'] as const)('recovers interrupted asset uploads only with %s reads', async (readConsistency) => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const assets = [asset]
+    for (let index = 0; index < 26; index++) {
+      const path = `_nuxt/extra-${index}.js`
+      await writeFile(join(directory, path), index === 25
+        ? 'fail'
+        : `extra ${index}`)
+      assets.push(path)
+    }
+    const upload = driver.setItemRaw!
+    driver.setItemRaw = (item, value, options) => {
+      if (Buffer.from(value).toString() === 'fail')
+        throw new Error('upload interrupted')
+      return upload(item, value, options)
+    }
+    await expect(createAssetManager({ driver, readConsistency }).publishBuild('next', directory, assets)).rejects.toThrow('upload interrupted')
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+
+    await createAssetManager({ driver, readConsistency }).cleanupExpiredVersions()
+    expect(await storage.getItemRaw(key)).toEqual(readConsistency === 'strong'
+      ? null
+      : Buffer.from('new bytes'))
+  })
+
+  it('preserves an uncertain manifest write even when strong reads report absence', async () => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const save = driver.setItem!
+    driver.setItem = async (item, value, options) => {
+      await save(item, value, options)
+      if (item === 'version-manifest.json')
+        throw new Error('response lost')
+    }
+    await expect(createAssetManager({ driver, readConsistency: 'strong' }).publishBuild('next', directory, [asset])).rejects.toThrow('response lost')
+    driver.setItem = save
+    const read = driver.getItem!
+    driver.getItem = (item, options) => item === 'version-manifest.json'
+      ? null
+      : read(item, options)
+
+    await createAssetManager({ driver, readConsistency: 'strong' }).cleanupExpiredVersions()
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+  })
+
+  it('protects legacy objects referenced by an uncertain manifest write', async () => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    const legacyAsset = '_nuxt/legacy.hash.js'
+    const legacyKey = `legacy/${legacyAsset}`
+    const timestamp = new Date().toISOString()
+    const legacy = {
+      timestamp,
+      expires: timestamp,
+      assets: [legacyAsset],
+    }
+    await storage.setItem('version-manifest.json', {
+      current: 'legacy',
+      versions: { legacy },
+    })
+    await storage.setItemRaw(legacyKey, Buffer.from('legacy bytes'))
+    const save = driver.setItem!
+    driver.setItem = async (item, value, options) => {
+      await save(item, value, options)
+      if (item === 'version-manifest.json')
+        throw new Error('response lost')
+    }
+    await expect(createAssetManager({ driver, readConsistency: 'strong' }).publishBuild('next', directory, [asset])).rejects.toThrow('response lost')
+    driver.setItem = save
+    await storage.setItem('version-manifest.json', {
+      current: 'replacement',
+      versions: {
+        legacy: { ...legacy, timestamp: '2020-01-01T00:00:00.000Z' },
+        replacement: { timestamp, expires: timestamp, assets: [] },
+      },
+    })
+
+    await createAssetManager({ driver, readConsistency: 'strong' }).cleanupExpiredVersions()
+    expect(await storage.getItemRaw(legacyKey)).toEqual(Buffer.from('legacy bytes'))
+  })
+
   it('keeps every committed object when the first read after publication is stale', async () => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
@@ -159,7 +241,7 @@ describe('abandoned asset uploads', () => {
   it('defers failed superseded deletion when a later read cannot prove current references', async () => {
     const driver = memoryDriver()
     const storage = createStorage({ driver })
-    const manager = createAssetManager({ driver, maxNumberOfVersions: 1 })
+    const manager = createAssetManager({ driver, maxNumberOfVersions: 1, readConsistency: 'eventual' })
     await manager.publishBuild('next', directory, [asset])
     await writeFile(join(directory, asset), 'newer bytes')
     await writeFile(join(directory, '_nuxt', 'builds', 'latest.json'), JSON.stringify({ id: 'second' }))
@@ -175,14 +257,44 @@ describe('abandoned asset uploads', () => {
     expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
     driver.removeItem = remove
 
-    await createAssetManager({ driver }).cleanupExpiredVersions()
+    await createAssetManager({ driver, readConsistency: 'eventual' }).cleanupExpiredVersions()
     expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
     expect(await storage.getItem('pending-uploads.json')).toEqual({
       _tag: 'PendingUploads',
       keys: [key],
+      uncertainKeys: [],
     })
     const currentKey = (await manager.getManifest()).versions.second!.storageKeys![asset]!
     expect(await storage.getItemRaw(currentKey)).toEqual(Buffer.from('newer bytes'))
+  })
+
+  it('does not reuse an object whose failed DELETE may finish later', async () => {
+    const driver = memoryDriver()
+    const storage = createStorage({ driver })
+    // Seed an abandoned upload without starting a manifest write.
+    await storage.setItem('pending-uploads.json', {
+      _tag: 'PendingUploads',
+      keys: [key],
+      uncertainKeys: [],
+    })
+    await storage.setItemRaw(key, Buffer.from('new bytes'))
+    const remove = driver.removeItem!
+    let delayedDelete: (() => unknown) | undefined
+    driver.removeItem = (item, options) => {
+      if (item === key.replaceAll('/', ':') && delayedDelete === undefined) {
+        delayedDelete = () => remove(item, options)
+        throw new Error('DELETE response lost')
+      }
+      return remove(item, options)
+    }
+    await createAssetManager({ driver, readConsistency: 'strong' }).cleanupExpiredVersions()
+    const manager = createAssetManager({ driver, readConsistency: 'strong' })
+    await manager.publishBuild('next', directory, [asset])
+    await delayedDelete!()
+
+    const current = (await manager.getManifest()).versions.next!
+    for (const storedKey of Object.values(current.storageKeys!))
+      expect(await storage.getItemRaw(storedKey)).not.toBeNull()
   })
 
   it('allows the next publication when storage cannot delete objects', async () => {
