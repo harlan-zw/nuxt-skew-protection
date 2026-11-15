@@ -27,7 +27,8 @@ function versionCookies(response: Response): string[] {
 
 async function startWrangler(): Promise<ChildProcess> {
   await execAsync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`)
-  const proc = spawn('npx', [
+  const proc = spawn('pnpm', [
+    'exec',
     'wrangler',
     'dev',
     '.output/server/index.mjs',

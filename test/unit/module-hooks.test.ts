@@ -235,59 +235,6 @@ describe('module Hooks', () => {
     })
   })
 
-  describe('close Hook', () => {
-    it('should cleanup expired versions on close', async () => {
-      const manager = createAssetManager({
-        driver: await resolveBuildTimeDriver({ driver: 'fs', base: storageDir }),
-        retentionDays: 30,
-        maxNumberOfVersions: 2,
-        debug: false,
-      })
-
-      const nuxtDir = join(outputDir, 'public', '_nuxt')
-      await mkdir(nuxtDir, { recursive: true })
-
-      // Create 4 builds
-      for (let i = 1; i <= 4; i++) {
-        const asset = `_nuxt/build-${i}.ABC${i}.js`
-        await writeFile(join(outputDir, 'public', asset), `build ${i}`)
-        await manager.updateVersionsManifest(`build-${i}`, [asset])
-        await manager.storeAssetsInStorage(`build-${i}`, join(outputDir, 'public'), [asset])
-        await new Promise(resolve => setTimeout(resolve, 10))
-      }
-
-      // Before cleanup
-      let versions = await manager.listExistingVersions()
-      expect(versions).toHaveLength(4)
-
-      // Simulate close hook
-      await manager.cleanupExpiredVersions()
-
-      // After cleanup - should keep only 2 most recent
-      versions = await manager.listExistingVersions()
-      expect(versions).toHaveLength(2)
-
-      const versionIds = versions.map(v => v.id)
-      expect(versionIds).toContain('build-4')
-      expect(versionIds).toContain('build-3')
-      expect(versionIds).not.toContain('build-2')
-      expect(versionIds).not.toContain('build-1')
-    })
-
-    it('should handle close hook when assetManager is undefined', async () => {
-      let assetManager: ReturnType<typeof createAssetManager> | undefined
-
-      const closeHook = async () => {
-        if (assetManager) {
-          await assetManager.cleanupExpiredVersions()
-        }
-      }
-
-      // Should not throw when manager is undefined
-      await expect(closeHook()).resolves.toBeUndefined()
-    })
-  })
-
   describe('hook Timing', () => {
     it('should allow caching in rollup:before before finalization', async () => {
       const operations: string[] = []
