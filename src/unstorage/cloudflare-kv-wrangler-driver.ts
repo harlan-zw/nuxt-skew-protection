@@ -130,6 +130,8 @@ export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeW
       hasItem,
 
       async getItem(key: string) {
+        if (!await hasItem(key))
+          return null
         const result = await command(['kv', 'key', 'get', prefixKey(key), ...namespaceArgs, '--text'])
         const value = result.stdout.toString('utf8').trim()
         if (value === 'Value not found')
