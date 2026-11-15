@@ -178,12 +178,9 @@ describe('version Management Integration', () => {
       await manager.updateVersionsManifest('build-1', [asset])
       await manager.storeAssetsInStorage('build-1', join(outputDir, 'public'), [asset])
 
-      // Verify stored in filesystem
-      const storedContent = await readFile(
-        join(storageDir, 'build-1', asset),
-        'utf-8',
-      )
-      expect(storedContent).toBe(assetContent)
+      await rm(join(outputDir, 'public', asset))
+      await manager.restoreOldAssetsToPublic('next', join(outputDir, 'public'))
+      expect(await readFile(join(outputDir, 'public', asset), 'utf-8')).toBe(assetContent)
     })
 
     it('should work with memory storage', async () => {
