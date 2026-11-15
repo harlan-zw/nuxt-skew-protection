@@ -33,6 +33,8 @@ export default defineNuxtPlugin({
       },
     })
 
-    return { provide: { skewConnection } }
+    return {
+      provide: { skewConnection },
+    }
   },
 })

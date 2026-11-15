@@ -52,7 +52,9 @@ function assertSuccess(
   throw new Error([
     `[cloudflare-kv-wrangler] Wrangler exited with status ${result.exitCode}.`,
     `Command: wrangler ${args.map(arg => JSON.stringify(arg)).join(' ')}`,
-    stderr ? `stderr: ${stderr}` : 'Wrangler did not provide an error message.',
+    stderr
+      ? `stderr: ${stderr}`
+      : 'Wrangler did not provide an error message.',
   ].join('\n'))
 }
 
@@ -107,14 +109,30 @@ export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeW
 
     const locationFlag = local ? '--local' : '--remote'
     const namespaceArgs = ['--namespace-id', namespaceId, locationFlag] as const
-    const prefixKey = (key: string): string => base ? `${base}${key}` : key
-    const unprefixKey = (key: string): string => base && key.startsWith(base) ? key.slice(base.length) : key
+    const prefixKey = (key: string): string => base
+      ? `${base}${key}`
+      : key
+    const unprefixKey = (key: string): string => base && key.startsWith(base)
+      ? key.slice(base.length)
+      : key
     const command = async (args: readonly string[]): Promise<WranglerExecution> => assertSuccess(await run(args), args)
 
     const listKeys = async (basePrefix?: string): Promise<string[]> => {
-      const fullPrefix = base ? (basePrefix ? `${base}${basePrefix}` : base) : basePrefix
-      const prefixArgs = fullPrefix ? ['--prefix', fullPrefix] : []
-      const result = await command(['kv', 'key', 'list', ...prefixArgs, ...namespaceArgs])
+      const fullPrefix = base
+        ? (basePrefix
+            ? `${base}${basePrefix}`
+            : base)
+        : basePrefix
+      const prefixArgs = fullPrefix
+        ? ['--prefix', fullPrefix]
+        : []
+      const result = await command([
+        'kv',
+        'key',
+        'list',
+        ...prefixArgs,
+        ...namespaceArgs,
+      ])
       return parseListedKeys(result.stdout).map(unprefixKey)
     }
 
@@ -130,7 +148,14 @@ export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeW
       hasItem,
 
       async getItem(key: string) {
-        const result = await command(['kv', 'key', 'get', prefixKey(key), ...namespaceArgs, '--text'])
+        const result = await command([
+          'kv',
+          'key',
+          'get',
+          prefixKey(key),
+          ...namespaceArgs,
+          '--text',
+        ])
         const value = result.stdout.toString('utf8').trim()
         if (value === 'Value not found')
           return null
@@ -140,32 +165,67 @@ export function createCloudflareKVWranglerDriver(run: ExecuteWrangler = executeW
       async getItemRaw(key: string) {
         if (!await hasItem(key))
           return null
-        const result = await command(['kv', 'key', 'get', prefixKey(key), ...namespaceArgs])
+        const result = await command([
+          'kv',
+          'key',
+          'get',
+          prefixKey(key),
+          ...namespaceArgs,
+        ])
         return result.stdout
       },
 
       async setItem(key: string, value: unknown) {
         await withTemporaryFile('.json', Buffer.from(JSON.stringify(value)), async (path) => {
-          await command(['kv', 'key', 'put', prefixKey(key), '--path', path, ...namespaceArgs])
+          await command([
+            'kv',
+            'key',
+            'put',
+            prefixKey(key),
+            '--path',
+            path,
+            ...namespaceArgs,
+          ])
         })
       },
 
       async setItemRaw(key: string, value: unknown) {
         await withTemporaryFile('.bin', toRawBuffer(value), async (path) => {
-          await command(['kv', 'key', 'put', prefixKey(key), '--path', path, ...namespaceArgs])
+          await command([
+            'kv',
+            'key',
+            'put',
+            prefixKey(key),
+            '--path',
+            path,
+            ...namespaceArgs,
+          ])
         })
       },
 
       async removeItem(key: string) {
-        await command(['kv', 'key', 'delete', prefixKey(key), ...namespaceArgs])
+        await command([
+          'kv',
+          'key',
+          'delete',
+          prefixKey(key),
+          ...namespaceArgs,
+        ])
       },
 
       getKeys: listKeys,
 
       async clear(basePrefix?: string) {
         const keys = await listKeys(basePrefix)
-        for (const key of keys)
-          await command(['kv', 'key', 'delete', prefixKey(key), ...namespaceArgs])
+        for (const key of keys) {
+          await command([
+            'kv',
+            'key',
+            'delete',
+            prefixKey(key),
+            ...namespaceArgs,
+          ])
+        }
       },
 
       async dispose() {},

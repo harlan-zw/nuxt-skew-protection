@@ -21,18 +21,35 @@ describe('first release diagnostics', () => {
         dev: false,
         buildId: 'first-build',
         modules: [skewProtection],
-        skewProtection: { storage: { driver, base: join(rootDir, 'storage') }, bundleAssets: true },
+        skewProtection: {
+          storage: {
+            driver,
+            base: join(rootDir, 'storage'),
+          },
+          bundleAssets: true,
+        },
       },
     })
     const messages: { type: string, args: unknown[] }[] = []
-    const reporter = { log: (record: { type: string, args: unknown[] }) => messages.push({ type: record.type, args: record.args }) }
+    const reporter = {
+      log: (record: { type: string, args: unknown[] }) => messages.push({ type: record.type, args: record.args }),
+    }
     logger.addReporter(reporter)
     try {
       await nuxt.ready()
       messages.length = 0
-      await nuxt.callHook('nitro:build:public-assets', { hooks: nuxt.hooks, options: { output: { publicDir } } } as any)
+      await nuxt.callHook('nitro:build:public-assets', {
+        hooks: nuxt.hooks,
+        options: {
+          output: { publicDir },
+        },
+      } as any)
       const firstRelease = messages.filter(message => message.args.some(arg => typeof arg === 'string' && /first release|No previous versions/.test(arg)))
-      expect(firstRelease.map(message => message.type)).toEqual([driver === 'fs' ? 'info' : 'warn'])
+      expect(firstRelease.map(message => message.type)).toEqual([
+        driver === 'fs'
+          ? 'info'
+          : 'warn',
+      ])
     }
     finally {
       logger.removeReporter(reporter)

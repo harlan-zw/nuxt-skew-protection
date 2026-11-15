@@ -10,8 +10,22 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-const SOURCE_EXTENSIONS = new Set(['.vue', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.mts'])
-const IGNORE_DIRS = new Set(['node_modules', '.nuxt', '.output', 'dist', '.git'])
+const SOURCE_EXTENSIONS = new Set([
+  '.vue',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.mts',
+])
+const IGNORE_DIRS = new Set([
+  'node_modules',
+  '.nuxt',
+  '.output',
+  'dist',
+  '.git',
+])
 
 const replacements = [
   {
@@ -77,7 +91,11 @@ function migrate(cwd) {
       const matches = modified.match(r.pattern)
       if (matches && matches.length > 0) {
         modified = modified.replace(r.pattern, r.replacement)
-        changes.push({ file: file.replace(cwd, '.'), name: r.name, count: matches.length })
+        changes.push({
+          file: file.replace(cwd, '.'),
+          name: r.name,
+          count: matches.length,
+        })
       }
     }
 

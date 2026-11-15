@@ -15,7 +15,9 @@ export const subscribe: SubscribeFn<AblyClientConfig> = defineWebSubscribe<AblyC
 
     const channel = ably.channels.get(channelName)
     await channel.subscribe(eventName, (message) => {
-      const data = typeof message.data === 'string' ? JSON.parse(message.data) : message.data
+      const data = typeof message.data === 'string'
+        ? JSON.parse(message.data)
+        : message.data
       onMessage({ version: data.version })
     })
 

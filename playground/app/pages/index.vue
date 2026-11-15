@@ -100,24 +100,27 @@ watch(selectedVariant, (newVariant, oldVariant) => {
       title: 'New update available!',
       duration: 0,
       color: 'primary',
-      actions: [{
-        label: 'Refresh',
-        color: 'primary',
-        click: async () => {
-          toast.remove('skew-update')
-          await reloadNuxtApp({
-            force: true,
-            persistState: true,
-          })
+      actions: [
+        {
+          label: 'Refresh',
+          color: 'primary',
+          click: async () => {
+            toast.remove('skew-update')
+            await reloadNuxtApp({
+              force: true,
+              persistState: true,
+            })
+          },
         },
-      }, {
-        label: 'Dismiss',
-        color: 'gray',
-        variant: 'ghost',
-        click: () => {
-          toast.remove('skew-update')
+        {
+          label: 'Dismiss',
+          color: 'gray',
+          variant: 'ghost',
+          click: () => {
+            toast.remove('skew-update')
+          },
         },
-      }],
+      ],
     })
   }
 })

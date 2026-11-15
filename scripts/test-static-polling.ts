@@ -141,7 +141,9 @@ async function verifyEntryAssetContent(
   const content = await verifyAssetContent(
     serverUrl,
     deployment.entryAsset,
-    [{ type: 'includes', value: `"${expectedVersion}"` }],
+    [
+      { type: 'includes', value: `"${expectedVersion}"` },
+    ],
   )
 
   log(`  ✅ Entry asset contains version "${expectedVersion}"`, 'green')
@@ -183,7 +185,13 @@ async function main() {
         port: port1,
         cwd: fixtureDir,
         command: 'npx',
-        args: ['sirv-cli', join(deployment1.outputDir, 'public'), '--port', port1.toString(), '--single'],
+        args: [
+          'sirv-cli',
+          join(deployment1.outputDir, 'public'),
+          '--port',
+          port1.toString(),
+          '--single',
+        ],
         readyDelay: 3000,
       })
       await sleep(1000)
@@ -201,7 +209,13 @@ async function main() {
         port: portLast,
         cwd: fixtureDir,
         command: 'npx',
-        args: ['sirv-cli', join(lastDeployment.outputDir, 'public'), '--port', portLast.toString(), '--single'],
+        args: [
+          'sirv-cli',
+          join(lastDeployment.outputDir, 'public'),
+          '--port',
+          portLast.toString(),
+          '--single',
+        ],
         readyDelay: 3000,
       })
       await sleep(1000)

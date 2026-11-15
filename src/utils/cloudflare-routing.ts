@@ -9,7 +9,11 @@ export function withCloudflareBuildAssetRouting(
 
   const prefix = `/${buildAssetsDir.replace(/^\/+|\/+$/g, '')}/`
   const pattern = `${prefix}*`
-  const routes = Array.isArray(current) ? current.filter(route => typeof route === 'string') : []
+  const routes = Array.isArray(current)
+    ? current.filter(route => typeof route === 'string')
+    : []
 
-  return routes.includes(pattern) ? routes : [...routes, pattern]
+  return routes.includes(pattern)
+    ? routes
+    : [...routes, pattern]
 }

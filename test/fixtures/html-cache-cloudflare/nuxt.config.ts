@@ -18,8 +18,12 @@ export default defineNuxtConfig({
 
   // The whole opt-in. No module option turns HTML caching on.
   routeRules: {
-    '/cached': { headers: { 'cache-control': 'public, s-maxage=300' } },
-    '/private': { headers: { 'cache-control': 'private, no-store' } },
+    '/cached': {
+      headers: { 'cache-control': 'public, s-maxage=300' },
+    },
+    '/private': {
+      headers: { 'cache-control': 'private, no-store' },
+    },
   },
 
   skewProtection: {

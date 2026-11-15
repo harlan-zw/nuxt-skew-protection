@@ -9,7 +9,14 @@ vi.mock('nuxt/server', () => ({
 
 function requestEvent(): RequestEvent {
   const url = new URL('http://localhost/__skew-devtools/debug-production?url=https://example.com')
-  return { req: new Request(url), url, context: {}, res: { headers: new Headers() } }
+  return {
+    req: new Request(url),
+    url,
+    context: {},
+    res: {
+      headers: new Headers(),
+    },
+  }
 }
 
 describe('production debug proxy response cleanup', () => {
@@ -23,7 +30,9 @@ describe('production debug proxy response cleanup', () => {
     const result = await handler(requestEvent())
 
     expect(result.errors).toEqual(expect.arrayContaining([`Health check failed: HTTP ${status} `, `Manifest fetch failed: HTTP ${status} `]))
-    expect(cancel).toHaveBeenCalledTimes(status === 503 ? 4 : 2)
+    expect(cancel).toHaveBeenCalledTimes(status === 503
+      ? 4
+      : 2)
   })
 
   it('reports a body cancellation failure through the existing diagnostics', async () => {

@@ -51,7 +51,15 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
 
   if (isBot) {
     logger.debug(`[${name}] Skipping connection for bot`)
-    return { connect: () => {}, disconnect: () => {}, send: () => {}, sendRoute: () => {}, subscribeStats: () => {}, buildId, cookie }
+    return {
+      connect: () => {},
+      disconnect: () => {},
+      send: () => {},
+      sendRoute: () => {},
+      subscribeStats: () => {},
+      buildId,
+      cookie,
+    }
   }
 
   // Set cookie client-side if not already set
@@ -99,7 +107,9 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     })
     // A synchronous subscription hook can disconnect or start a replacement.
     if (generation !== openedGeneration) {
-      const close = result && typeof result === 'object' ? result.cleanup : result
+      const close = result && typeof result === 'object'
+        ? result.cleanup
+        : result
       close?.()
       return
     }
@@ -286,5 +296,13 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
     })
   }
 
-  return { connect, disconnect, send, sendRoute, subscribeStats, buildId, cookie }
+  return {
+    connect,
+    disconnect,
+    send,
+    sendRoute,
+    subscribeStats,
+    buildId,
+    cookie,
+  }
 }

@@ -11,7 +11,9 @@ import { getRuntimeConfigSkewProtection } from './getRuntimeConfigSkewProtection
  */
 export function getSkewProtectionCookieName(event?: SkewProtectionEvent): string | undefined {
   const { cookie } = getRuntimeConfigSkewProtection(event)
-  return cookie === false ? undefined : cookie.name
+  return cookie === false
+    ? undefined
+    : cookie.name
 }
 
 /**

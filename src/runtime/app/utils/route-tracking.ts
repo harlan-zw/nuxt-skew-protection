@@ -10,7 +10,9 @@ export interface RouteTrackingRouter {
  * so the server knows the client's starting route when route tracking is on.
  */
 export function resolveInitialRouteQuery(routeTracking: boolean | undefined, router: RouteTrackingRouter): string {
-  return routeTracking ? `?route=${encodeURIComponent(router.currentRoute.value.path)}` : ''
+  return routeTracking
+    ? `?route=${encodeURIComponent(router.currentRoute.value.path)}`
+    : ''
 }
 
 /**

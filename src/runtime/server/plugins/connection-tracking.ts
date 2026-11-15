@@ -46,9 +46,20 @@ export default defineNitroPlugin((nitroApp) => {
     for (const [id, conn] of connections.entries()) {
       versions[conn.version] = (versions[conn.version] || 0) + 1
       routes[conn.route] = (routes[conn.route] || 0) + 1
-      connectionList.push({ id, version: conn.version, route: conn.route, ip: conn.ip })
+      connectionList.push({
+        id,
+        version: conn.version,
+        route: conn.route,
+        ip: conn.ip,
+      })
     }
-    return { total: connections.size, versions, routes, connections: connectionList, yourId: forId }
+    return {
+      total: connections.size,
+      versions,
+      routes,
+      connections: connectionList,
+      yourId: forId,
+    }
   }
 
   const broadcastToSubscribers = () => {
@@ -58,7 +69,10 @@ export default defineNitroPlugin((nitroApp) => {
       if (subscription._tag !== 'Authorized')
         continue
       const conn = connections.get(id)
-      conn?.send({ type: 'stats', ...getStats(id) })
+      conn?.send({
+        type: 'stats',
+        ...getStats(id),
+      })
     }
   }
 
@@ -67,7 +81,12 @@ export default defineNitroPlugin((nitroApp) => {
     callback(getStats())
   })
   nitroApp.hooks.hook('skew:connection:open', ({ id, version, route, ip, send }: ConnectionOpenPayload) => {
-    connections.set(id, { version, route: route || '/', ip, send })
+    connections.set(id, {
+      version,
+      route: route || '/',
+      ip,
+      send,
+    })
     broadcastToSubscribers()
   })
   nitroApp.hooks.hook('skew:connection:route-update', ({ id, route }: RouteUpdatePayload) => {
@@ -102,7 +121,10 @@ export default defineNitroPlugin((nitroApp) => {
 
     if (authorized) {
       statsSubscriptions.set(id, { _tag: 'Authorized' })
-      conn.send({ type: 'stats', ...getStats(id) })
+      conn.send({
+        type: 'stats',
+        ...getStats(id),
+      })
     }
     else {
       statsSubscriptions.delete(id)

@@ -155,7 +155,9 @@ for (const name of ['scheduled', 'email', 'queue', 'tail', 'trace']) {
 assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch')
 `, 'utf-8'),
       ])
-      await expect(promisify(execFile)('node', [join(testDir, 'verify.mjs')])).resolves.toMatchObject({ stdout: '' })
+      await expect(promisify(execFile)('node', [
+        join(testDir, 'verify.mjs'),
+      ])).resolves.toMatchObject({ stdout: '' })
     }
     finally {
       await rm(testDir, { force: true, recursive: true })
@@ -266,7 +268,9 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
   it('keeps non-build requests untouched', () => {
     expect(fetchCloudflareBuildAsset(
       new Request('https://example.com/favicon.ico'),
-      { fetch: vi.fn() },
+      {
+        fetch: vi.fn(),
+      },
       '/_nuxt/',
       '/__skew/asset',
     )).toBeUndefined()
@@ -311,7 +315,9 @@ assert.equal(handler.fetch(new Request('https://example.com/'), {}, {}), 'fetch'
   it('tags rejected recovery requests with an x-robots-tag that blocks indexing', async () => {
     const response = await fetchCloudflareBuildAsset(
       new Request('https://example.com/__skew/asset'),
-      { fetch: vi.fn() },
+      {
+        fetch: vi.fn(),
+      },
       '/_nuxt/',
       '/__skew/asset',
     )

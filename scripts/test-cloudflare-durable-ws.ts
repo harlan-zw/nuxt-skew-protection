@@ -294,7 +294,9 @@ async function main() {
 
         // KV returns JSON as a string, so we need to parse it twice
         const firstParse = JSON.parse(kvOutput)
-        const manifest = typeof firstParse === 'string' ? JSON.parse(firstParse) : firstParse
+        const manifest = typeof firstParse === 'string'
+          ? JSON.parse(firstParse)
+          : firstParse
 
         if (!manifest.current || !manifest.versions) {
           throw new Error(`Invalid manifest structure: ${JSON.stringify(manifest)}`)
@@ -338,7 +340,9 @@ async function main() {
 
         // KV returns JSON as a string, parse it twice
         const firstParse = JSON.parse(kvOutput)
-        const manifest = typeof firstParse === 'string' ? JSON.parse(firstParse) : firstParse
+        const manifest = typeof firstParse === 'string'
+          ? JSON.parse(firstParse)
+          : firstParse
         const versionInfo = manifest.versions[deployment2.deploymentId]
 
         if (!versionInfo) {

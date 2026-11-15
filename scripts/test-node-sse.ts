@@ -113,7 +113,9 @@ class SSEClient {
       this.eventSource.onmessage = (event: any) => {
         try {
           const message = JSON.parse(event.data) as SSEMessage
-          log(`  📨 Received: ${message.type}${message.version ? ` (version: ${message.version})` : ''}`, 'cyan')
+          log(`  📨 Received: ${message.type}${message.version
+            ? ` (version: ${message.version})`
+            : ''}`, 'cyan')
           this.messages.push(message)
         }
         catch (error) {

@@ -20,7 +20,9 @@ export default defineNuxtPlugin({
     const skewConfig = runtimeConfig.public.skewProtection as { routeTracking?: boolean, basePath?: string }
     const routeTracking = skewConfig?.routeTracking
     const basePath = skewConfig?.basePath || '/__skew'
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const protocol = window.location.protocol === 'https:'
+      ? 'wss:'
+      : 'ws:'
 
     // Include initial route in connection URL if route tracking enabled
     const initialRoute = resolveInitialRouteQuery(routeTracking, router)
@@ -63,6 +65,8 @@ export default defineNuxtPlugin({
     // Track route changes if enabled
     trackRouteChanges(router, routeTracking, skewConnection)
 
-    return { provide: { skewConnection } }
+    return {
+      provide: { skewConnection },
+    }
   },
 })

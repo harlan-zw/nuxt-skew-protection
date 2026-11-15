@@ -23,14 +23,18 @@ const versions = computed(() => {
       expires: new Date(info.expires),
       assetCount: info.assets?.length || 0,
       deletedChunks: info.deletedChunks?.length || 0,
-      isExpired: currentTime === null ? false : new Date(info.expires).getTime() < currentTime,
+      isExpired: currentTime === null
+        ? false
+        : new Date(info.expires).getTime() < currentTime,
     }))
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 })
 
 const currentBuildId = computed(() => {
   const id = productionData.value?.manifest?.id
-  return typeof id === 'string' ? id : null
+  return typeof id === 'string'
+    ? id
+    : null
 })
 
 function formatDate(date: Date): string {

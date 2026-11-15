@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import memoryPlugin from '../../src/runtime/server/plugins/connection-tracking'
 import durablePlugin from '../../src/runtime/server/plugins/connection-tracking-cloudflare-durable'
 
-vi.mock('#nuxtseo/nitro', () => ({ defineNitroPlugin: (plugin: unknown) => plugin }))
+vi.mock('#nuxtseo/nitro', () => ({
+  defineNitroPlugin: (plugin: unknown) => plugin,
+}))
 
 type Hook = (payload: any) => unknown
 
@@ -13,7 +15,10 @@ function createTracker(mode: 'memory' | 'durable') {
   const app = {
     hooks: {
       hook(name: string, callback: Hook) {
-        callbacks.set(name, [...(callbacks.get(name) ?? []), callback])
+        callbacks.set(name, [
+          ...(callbacks.get(name) ?? []),
+          callback,
+        ])
       },
       async callHook(name: string, payload: unknown) {
         for (const callback of callbacks.get(name) ?? [])
@@ -21,7 +26,9 @@ function createTracker(mode: 'memory' | 'durable') {
       },
     },
   }
-  const receive = (message: unknown) => messages.push(typeof message === 'string' ? JSON.parse(message) : message)
+  const receive = (message: unknown) => messages.push(typeof message === 'string'
+    ? JSON.parse(message)
+    : message)
   function connection(id: string) {
     let attachment: Record<string, unknown> = {}
     const ws = {
@@ -36,10 +43,21 @@ function createTracker(mode: 'memory' | 'durable') {
       version: 'build-fixture',
       route: '/',
       send: receive,
-      peer: { _internal: { ws, durable: { ctx: { getWebSockets: () => sockets } } } },
+      peer: {
+        _internal: {
+          ws,
+          durable: {
+            ctx: {
+              getWebSockets: () => sockets,
+            },
+          },
+        },
+      },
     }
   }
-  const plugin = mode === 'memory' ? memoryPlugin : durablePlugin
+  const plugin = mode === 'memory'
+    ? memoryPlugin
+    : durablePlugin
   // Nitro supplies more fields. These plugins consume only the hook boundary.
   plugin(app as never)
   return { app, messages, connection }
@@ -54,9 +72,15 @@ describe.each(['memory', 'durable'] as const)('%s stats subscriptions', (mode) =
         authorize()
     })
     await app.hooks.callHook('skew:connection:open', subscriber)
-    await app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'admin' } })
+    await app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'admin' },
+    })
     expect(messages.at(-1)).toMatchObject({ type: 'stats' })
-    await app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'viewer' } })
+    await app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'viewer' },
+    })
     expect(messages.at(-1)).toEqual({ type: 'stats-unauthorized' })
     messages.length = 0
     await app.hooks.callHook('skew:connection:route-update', { ...subscriber, route: '/next-page' })
@@ -78,8 +102,14 @@ describe.each(['memory', 'durable'] as const)('%s stats subscriptions', (mode) =
       }
     })
     await app.hooks.callHook('skew:connection:open', subscriber)
-    await app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'admin' } })
-    const pending = app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'viewer' } })
+    await app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'admin' },
+    })
+    const pending = app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'viewer' },
+    })
     messages.length = 0
     await app.hooks.callHook('skew:connection:route-update', { ...subscriber, route: '/next-page' })
     expect(messages).toEqual([])
@@ -100,8 +130,14 @@ describe.each(['memory', 'durable'] as const)('%s stats subscriptions', (mode) =
       }
     })
     await app.hooks.callHook('skew:connection:open', subscriber)
-    const earlier = app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'admin' } })
-    await app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'viewer' } })
+    const earlier = app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'admin' },
+    })
+    await app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'viewer' },
+    })
     finish!()
     await earlier
     messages.length = 0
@@ -119,8 +155,14 @@ describe.each(['memory', 'durable'] as const)('%s stats subscriptions', (mode) =
         throw new Error('Fixture authorization failure')
     })
     await app.hooks.callHook('skew:connection:open', subscriber)
-    await app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'admin' } })
-    await expect(app.hooks.callHook('skew:subscribe-stats', { ...subscriber, event: { role: 'viewer' } })).rejects.toThrow('Fixture authorization failure')
+    await app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'admin' },
+    })
+    await expect(app.hooks.callHook('skew:subscribe-stats', {
+      ...subscriber,
+      event: { role: 'viewer' },
+    })).rejects.toThrow('Fixture authorization failure')
     messages.length = 0
     await app.hooks.callHook('skew:connection:route-update', { ...subscriber, route: '/next-page' })
     expect(messages).toEqual([])
@@ -131,7 +173,10 @@ describe('durable connection lifecycle', () => {
   it('removes a closing connection from broadcast totals', async () => {
     const { app, messages, connection } = createTracker('durable')
     const subscriber = connection('subscriber')
-    const closing = { ...connection('closing'), version: 'previous-build' }
+    const closing = {
+      ...connection('closing'),
+      version: 'previous-build',
+    }
     app.hooks.hook('skew:authorize-stats', ({ authorize }) => authorize())
     await app.hooks.callHook('skew:connection:open', subscriber)
     await app.hooks.callHook('skew:connection:open', closing)
@@ -141,11 +186,13 @@ describe('durable connection lifecycle', () => {
     closing.peer._internal.ws.readyState = WebSocket.CLOSING
     await app.hooks.callHook('skew:connection:close', closing)
 
-    expect(messages).toEqual([expect.objectContaining({
-      type: 'stats',
-      total: 1,
-      versions: { 'build-fixture': 1 },
-    })])
+    expect(messages).toEqual([
+      expect.objectContaining({
+        type: 'stats',
+        total: 1,
+        versions: { 'build-fixture': 1 },
+      }),
+    ])
   })
 
   it('does not broadcast to a closing subscriber', async () => {

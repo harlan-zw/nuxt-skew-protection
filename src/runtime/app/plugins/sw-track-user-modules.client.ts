@@ -198,7 +198,10 @@ export default defineNuxtPlugin({
 
       // Sort versions by timestamp to find the range
       const sortedVersions = Object.entries(versions)
-        .map(([id, data]) => ({ id, timestamp: new Date(data.timestamp).getTime() }))
+        .map(([id, data]) => ({
+          id,
+          timestamp: new Date(data.timestamp).getTime(),
+        }))
         .sort((a, b) => a.timestamp - b.timestamp)
 
       const currentIdx = sortedVersions.findIndex(v => v.id === clientVersion)

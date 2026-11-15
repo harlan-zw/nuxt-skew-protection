@@ -63,7 +63,9 @@ function isDocumentRequest(request: HtmlCacheRequest): boolean {
 
 function directive(value: string, name: string): number | undefined {
   const match = value.match(new RegExp(`(?:^|[,\\s])${name}=(\\d+)`, 'i'))
-  return match ? Number(match[1]) : undefined
+  return match
+    ? Number(match[1])
+    : undefined
 }
 
 /**
@@ -79,7 +81,9 @@ export function sharedCacheSeconds(cacheControl: unknown): number | null {
   // here rather than asserting a string keeps a duplicated header from throwing
   // inside a hook whose rejection Nitro swallows, which would leave the feature
   // silently dead rather than loudly wrong.
-  const raw = Array.isArray(cacheControl) ? cacheControl.join(', ') : cacheControl
+  const raw = Array.isArray(cacheControl)
+    ? cacheControl.join(', ')
+    : cacheControl
   if (typeof raw !== 'string' || !raw)
     return null
   const value = raw.toLowerCase()
@@ -106,7 +110,9 @@ export function sharedCacheSeconds(cacheControl: unknown): number | null {
 export function sharedWindowFromMaxAgeAlone(cacheControl: unknown): boolean {
   if (sharedCacheSeconds(cacheControl) === null)
     return false
-  const raw = Array.isArray(cacheControl) ? cacheControl.join(', ') : cacheControl
+  const raw = Array.isArray(cacheControl)
+    ? cacheControl.join(', ')
+    : cacheControl
   if (typeof raw !== 'string')
     return false
   return directive(raw.toLowerCase(), 's-maxage') === undefined
@@ -175,7 +181,9 @@ export function withoutCookie(
 ): string[] {
   if (!setCookie)
     return []
-  const all = Array.isArray(setCookie) ? setCookie : [setCookie]
+  const all = Array.isArray(setCookie)
+    ? setCookie
+    : [setCookie]
   return all.filter(entry => !entry.trimStart().toLowerCase().startsWith(`${name.toLowerCase()}=`))
 }
 
@@ -290,7 +298,9 @@ function ruleWindow(rule: InspectableRouteRule): { seconds: number, source: Over
 
   const cache = rule.cache as { maxAge?: unknown, staleMaxAge?: unknown } | undefined
   if (cache && typeof cache === 'object' && typeof cache.maxAge === 'number') {
-    const stale = typeof cache.staleMaxAge === 'number' ? cache.staleMaxAge : 0
+    const stale = typeof cache.staleMaxAge === 'number'
+      ? cache.staleMaxAge
+      : 0
     return { seconds: cache.maxAge + stale, source: 'cache', fromMaxAgeAlone: false }
   }
 
@@ -337,8 +347,14 @@ export function cachingRouteRules(
     if (!isHtmlCapableRoute(route, rule, publicAssetPrefixes))
       continue
     const window = ruleWindow(rule)
-    if (window)
-      caching.push({ route, seconds: window.seconds, source: window.source, fromMaxAgeAlone: window.fromMaxAgeAlone })
+    if (window) {
+      caching.push({
+        route,
+        seconds: window.seconds,
+        source: window.source,
+        fromMaxAgeAlone: window.fromMaxAgeAlone,
+      })
+    }
   }
   return caching
 }
@@ -396,7 +412,11 @@ export function readSetCookies(
     return headers.getSetCookie()
   if (Array.isArray(fallback))
     return fallback
-  return fallback === undefined || fallback === '' ? [] : [String(fallback)]
+  return fallback === undefined || fallback === ''
+    ? []
+    : [
+        String(fallback),
+      ]
 }
 
 /**

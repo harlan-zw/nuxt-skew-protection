@@ -64,7 +64,9 @@ export function resolveBasePath(input: ResolveBasePathInput = {}): string {
 
   if (input.basePath) {
     const explicit = `/${trimSlashes(input.basePath)}`
-    return isUnder(explicit, baseURL) ? explicit : joinSegments(baseURL, explicit)
+    return isUnder(explicit, baseURL)
+      ? explicit
+      : joinSegments(baseURL, explicit)
   }
 
   // Absolute buildAssetsDir: the prefix before `_nuxt` is the mount point.
@@ -73,7 +75,9 @@ export function resolveBasePath(input: ResolveBasePathInput = {}): string {
   if (assetsDir.startsWith('/')) {
     const segments = trimSlashes(assetsDir).split('/').filter(Boolean)
     const nuxtAssetsIndex = segments.indexOf('_nuxt')
-    const mountEnd = nuxtAssetsIndex === -1 ? segments.length - 1 : nuxtAssetsIndex
+    const mountEnd = nuxtAssetsIndex === -1
+      ? segments.length - 1
+      : nuxtAssetsIndex
     mount = segments.slice(0, mountEnd).join('/')
   }
 
@@ -117,5 +121,7 @@ export function resolveCookieName(explicitName: string | undefined, basePath: st
     segments.pop()
 
   const slug = segments.join('_')
-  return slug ? `${DEFAULT_COOKIE_NAME}_${slug}` : DEFAULT_COOKIE_NAME
+  return slug
+    ? `${DEFAULT_COOKIE_NAME}_${slug}`
+    : DEFAULT_COOKIE_NAME
 }

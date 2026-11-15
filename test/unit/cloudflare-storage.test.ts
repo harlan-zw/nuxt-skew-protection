@@ -36,7 +36,15 @@ describe('cloudflare KV namespace resolution', () => {
   })
 
   it.each([
-    ['json', JSON.stringify({ kv_namespaces: [{ binding: 'SKEW_PROTECTION', id: 'json-id' }] }), 'json-id'],
+    [
+      'json',
+      JSON.stringify({
+        kv_namespaces: [
+          { binding: 'SKEW_PROTECTION', id: 'json-id' },
+        ],
+      }),
+      'json-id',
+    ],
     ['jsonc', `{
       // Dedicated storage for retained assets.
       "kv_namespaces": [
