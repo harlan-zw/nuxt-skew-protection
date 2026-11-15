@@ -727,7 +727,7 @@ export {}
             ...options,
             buildAssetsDir: nuxt.options.app.buildAssetsDir,
             persistAssets: options.bundleAssets !== false,
-            driver: await resolveBuildTimeDriver(options.storage!),
+            driver: await resolveBuildTimeDriver(options.storage!, nitro.options),
           })
 
           // Get list of assets from build
