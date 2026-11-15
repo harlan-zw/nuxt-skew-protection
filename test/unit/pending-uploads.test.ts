@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { createStorage } from 'unstorage'
+import fsDriver from 'unstorage/drivers/fs'
+import fsLiteDriver from 'unstorage/drivers/fs-lite'
 import memoryDriver from 'unstorage/drivers/memory'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createAssetManager } from '../../src/utils/version-manager'
@@ -22,6 +24,43 @@ describe('abandoned asset uploads', () => {
 
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true })
+  })
+
+  it.each([
+    { name: 'fs', createDriver: fsDriver },
+
+    { name: 'fs-lite', createDriver: fsLiteDriver },
+  ])('publishes identical bytes beside an uncertain filesystem object: $name', async ({ createDriver }) => {
+    const driver = createDriver({
+      base: join(directory, 'storage'),
+    })
+    const storage = createStorage({ driver })
+    await storage.setItemRaw(key, Buffer.from('new bytes'))
+    await storage.setItem('pending-uploads.json', {
+      _tag: 'PendingUploads',
+      keys: [key],
+      uncertainKeys: [key],
+    })
+
+    const manager = createAssetManager({ driver, maxNumberOfVersions: 1 })
+    await manager.publishBuild('next', directory, [asset])
+    const replacementKey = (await manager.getManifest()).versions.next!.storageKeys![asset]!
+    expect(replacementKey).not.toBe(key)
+    expect(await storage.getItemRaw(replacementKey)).toEqual(Buffer.from('new bytes'))
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+
+    await writeFile(join(directory, '_nuxt', 'builds', 'latest.json'), JSON.stringify({ id: 'second' }))
+    await writeFile(join(directory, '_nuxt', 'builds', 'meta', 'second.json'), JSON.stringify({ id: 'second' }))
+    await manager.publishBuild('second', directory, [asset])
+    expect((await manager.getManifest()).versions.second!.storageKeys![asset]).toBe(replacementKey)
+
+    await writeFile(join(directory, asset), 'changed bytes')
+    await writeFile(join(directory, '_nuxt', 'builds', 'latest.json'), JSON.stringify({ id: 'third' }))
+    await writeFile(join(directory, '_nuxt', 'builds', 'meta', 'third.json'), JSON.stringify({ id: 'third' }))
+    await manager.publishBuild('third', directory, [asset])
+    expect(await storage.getItemRaw(replacementKey)).toBeNull()
+    expect(await storage.getItemRaw(key)).toEqual(Buffer.from('new bytes'))
+    await storage.dispose()
   })
 
   it.each(['strong', 'eventual'] as const)('recovers interrupted asset uploads only with %s reads', async (readConsistency) => {

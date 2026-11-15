@@ -10,7 +10,7 @@ import { logger } from '../logger'
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
 const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
 const PENDING_UPLOADS_KEY = 'pending-uploads.json'
-const RE_BLOB_KEY = /^blobs\/[a-f0-9]{64}(?:\/[a-f0-9-]{36})?$/
+const RE_BLOB_KEY = /^blobs\/[a-f0-9]{64}(?:[-/][a-f0-9-]{36})?$/
 
 interface PendingUploads {
   _tag: 'PendingUploads'
@@ -666,7 +666,7 @@ export function createAssetManager(options: {
     for (const data of Object.values(manifest.versions)) {
       for (const key of Object.values(data.storageKeys || {})) {
         if (RE_BLOB_KEY.test(key) && !uncertainObjectKeys.has(key) && !await hasUncertainOperation(key))
-          reusableKeys.set(key.split('/')[1]!, key)
+          reusableKeys.set(key.slice('blobs/'.length, 'blobs/'.length + 64), key)
       }
     }
 
@@ -678,7 +678,8 @@ export function createAssetManager(options: {
         const hash = createHash('sha256').update(assetData).digest('hex')
         const canonicalKey = `blobs/${hash}`
         const storageKey = reusableKeys.get(hash) || (uncertainObjectKeys.has(canonicalKey) || await hasUncertainOperation(canonicalKey)
-          ? `${canonicalKey}/${randomUUID()}`
+          // Keep replacements beside canonical files for filesystem drivers.
+          ? `${canonicalKey}-${randomUUID()}`
           : canonicalKey)
         reusableKeys.set(hash, storageKey)
         return { asset, assetData, storageKey }
