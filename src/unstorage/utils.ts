@@ -10,6 +10,10 @@ export interface WranglerKVNamespace {
   id?: string
 }
 
+interface BuildTimeNitroOptions {
+  cloudflare?: { wrangler?: { kv_namespaces?: unknown } }
+}
+
 function parseWranglerKVNamespaces(value: unknown, source: string): WranglerKVNamespace[] {
   if (value === undefined)
     return []
@@ -59,7 +63,15 @@ export async function readWranglerKVNamespaces(path: string): Promise<WranglerKV
 }
 
 /** Detect a named Cloudflare KV binding from Nitro or Wrangler configuration. */
-async function detectCloudflareKVNamespace(binding: string): Promise<string | null> {
+async function detectCloudflareKVNamespace(binding: string, nitroOptions?: BuildTimeNitroOptions): Promise<string | null> {
+  const resolvedNamespaces = parseWranglerKVNamespaces(
+    nitroOptions?.cloudflare?.wrangler?.kv_namespaces,
+    'nitro.options.cloudflare.wrangler.kv_namespaces',
+  )
+  const resolvedNamespaceId = selectCloudflareKVNamespace(resolvedNamespaces, binding)
+  if (resolvedNamespaceId)
+    return resolvedNamespaceId
+
   const nuxt = useNuxt()
   const nitroNamespaces = parseWranglerKVNamespaces(
     nuxt.options.nitro?.cloudflare?.wrangler?.kv_namespaces,
@@ -92,6 +104,7 @@ async function detectCloudflareKVNamespace(binding: string): Promise<string | nu
 /** Resolve a CLI-capable build-time equivalent for a runtime storage driver. */
 export async function resolveBuildTimeDriver(
   storage: Required<ModuleOptions>['storage'],
+  nitroOptions?: BuildTimeNitroOptions,
 ): Promise<Driver> {
   const {
     driver,
@@ -105,7 +118,7 @@ export async function resolveBuildTimeDriver(
     const binding = typeof configuredBinding === 'string' ? configuredBinding : 'SKEW_PROTECTION'
     const namespaceId = typeof configuredNamespaceId === 'string'
       ? configuredNamespaceId
-      : await detectCloudflareKVNamespace(binding)
+      : await detectCloudflareKVNamespace(binding, nitroOptions)
 
     if (!namespaceId) {
       throw new Error(
