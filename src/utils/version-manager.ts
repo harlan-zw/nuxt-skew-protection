@@ -9,6 +9,7 @@ import { logger } from '../logger'
 
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
 const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
+const RE_HTTP_STATUS = /(?:^|:\s+|\b(?:HTTP(?: error)?|status(?: code)?)\s+)([1-5]\d{2})(?=\s|$)/i
 const PENDING_UPLOADS_KEY = 'pending-uploads.json'
 const RE_BLOB_KEY = /^blobs\/[a-f0-9]{64}(?:[-/][a-f0-9-]{36})?$/
 
@@ -40,7 +41,8 @@ function formatStorageError(error: unknown, operation: string): Error {
   }
 
   // Auth/permission errors
-  if (message.includes('401') || message.includes('Unauthorized') || message.includes('WRONGPASS')) {
+  const httpStatus = message.match(RE_HTTP_STATUS)?.[1]
+  if (httpStatus === '401' || (!httpStatus && (message.includes('Unauthorized') || message.includes('WRONGPASS')))) {
     return new Error(`Storage ${operation} failed: Authentication failed. Check your storage credentials.`)
   }
 
@@ -529,7 +531,17 @@ export function createAssetManager(options: {
     logger.debug(`updateVersionsManifest: loaded manifest in ${formatDuration(Date.now() - manifestStart)} (${Object.keys(manifest.versions).length} versions)`)
 
     // Check if this version already exists.
-    const isExistingVersion = !!manifest.versions[buildId]
+    const existingVersion = manifest.versions[buildId]
+    const isExistingVersion = !!existingVersion
+    const previousStorageKeys = existingVersion
+      ? Object.fromEntries(existingVersion.assets.map(asset => [
+          asset,
+          assetStorageKey(buildId, existingVersion, asset),
+        ]))
+      : undefined
+    // Keep displaced objects recoverable before replacing this build's references.
+    if (previousStorageKeys)
+      await recordPendingUploads(Object.values(previousStorageKeys))
     const previousVersionId = manifest.current && manifest.current !== buildId
       ? manifest.current
       : getPreviousVersion(manifest, buildId)
@@ -543,6 +555,9 @@ export function createAssetManager(options: {
       assets: persistAssets
         ? [...assets]
         : [],
+      ...(previousStorageKeys
+        ? { storageKeys: previousStorageKeys }
+        : {}),
       // Store original assets for deletedChunks calculation (assets array gets modified by deduplication)
       originalAssets: [...assets],
       deletedChunks: calculateDeletedChunks(assets, previousAssets),
@@ -674,9 +689,9 @@ export function createAssetManager(options: {
     let deduplicatedCount = 0
     let totalBytes = 0
     let skippedCount = 0
-    const supersededKeys: string[] = []
     const version = manifest.versions[buildId]!
-    version.storageKeys = {}
+    const supersededKeys = Object.values(version.storageKeys || {})
+    await recordPendingUploads(supersededKeys)
     const uploads = new Map<string, Promise<void>>()
     const uncertainObjectKeys = new Set((await getPendingUploads()).uncertainKeys)
     const hasUncertainOperation = createOperationReader()
@@ -695,6 +710,7 @@ export function createAssetManager(options: {
       if (safeKeys.has(key))
         reusableKeys.set(key.slice('blobs/'.length, 'blobs/'.length + 64), key)
     }
+    version.storageKeys = {}
 
     const storeStart = Date.now()
 
@@ -1013,7 +1029,11 @@ export function createAssetManager(options: {
       await storeAssetsInStorage(buildId, publicDir, storedAssets, manifest)
     }
     else {
-      const removedKeys = limitVersionCount(manifest, buildId)
+      const removedKeys = [
+        ...Object.values(manifest.versions[buildId]!.storageKeys || {}),
+        ...limitVersionCount(manifest, buildId),
+      ]
+      delete manifest.versions[buildId]!.storageKeys
       await recordPendingUploads(removedKeys)
       await commitVersionManifest(manifest)
       await finishAssetCleanup(manifest, removedKeys)
