@@ -12,6 +12,26 @@ const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/
 const RE_HTTP_STATUS = /(?:^|:\s+|\b(?:HTTP(?: error)?|status(?: code)?)\s+)([1-5]\d{2})(?=\s|$)/i
 const PENDING_UPLOADS_KEY = 'pending-uploads.json'
 const RE_BLOB_KEY = /^blobs\/[a-f0-9]{64}(?:[-/][a-f0-9-]{36})?$/
+const RE_VERSION_PREFIX = /^[\w-][\w.-]*$/
+const RE_UNSAFE_STORAGE_KEY = /[\\:%?#\s\p{Cc}]/u
+const RESERVED_STORAGE_PREFIXES = new Set([
+  'blobs',
+  'asset-operations',
+  'asset-operation-completions',
+  PENDING_UPLOADS_KEY,
+  'version-manifest.json',
+])
+
+function isRecoverableAssetKey(key: string): boolean {
+  if (RE_BLOB_KEY.test(key))
+    return true
+  const [version, ...segments] = key.split('/')
+  return !!version && RE_VERSION_PREFIX.test(version)
+    && !RESERVED_STORAGE_PREFIXES.has(version.toLowerCase())
+    && !RE_UNSAFE_STORAGE_KEY.test(key)
+    && segments.length > 0
+    && segments.every(segment => segment.length > 0 && segment !== '.' && segment !== '..')
+}
 
 interface PendingUploads {
   _tag: 'PendingUploads'
@@ -388,9 +408,9 @@ export function createAssetManager(options: {
       typeof value !== 'object' || value === null
       || !('_tag' in value) || value._tag !== 'PendingUploads'
       || !('keys' in value) || !Array.isArray(value.keys)
-      || !value.keys.every(key => typeof key === 'string' && RE_BLOB_KEY.test(key))
+      || !value.keys.every(key => typeof key === 'string' && isRecoverableAssetKey(key))
     ) {
-      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+      throw new TypeError('Invalid pending asset uploads. Expected stored asset keys.')
     }
     const keys: string[] = value.keys
     // Records without a commit outcome cannot authorize deletion.
@@ -399,7 +419,7 @@ export function createAssetManager(options: {
       : keys
     if (!Array.isArray(uncertainKeys)
       || !uncertainKeys.every(key => typeof key === 'string' && key.length > 0)) {
-      throw new TypeError('Invalid pending asset uploads. Expected content-addressed object keys.')
+      throw new TypeError('Invalid pending asset uploads. Expected stored asset keys.')
     }
     return {
       _tag: 'PendingUploads',
@@ -409,7 +429,7 @@ export function createAssetManager(options: {
   }
 
   async function recordPendingUploads(keys: Iterable<string>) {
-    const additions = [...keys].filter(key => RE_BLOB_KEY.test(key))
+    const additions = [...keys].filter(isRecoverableAssetKey)
     if (additions.length === 0)
       return
     const previous = await getPendingUploads()
@@ -431,7 +451,7 @@ export function createAssetManager(options: {
     const keys = [
       ...new Set([
         ...previous.keys,
-        ...references.filter(key => RE_BLOB_KEY.test(key)),
+        ...references.filter(isRecoverableAssetKey),
       ]),
     ]
     if (references.length > 0) {
@@ -474,7 +494,7 @@ export function createAssetManager(options: {
       keys: [
         ...new Set([
           ...remaining,
-          ...current.uncertainKeys.filter(key => RE_BLOB_KEY.test(key)),
+          ...current.uncertainKeys.filter(isRecoverableAssetKey),
         ]),
       ],
     })
