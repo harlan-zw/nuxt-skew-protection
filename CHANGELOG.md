@@ -1,3 +1,11 @@
+## 2.0.5
+
+[Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.4...v2.0.5)
+
+- perf(storage): batch and cache asset safety reads (#120) ([62ae3e4](https://github.com/harlan-zw/nuxt-skew-protection/commit/62ae3e4b0b41377cfe8f7cf4b07384f230173ab2))
+- fix(storage): retain references when republishing builds (#121) ([ee94308](https://github.com/harlan-zw/nuxt-skew-protection/commit/ee94308d35518f1bdf784de52765ca830a52ce91))
+- fix(storage): recover displaced legacy asset objects (#122) ([3e33e41](https://github.com/harlan-zw/nuxt-skew-protection/commit/3e33e4183fe68fc48c80b508152ea58a9a41e473))
+
 ## 2.0.4
 
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.3...v2.0.4)
