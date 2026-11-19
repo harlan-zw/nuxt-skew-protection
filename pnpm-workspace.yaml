@@ -54,10 +54,13 @@ packages:
   - test/fixtures/*
   - '!test/fixtures/nuxt5'
 
-# Local migration proof overrides
 overrides:
+  # Local migration proof overrides
   '@nuxtjs/robots': https://pkg.pr.new/nuxt-modules/robots/@nuxtjs/robots@24f4dcdbf3cd8d4c19a210b62eec8295eb4772a7
   '@nuxtjs/sitemap': https://pkg.pr.new/nuxt-modules/sitemap/@nuxtjs/sitemap@7879681b68064274eea0be819003669b9422b60d
+  # Security fixes until the parents accept the patched major versions.
+  archiver@8>readdir-glob: ^4.0.0
+  micromark-extension-math@3>katex: ^0.18.2
   nuxt-site-config: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config@59e27b8dc55b21407ce19dfdbb7be0c6571e9490
   nuxt-site-config-kit: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config-kit@59e27b8dc55b21407ce19dfdbb7be0c6571e9490
   nuxtseo-shared: https://pkg.pr.new/harlan-zw/nuxt-seo/nuxtseo-shared@226c091a0744b7286ef721ac035eed53856bfaa5
@@ -91,7 +94,7 @@ catalog:
   '@nuxt/kit': ^4.6.4
   '@nuxt/module-builder': ^1.0.4
   '@nuxt/test-utils': ^4.4.0
-  '@nuxt/ui': ^4.12.0
+  '@nuxt/ui': ^4.13.0
   '@nuxthub/core': 0.10.12
   '@nuxtjs/robots': ^7.0.2
   '@types/ws': ^8.18.2
