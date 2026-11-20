@@ -28,7 +28,7 @@ export function createSkewConnection(config: CreateSkewConnectionConfig): SkewCo
   const buildId = runtimeConfig.app.buildId
 
   // Initialize logger
-  init()
+  init(runtimeConfig.public.skewProtection.debug)
 
   // Skip connection for bots using @nuxtjs/robots detection
   const isBot = useSkewBotDetection()
