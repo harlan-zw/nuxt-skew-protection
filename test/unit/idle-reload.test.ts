@@ -33,6 +33,7 @@ vi.mock('nuxt/app', () => ({
 vi.mock('../../src/runtime/shared/logger', () => ({
   logger: {
     debug: vi.fn(),
+    warn: vi.fn(),
   },
 }))
 
@@ -52,6 +53,7 @@ async function outdateChunks() {
   const plugin = (await import('../../src/runtime/app/plugins/multi-tab.client')).default as any
   plugin.setup()
   await nuxtApp.hooks.callHook('skew:chunks-outdated', { deletedChunks: [], invalidatedModules: [], passedReleases: [] })
+  await vi.dynamicImportSettled()
 }
 
 describe('reloadStrategy: idle', () => {
@@ -93,5 +95,18 @@ describe('reloadStrategy: idle', () => {
     setHidden(true)
     await vi.advanceTimersByTimeAsync(0)
     expect(reloadNuxtApp).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers when the idle helpers are missing after a deployment', async () => {
+    vi.doMock('../../src/runtime/app/utils/wait-for-idle-reload', () => {
+      throw new Error('The previous deployment no longer serves this chunk')
+    })
+    try {
+      await outdateChunks()
+      expect(reloadNuxtApp).toHaveBeenCalledExactlyOnceWith({ force: true, persistState: true })
+    }
+    finally {
+      vi.doUnmock('../../src/runtime/app/utils/wait-for-idle-reload')
+    }
   })
 })

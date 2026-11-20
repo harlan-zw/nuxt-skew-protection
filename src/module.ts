@@ -20,6 +20,7 @@ import {
 } from '@nuxt/kit'
 import { colors } from 'consola/utils'
 import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility, setupRuntimeAliases } from 'nuxtseo-shared/kit'
+import { relative } from 'pathe'
 import { isStaticPreset, resolveNitroPreset } from './kit'
 import { logger } from './logger'
 import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults'
@@ -708,6 +709,13 @@ export {}
 
       // Multi-tab coordination and auto-reload handling
       if (options.multiTab !== false || (options.reloadStrategy && options.reloadStrategy !== 'prompt')) {
+        const idleReloadPath = relative(nuxt.options.srcDir, resolver.resolve('./runtime/app/utils/wait-for-idle-reload'))
+        nuxt.hook('build:manifest', (manifest) => {
+          // The SSR renderer prefetches dynamic imports by default.
+          const idleReload = manifest[`${idleReloadPath}.js`] ?? manifest[`${idleReloadPath}.ts`]
+          if (idleReload)
+            idleReload.prefetch = false
+        })
         addPlugin({
           src: resolver.resolve('./runtime/app/plugins/multi-tab.client'),
           mode: 'client',

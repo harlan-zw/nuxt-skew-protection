@@ -1,13 +1,21 @@
-import type { ConsolaInstance } from 'consola'
-import { useRuntimeConfig } from 'nuxt/app'
-import { createModuleLogger } from 'nuxtseo-shared/utils'
+const tag = '[nuxt-skew-protection]'
+let debugEnabled = false
 
-export const logger: ConsolaInstance = createModuleLogger('nuxt-skew-protection')
+export const logger = {
+  debug(...args: unknown[]) {
+    if (debugEnabled) {
+      // eslint-disable-next-line no-console -- Use the browser console for opt-in debug logs.
+      console.debug(tag, ...args)
+    }
+  },
+  warn(...args: unknown[]) {
+    console.warn(tag, ...args)
+  },
+  error(...args: unknown[]) {
+    console.error(tag, ...args)
+  },
+}
 
-/**
- * Initialize logger with runtime config
- */
-export function init() {
-  const config = useRuntimeConfig()
-  logger.level = config.public.skewProtection.debug ? 4 : 3
+export function init(debug: boolean) {
+  debugEnabled = debug
 }

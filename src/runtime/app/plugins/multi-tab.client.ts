@@ -1,11 +1,8 @@
 import type { NuxtAppManifestMeta } from 'nuxt/app'
-import { until, useDocumentVisibility, useIdle } from '@vueuse/core'
 import { defineNuxtPlugin, reloadNuxtApp, useNuxtApp, useRuntimeConfig, useState } from 'nuxt/app'
 import { logger } from '../../shared/logger'
 
 const CHANNEL_NAME = 'nuxt-skew-protection'
-/** No input for this long counts as idle. */
-const IDLE_TIMEOUT_MS = 60_000
 
 /**
  * Multi-tab coordination via BroadcastChannel.
@@ -39,12 +36,13 @@ export default defineNuxtPlugin({
         else if (reloadStrategy === 'idle' && !waitingForIdle) {
           logger.debug('[AutoReload] Chunks outdated, waiting for idle or a hidden tab')
           waitingForIdle = true
-          const { idle, stop } = useIdle(IDLE_TIMEOUT_MS)
-          const visibility = useDocumentVisibility()
-          until(() => idle.value || visibility.value === 'hidden').toBe(true).then(() => {
-            stop()
-            reloadNuxtApp({ force: true, persistState: true })
-          })
+          void import('../utils/wait-for-idle-reload')
+            .then(({ waitForIdleReload }) => waitForIdleReload())
+            .catch((error) => {
+              // An older tab can lose the idle chunk in the same deployment.
+              logger.warn('[AutoReload] Could not wait for idle. Reloading now.', error)
+            })
+            .then(() => reloadNuxtApp({ force: true, persistState: true }))
         }
       })
     }
