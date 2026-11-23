@@ -3,7 +3,7 @@
 [Compare changes](https://github.com/harlan-zw/nuxt-skew-protection/compare/v2.0.5...v2.0.6)
 
 - Reduce the initial client bundle. The idle reload helper loads only when a stale tab needs it. ([e92b21e](https://github.com/harlan-zw/nuxt-skew-protection/commit/e92b21e18bcbb03fdcf5a61df49e29c817bb42b4))
-- Reload immediately if a stale tab can no longer load the idle reload helper. ([e92b21e](https://github.com/harlan-zw/nuxt-skew-protection/commit/e92b21e18bcbb03fdcf5a61df49e29c817bb42b4))
+- With `reloadStrategy: 'idle'`, reload immediately if a stale tab can no longer load the helper. ([e92b21e](https://github.com/harlan-zw/nuxt-skew-protection/commit/e92b21e18bcbb03fdcf5a61df49e29c817bb42b4))
 
 ## 2.0.5
 
