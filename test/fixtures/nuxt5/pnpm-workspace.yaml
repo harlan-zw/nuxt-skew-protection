@@ -5,6 +5,9 @@ allowBuilds:
   esbuild: true
 
 minimumReleaseAgeExclude:
+  - nuxt-site-config@5.0.4
+  - nuxt-site-config-kit@5.0.4
+  - site-config-stack@5.0.4
   - nuxt-nightly
   - '@nuxt/*-nightly'
   - '@nuxt/kit@4.6.4'
@@ -46,11 +49,11 @@ trustPolicyExclude:
 blockExoticSubdeps: false
 overrides:
   nuxtseo-shared: https://pkg.pr.new/harlan-zw/nuxt-seo/nuxtseo-shared@113287e3fb44472264dd56fc90fb695ff8a9f6dd
-  '@nuxtjs/robots': https://pkg.pr.new/nuxt-modules/robots/@nuxtjs/robots@fbe3d89828df93711f5aa7fc4d5794545bd8014e
-  '@nuxtjs/sitemap': https://pkg.pr.new/nuxt-modules/sitemap/@nuxtjs/sitemap@abbf91b087b3839a745ad077cfc303882a0e84aa
-  nuxt-site-config: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config@40698727ca424460013f3534af9005e36728d669
-  nuxt-site-config-kit: https://pkg.pr.new/harlan-zw/nuxt-site-config/nuxt-site-config-kit@40698727ca424460013f3534af9005e36728d669
-  site-config-stack: https://pkg.pr.new/harlan-zw/nuxt-site-config/site-config-stack@40698727ca424460013f3534af9005e36728d669
+  '@nuxtjs/robots': 7.0.2
+  '@nuxtjs/sitemap': 9.1.0
+  nuxt-site-config: 5.0.4
+  nuxt-site-config-kit: 5.0.4
+  site-config-stack: 5.0.4
 catalog:
   '@nuxt/kit': ^4.6.4
   nitro: 3.0.261103-rc
@@ -61,4 +64,4 @@ catalog:
   vue-router: ^5.5.1
   vue-tsc: ^3.3.14
   '@nuxtjs/robots': ^7.0.2
-  nuxt-site-config: ^5.0.3
+  nuxt-site-config: ^5.0.4
