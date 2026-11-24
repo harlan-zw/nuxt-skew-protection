@@ -60,7 +60,7 @@ catalog:
   nuxt: npm:nuxt-nightly@5.0.0-2611231954-f3bb563
   nuxtseo-shared: ^6.0.3
   typescript: 6.0.3
-  vue: ^3.5.45
+  vue: ^3.5.46
   vue-router: ^5.5.1
   vue-tsc: ^3.3.14
   '@nuxtjs/robots': ^7.0.2

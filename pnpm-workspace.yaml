@@ -127,10 +127,10 @@ catalog:
   typescript: 6.0.3
   unbuild: ^3.6.1
   unstorage: ^1.17.6
-  vitest: ^5.1.0
-  vue: ^3.5.45
+  vitest: ^5.1.1
+  vue: ^3.5.46
   vue-router: ^5.5.1
   vue-tsc: ^3.3.14
-  wrangler: ^4.162.0
+  wrangler: ^4.166.0
   ws: ^8.23.0
   zod: ^4.6.7
