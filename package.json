@@ -72,11 +72,11 @@
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "build": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && unbuild --config sw.build.config.ts && pnpm run build:devtools",
+    "build": "nuxt-module-build prepare && tsdown && unbuild --config sw.build.config.ts && pnpm run build:devtools",
     "build:devtools": "node -e \"require('fs').cpSync('devtools','dist/devtools',{recursive:true})\"",
     "dev": "nuxi dev playground",
     "dev:build": "nuxi build playground",
-    "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt-module-build build && nuxi prepare playground && pnpm run build:devtools",
+    "dev:prepare": "nuxt-module-build prepare && tsdown && nuxi prepare playground && pnpm run build:devtools",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
     "test": "vitest run && pnpm test:nuxt5",
@@ -148,6 +148,7 @@
     "playwright-core": "catalog:",
     "pusher-js": "catalog:",
     "std-env": "catalog:",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "unbuild": "catalog:",
@@ -162,10 +163,5 @@
   "resolutions": {
     "nuxt-skew-protection": "workspace:*",
     "reka-ui": "2.6.1"
-  },
-  "build": {
-    "externals": [
-      "nuxt/server"
-    ]
   }
 }
