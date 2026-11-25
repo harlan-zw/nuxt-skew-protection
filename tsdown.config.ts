@@ -5,7 +5,6 @@ export default defineConfig({
   plugins: [
     builder({
       externals: [
-        'nuxt/server',
         'wrangler',
       ],
     }),
