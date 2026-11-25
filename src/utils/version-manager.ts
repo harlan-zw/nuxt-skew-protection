@@ -5,7 +5,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { colors } from 'consola/utils'
 import { dirname, join } from 'pathe'
 import { createStorage } from 'unstorage'
-import { logger } from '../logger'
+import { logger } from '../logger.ts'
 
 const RE_ENOTFOUND = /ENOTFOUND\s+(\S+)/
 const RE_GETADDRINFO = /getaddrinfo\s+\S+\s+(\S+)/

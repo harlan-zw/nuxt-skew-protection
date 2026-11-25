@@ -3,7 +3,7 @@ import type { ModuleOptions } from '../module'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { useNuxt } from '@nuxt/kit'
-import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver'
+import { cloudflareKVWranglerDriver } from './cloudflare-kv-wrangler-driver.ts'
 
 export interface WranglerKVNamespace {
   binding: string

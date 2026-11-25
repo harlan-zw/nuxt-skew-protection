@@ -21,19 +21,19 @@ import {
 import { colors } from 'consola/utils'
 import { renderNitroTypeAugmentations, setupNitroRuntimeCompatibility, setupRuntimeAliases } from 'nuxtseo-shared/kit'
 import { relative } from 'pathe'
-import { isStaticPreset, resolveNitroPreset } from './kit'
-import { logger } from './logger'
-import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults'
-import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRoute } from './resolve-base-path'
-import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy'
-import { resolveBuildTimeDriver } from './unstorage/utils'
-import { isSkewAdapter } from './utils'
+import { isStaticPreset, resolveNitroPreset } from './kit.ts'
+import { logger } from './logger.ts'
+import { resolveBundleAssets, resolveDefaultUpdateStrategy } from './provider-defaults.ts'
+import { resolveBasePath, resolveBuildAssetsPath, resolveCookieName, toServerRoute } from './resolve-base-path.ts'
+import { cachingRouteRules, htmlCacheCapability, skewCacheCeilingSeconds } from './runtime/server/utils/html-cache-policy.ts'
+import { resolveBuildTimeDriver } from './unstorage/utils.ts'
+import { isSkewAdapter } from './utils.ts'
 import {
   createCloudflareAssetProtectionPlugin,
   withoutCloudflareAssetProtectionPlugin,
-} from './utils/cloudflare-cache-protection'
-import { withCloudflareBuildAssetRouting } from './utils/cloudflare-routing'
-import { createAssetManager } from './utils/version-manager'
+} from './utils/cloudflare-cache-protection.ts'
+import { withCloudflareBuildAssetRouting } from './utils/cloudflare-routing.ts'
+import { createAssetManager } from './utils/version-manager.ts'
 
 export interface ModuleOptions {
   /**
@@ -482,7 +482,7 @@ export {}
 
     // DevTools integration (dev mode only)
     if (nuxt.options.dev) {
-      const { setupDevToolsUI } = await import('./build/devtools')
+      const { setupDevToolsUI } = await import('./build/devtools.ts')
       setupDevToolsUI(resolver.resolve, nuxt)
     }
 
